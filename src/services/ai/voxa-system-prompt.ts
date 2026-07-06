@@ -2,7 +2,7 @@ import { COMPANION_MODES } from '../../constants/companion-modes';
 import { VOXA_SAFETY } from '../../constants/safety';
 import { CompanionModeId, Memory, UserProfile } from '../../types';
 
-const MAX_MEMORIES_IN_PROMPT = 8;
+const MAX_MEMORIES_IN_PROMPT = 5;
 
 export function buildVoxaSystemPrompt(input: {
   userProfile: UserProfile;
@@ -49,7 +49,7 @@ export function buildVoxaSystemPrompt(input: {
     `Check-in style: ${input.userProfile.preferences.checkInStyle}`,
     `Memories enabled: ${input.userProfile.preferences.memoryEnabled ? 'yes' : 'no'}`,
     '',
-    '## Recent memories (use naturally when relevant — do not recite the list)',
+    '## Relevant memories (top matches for this moment — use naturally, do not recite the list)',
     memoryBlock,
     '',
     '## Behavior',

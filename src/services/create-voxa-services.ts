@@ -12,6 +12,7 @@ import { LocalMemoryRepository } from './local/local-memory-repository';
 import { LocalMessageRepository } from './local/local-message-repository';
 import { LocalReminderRepository } from './local/local-reminder-repository';
 import { LocalUserProfileRepository } from './local/local-user-profile-repository';
+import { MemoryIntelligenceService } from './memory/memory-intelligence-service';
 
 export type CreateVoxaServicesOptions = {
   storage?: IStorageService;
@@ -30,7 +31,9 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     reminders: new LocalReminderRepository(storage),
   };
 
-  return { storage, ai, repositories };
+  const memoryEngine = new MemoryIntelligenceService(repositories.memories, ai);
+
+  return { storage, ai, repositories, memoryEngine };
 }
 
 /** Singleton for app-wide access until a React context/provider is added. */

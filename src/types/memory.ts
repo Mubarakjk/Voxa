@@ -10,7 +10,15 @@ export type MemoryCategory =
   | 'productivity'
   | 'fitness'
   | 'business'
-  | 'emotional';
+  | 'emotional'
+  | 'routines'
+  | 'favourites'
+  | 'work'
+  | 'faith'
+  | 'habits'
+  | 'fears'
+  | 'birthdays'
+  | 'future_plans';
 
 export type MemoryMood =
   | 'motivated'
@@ -38,6 +46,10 @@ export type Memory = Timestamps & {
   source: MemorySource;
   relatedMode?: CompanionModeId;
   occurredAt?: ISODateString;
+  /** When this memory was last injected into an AI prompt. */
+  lastUsedAt?: ISODateString;
+  /** How often this memory has been retrieved for prompts. */
+  useCount: number;
 };
 
 export type CreateMemoryInput = {
@@ -51,8 +63,22 @@ export type CreateMemoryInput = {
   source?: MemorySource;
   relatedMode?: CompanionModeId;
   occurredAt?: ISODateString;
+  lastUsedAt?: ISODateString;
+  useCount?: number;
 };
 
 export type UpdateMemoryInput = Partial<
-  Pick<Memory, 'category' | 'title' | 'content' | 'mood' | 'importance' | 'tags' | 'relatedMode' | 'occurredAt'>
+  Pick<
+    Memory,
+    | 'category'
+    | 'title'
+    | 'content'
+    | 'mood'
+    | 'importance'
+    | 'tags'
+    | 'relatedMode'
+    | 'occurredAt'
+    | 'lastUsedAt'
+    | 'useCount'
+  >
 >;

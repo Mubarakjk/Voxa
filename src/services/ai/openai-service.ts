@@ -1,10 +1,14 @@
-import { CompanionModeId, Message } from '../../types';
+import { CompanionModeId, Memory, MemoryCategory, MemoryMood, Message } from '../../types';
 import {
+  AnalyzeConversationInput,
+  ExtractedMemoryCandidate,
   GenerateCheckInInput,
   GenerateReplyInput,
   GenerateReplyResult,
   IAIService,
 } from '../contracts';
+import { MEMORY_EXTRACTION_CATEGORIES } from '../../constants/memory-categories';
+import { extractMemoriesLocally } from '../memory/local-memory-extractor';
 import { buildVoxaSystemPrompt } from './voxa-system-prompt';
 
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
@@ -49,9 +53,6 @@ export class OpenAIService implements IAIService {
 
     return {
       content,
-      suggestedMemory: input.userProfile.preferences.memoryEnabled
-        ? inferMemorySuggestion(input)
-        : undefined,
     };
   }
 
@@ -93,6 +94,46 @@ export class OpenAIService implements IAIService {
     );
 
     return content || `${mode.replace('_', ' ')} · ${snippet}${firstMessage.length > 42 ? '…' : ''}`;
+  }
+
+  async extractMemoriesFromExchange(input: AnalyzeConversationInput): Promise<ExtractedMemoryCandidate[]> {
+    try {
+      const categories = MEMORY_EXTRACTION_CATEGORIES.join(', ');
+      const raw = await this.completeChat(
+        [
+          {
+            role: 'system',
+            content: [
+              'Extract durable long-term memories about the user from this chat exchange.',
+              `Valid categories: ${categories}.`,
+              'Return ONLY a JSON array (max 3 items). Each item:',
+              '{ "category": string, "title": string, "content": string, "importance": 1-5, "tags": string[], "mood": "motivated"|"warm"|"joyful"|"calm"|"reflective"|"stressed"|"neutral" }',
+              'Skip small talk, greetings, and transient feelings. Merge with existing memories mentally — prefer updates over duplicates.',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              userMessage: input.userMessage,
+              voxaReply: input.voxaReply,
+              mode: input.mode,
+              existingTitles: input.existingMemories.slice(0, 12).map((item) => item.title),
+            }),
+          },
+        ],
+        { temperature: 0.2, maxTokens: 500 },
+      );
+
+      return parseExtractedMemories(raw, input.mode);
+    } catch (error) {
+      console.warn('[Voxa] OpenAI memory extraction failed, using local rules.', error);
+      return extractMemoriesLocally({
+        userMessage: input.userMessage,
+        voxaReply: input.voxaReply,
+        mode: input.mode,
+        existingMemories: input.existingMemories,
+      });
+    }
   }
 
   private async completeChat(
@@ -141,16 +182,50 @@ function mapConversationHistory(history: Message[]): OpenAIChatMessage[] {
     }));
 }
 
-function inferMemorySuggestion(input: GenerateReplyInput): GenerateReplyResult['suggestedMemory'] {
-  const text = input.userMessage.toLowerCase();
-  if (text.includes('goal') || text.includes('want to') || text.includes('i hope')) {
-    return {
-      category: 'goals',
-      title: 'Goal mentioned in chat',
-      content: input.userMessage,
-      mood: 'motivated',
-      relatedMode: input.mode,
-    };
-  }
-  return undefined;
+const VALID_MOODS: MemoryMood[] = [
+  'motivated',
+  'warm',
+  'joyful',
+  'calm',
+  'reflective',
+  'stressed',
+  'neutral',
+];
+
+function parseExtractedMemories(raw: string, mode: CompanionModeId): ExtractedMemoryCandidate[] {
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
+
+  const parsed = JSON.parse(jsonMatch[0]) as Array<Record<string, unknown>>;
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item): ExtractedMemoryCandidate | null => {
+      const category = item.category as MemoryCategory;
+      if (!MEMORY_EXTRACTION_CATEGORIES.includes(category)) return null;
+
+      const title = String(item.title ?? '').trim();
+      const content = String(item.content ?? '').trim();
+      if (!title || !content) return null;
+
+      const importanceRaw = Number(item.importance);
+      const importance = (
+        importanceRaw >= 1 && importanceRaw <= 5 ? importanceRaw : 3
+      ) as Memory['importance'];
+      const mood = VALID_MOODS.includes(item.mood as MemoryMood)
+        ? (item.mood as MemoryMood)
+        : 'neutral';
+
+      return {
+        category,
+        title,
+        content,
+        importance,
+        tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+        mood,
+        relatedMode: mode,
+      };
+    })
+    .filter((item): item is ExtractedMemoryCandidate => item !== null)
+    .slice(0, 3);
 }
