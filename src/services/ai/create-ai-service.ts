@@ -1,0 +1,26 @@
+import { hasOpenAIApiKey, getOpenAIApiKey } from '../../config/env';
+import { IAIService } from '../contracts';
+import { FakeAIService } from './fake-ai-service';
+import { FallbackAIService } from './fallback-ai-service';
+import { OpenAIService } from './openai-service';
+
+/**
+ * Chat and companion flows use OpenAI when a key is configured,
+ * with FakeAIService as the offline default and error fallback.
+ */
+export function createAppAIService(override?: IAIService): IAIService {
+  if (override) return override;
+
+  const fallback = new FakeAIService();
+  const apiKey = getOpenAIApiKey();
+
+  if (!apiKey) {
+    return fallback;
+  }
+
+  return new FallbackAIService(new OpenAIService({ apiKey }), fallback);
+}
+
+export function isLiveAIEnabled(): boolean {
+  return hasOpenAIApiKey();
+}
