@@ -27,7 +27,7 @@ const VoxaContext = createContext<VoxaContextValue | null>(null);
 export function VoxaProvider({ children }: { children: ReactNode }) {
   const [services, setServices] = useState(() => getVoxaServices());
   const companion = useMemo(
-    () => new VoxaCompanionService(services.repositories, services.ai),
+    () => new VoxaCompanionService(services.repositories, services.ai, services.memoryEngine),
     [services],
   );
   const [isReady, setIsReady] = useState(false);

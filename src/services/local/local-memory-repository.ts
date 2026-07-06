@@ -24,6 +24,10 @@ export class LocalMemoryRepository implements IMemoryRepository {
     const memories = await this.readAll();
     return memories
       .filter((item) => item.userId === userId)
+      .map((item) => ({
+        ...item,
+        useCount: item.useCount ?? 0,
+      }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
@@ -46,6 +50,8 @@ export class LocalMemoryRepository implements IMemoryRepository {
       source: input.source ?? 'manual',
       relatedMode: input.relatedMode,
       occurredAt: input.occurredAt,
+      lastUsedAt: input.lastUsedAt,
+      useCount: input.useCount ?? 0,
       createdAt: timestamp,
       updatedAt: timestamp,
     };

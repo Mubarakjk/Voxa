@@ -75,6 +75,19 @@ export type GenerateReplyResult = {
   suggestedMemory?: Pick<CreateMemoryInput, 'category' | 'title' | 'content' | 'mood' | 'relatedMode'>;
 };
 
+export type ExtractedMemoryCandidate = Pick<
+  CreateMemoryInput,
+  'category' | 'title' | 'content' | 'mood' | 'importance' | 'tags' | 'relatedMode'
+>;
+
+export type AnalyzeConversationInput = {
+  userMessage: string;
+  voxaReply: string;
+  mode: CompanionModeId;
+  userProfile: UserProfile;
+  existingMemories: Memory[];
+};
+
 /**
  * AI companion contract.
  * Replace FakeAIService with an OpenAI-backed implementation later.
@@ -83,6 +96,7 @@ export interface IAIService {
   generateReply(input: GenerateReplyInput): Promise<GenerateReplyResult>;
   generateCheckInPrompt(input: GenerateCheckInInput): Promise<string>;
   generateConversationTitle(mode: CompanionModeId, firstMessage: string): Promise<string>;
+  extractMemoriesFromExchange(input: AnalyzeConversationInput): Promise<ExtractedMemoryCandidate[]>;
 }
 
 export type VoxaRepositories = {
@@ -97,6 +111,7 @@ export type VoxaServices = {
   storage: import('./storage-service').IStorageService;
   ai: IAIService;
   repositories: VoxaRepositories;
+  memoryEngine: import('../memory/memory-intelligence-service').MemoryIntelligenceService;
 };
 
 export type { IStorageService } from './storage-service';

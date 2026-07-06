@@ -56,6 +56,7 @@ export class VoxaCompanionService {
   constructor(
     private readonly repositories: VoxaRepositories,
     private readonly ai: IAIService,
+    private readonly memoryEngine: import('./memory/memory-intelligence-service').MemoryIntelligenceService,
   ) {}
 
   async getOrCreateProfile(displayName: string): Promise<UserProfile> {
@@ -168,7 +169,18 @@ export class VoxaCompanionService {
     });
 
     const history = await this.repositories.messages.listMessages(input.conversationId);
-    const memories = await this.repositories.memories.listMemories(input.userId);
+    const recentMessageTexts = history
+      .filter((item) => item.role !== 'system')
+      .slice(-6)
+      .map((item) => item.content);
+
+    const memories = profile.preferences.memoryEnabled
+      ? await this.memoryEngine.retrieveForPrompt(input.userId, {
+          userMessage: input.content,
+          mode: input.mode,
+          recentMessageTexts,
+        })
+      : [];
 
     const aiResult = await this.ai.generateReply({
       mode: input.mode,
@@ -193,13 +205,13 @@ export class VoxaCompanionService {
       companion: { ...profile.companion, lastUsedMode: input.mode },
     });
 
-    if (aiResult.suggestedMemory && profile.preferences.memoryEnabled) {
-      await this.repositories.memories.createMemory({
-        userId: input.userId,
-        ...aiResult.suggestedMemory,
-        source: 'conversation',
-      });
-    }
+    await this.memoryEngine.processAfterReply({
+      userId: input.userId,
+      userMessage: input.content,
+      voxaReply: voxaMessage.content,
+      mode: input.mode,
+      userProfile: profile,
+    });
 
     return { userMessage, voxaMessage, aiMeta: aiResult };
   }
@@ -209,8 +221,14 @@ export class VoxaCompanionService {
     if (!profile) throw new Error('User profile not found');
 
     const conversation = await this.getOrCreateConversation(userId, 'friend', 'voice', 'Voice call');
-    const memories = await this.repositories.memories.listMemories(userId);
     const history = await this.repositories.messages.listMessages(conversation.id);
+    const memories = profile.preferences.memoryEnabled
+      ? await this.memoryEngine.retrieveForPrompt(userId, {
+          userMessage: 'Starting a voice call with Voxa.',
+          mode: 'friend',
+          recentMessageTexts: history.map((item) => item.content),
+        })
+      : [];
 
     const aiResult = await this.ai.generateReply({
       mode: 'friend',
@@ -232,6 +250,14 @@ export class VoxaCompanionService {
       lastMessageAt: openingMessage.createdAt,
     });
 
+    await this.memoryEngine.processAfterReply({
+      userId,
+      userMessage: 'Starting a voice call with Voxa.',
+      voxaReply: openingMessage.content,
+      mode: 'friend',
+      userProfile: profile,
+    });
+
     return { conversation, openingMessage };
   }
 
@@ -246,7 +272,13 @@ export class VoxaCompanionService {
       title: 'Safe Call session',
     });
 
-    const memories = await this.repositories.memories.listMemories(userId);
+    const memories = profile.preferences.memoryEnabled
+      ? await this.memoryEngine.retrieveForPrompt(userId, {
+          userMessage: 'I need to start a safe call.',
+          mode: 'safe_call',
+        })
+      : [];
+
     const aiResult = await this.ai.generateReply({
       mode: 'safe_call',
       userMessage: 'I need to start a safe call.',
@@ -264,6 +296,14 @@ export class VoxaCompanionService {
 
     await this.repositories.conversations.updateConversation(conversation.id, {
       lastMessageAt: openingMessage.createdAt,
+    });
+
+    await this.memoryEngine.processAfterReply({
+      userId,
+      userMessage: 'I need to start a safe call.',
+      voxaReply: openingMessage.content,
+      mode: 'safe_call',
+      userProfile: profile,
     });
 
     return { conversation, openingMessage };

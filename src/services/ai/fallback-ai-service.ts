@@ -1,4 +1,6 @@
 import {
+  AnalyzeConversationInput,
+  ExtractedMemoryCandidate,
   GenerateCheckInInput,
   GenerateReplyInput,
   GenerateReplyResult,
@@ -39,6 +41,15 @@ export class FallbackAIService implements IAIService {
     } catch (error) {
       console.warn('[Voxa] Primary AI title failed, using fallback.', error);
       return this.fallback.generateConversationTitle(mode, firstMessage);
+    }
+  }
+
+  async extractMemoriesFromExchange(input: AnalyzeConversationInput): Promise<ExtractedMemoryCandidate[]> {
+    try {
+      return await this.primary.extractMemoriesFromExchange(input);
+    } catch (error) {
+      console.warn('[Voxa] Primary AI memory extraction failed, using fallback.', error);
+      return this.fallback.extractMemoriesFromExchange(input);
     }
   }
 }

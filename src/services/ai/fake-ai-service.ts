@@ -1,11 +1,13 @@
 import { VOXA_SAFETY } from '../../constants/safety';
 import { CompanionModeId } from '../../types';
 import {
+  AnalyzeConversationInput,
   GenerateCheckInInput,
   GenerateReplyInput,
   GenerateReplyResult,
   IAIService,
 } from '../contracts';
+import { extractMemoriesLocally } from '../memory/local-memory-extractor';
 
 const MODE_REPLIES: Record<CompanionModeId, string[]> = {
   friend: [
@@ -60,20 +62,6 @@ function withSafetyPrefix(mode: CompanionModeId, content: string): string {
   return content;
 }
 
-function buildMemorySuggestion(input: GenerateReplyInput): GenerateReplyResult['suggestedMemory'] | undefined {
-  const text = input.userMessage.toLowerCase();
-  if (text.includes('goal') || text.includes('want to')) {
-    return {
-      category: 'goals',
-      title: 'New goal mentioned',
-      content: input.userMessage,
-      mood: 'motivated',
-      relatedMode: input.mode,
-    };
-  }
-  return undefined;
-}
-
 export class FakeAIService implements IAIService {
   async generateReply(input: GenerateReplyInput): Promise<GenerateReplyResult> {
     const pool = MODE_REPLIES[input.mode];
@@ -92,9 +80,6 @@ export class FakeAIService implements IAIService {
 
     return {
       content: withSafetyPrefix(input.mode, content),
-      suggestedMemory: input.userProfile.preferences.memoryEnabled
-        ? buildMemorySuggestion(input)
-        : undefined,
     };
   }
 
@@ -109,5 +94,14 @@ export class FakeAIService implements IAIService {
   async generateConversationTitle(mode: CompanionModeId, firstMessage: string): Promise<string> {
     const snippet = firstMessage.trim().slice(0, 42);
     return `${mode.replace('_', ' ')} · ${snippet}${firstMessage.length > 42 ? '…' : ''}`;
+  }
+
+  async extractMemoriesFromExchange(input: AnalyzeConversationInput) {
+    return extractMemoriesLocally({
+      userMessage: input.userMessage,
+      voxaReply: input.voxaReply,
+      mode: input.mode,
+      existingMemories: input.existingMemories,
+    });
   }
 }

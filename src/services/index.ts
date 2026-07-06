@@ -1,6 +1,7 @@
 export * from './contracts';
 export * from './contracts/storage-service';
 export { createVoxaServices, getVoxaServices, resetVoxaServices } from './create-voxa-services';
+export { MemoryIntelligenceService } from './memory/memory-intelligence-service';
 export { createAppAIService, isLiveAIEnabled } from './ai/create-ai-service';
 export { FakeAIService } from './ai/fake-ai-service';
 export { FallbackAIService } from './ai/fallback-ai-service';
