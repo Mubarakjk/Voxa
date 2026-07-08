@@ -28,6 +28,8 @@ export type CompanionMode = {
   shortLabel: string;
   description: string;
   tone: string;
+  openingMessage: string;
+  helpsWith: string[];
   capabilities: CompanionCapability[];
   /** Modes that require explicit safety copy in UI */
   requiresSafetyDisclaimer: boolean;

@@ -33,7 +33,9 @@ export function ScreenShell({ children, scroll, padded = true, glow = 'purple', 
   return (
     <View style={styles.root}>
       <LinearGradient colors={['#0E0E18', colors.background, colors.backgroundDeep]} style={StyleSheet.absoluteFill} />
-      {glow !== 'none' && <View style={[styles.glowOrb, { backgroundColor: glowColor }]} />}
+      {glow !== 'none' && (
+        <View pointerEvents="none" style={[styles.glowOrb, { backgroundColor: glowColor }]} />
+      )}
       {scroll ? (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {content}
@@ -51,10 +53,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -80,
     alignSelf: 'center',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.5,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    opacity: 0.28,
   },
   scroll: { flexGrow: 1 },
   content: { flex: 1 },

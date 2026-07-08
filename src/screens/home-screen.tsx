@@ -1,304 +1,276 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { CompositeScreenProps, useFocusEffect } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ErrorState, LoadingState } from '../components/ui/screen-state';
+import { LiveCompanionOrb } from '../components/live-companion/live-companion-orb';
+import { UpgradeCard } from '../components/subscription/upgrade-card';
+import { FadeIn, SectionCard } from '../components/premium/premium-ui';
 import { GlassCard } from '../components/ui/glass-card';
+import { LoadingPulse } from '../components/premium/premium-ui';
 import { ScreenShell } from '../components/ui/screen-shell';
-import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
-import { VoiceOrb } from '../components/ui/voice-orb';
-import { colors, layout, radius, spacing } from '../constants/theme';
+import { VoxaText } from '../components/ui/voxa-text';
+import { colors, layout, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
+import { useCachedDashboard } from '../hooks/use-cached-dashboard';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
-import { HomeDashboardData } from '../services/voxa-companion-service';
-import { useGridItemWidth } from '../utils/layout';
-import {
-  formatReminderDateTime,
-  getModeLabel,
-  getReminderKindLabel,
-} from '../utils/reminders';
-import { ReminderKind } from '../types';
+import { setVoiceDebugState } from '../services/voice/voice-debug-state';
+import { PlanStatus } from '../types';
+import { getVoxaAvatarTint, getVoxaDisplayName } from '../utils/companion-display';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
   NativeStackScreenProps<RootStackParamList>
 >;
 
-const QUICK_ACTIONS: Array<
-  | {
-      id: string;
-      label: string;
-      icon: keyof typeof Ionicons.glyphMap;
-      desc: string;
-      type: 'tab';
-      tab: 'Chat' | 'Voice' | 'Safe' | 'Settings';
-    }
-  | {
-      id: string;
-      label: string;
-      icon: keyof typeof Ionicons.glyphMap;
-      desc: string;
-      type: 'reminder';
-      presetKind: ReminderKind;
-    }
-> = [
-  { id: 'chat', type: 'tab', tab: 'Chat', label: 'Chat', icon: 'chatbubbles-outline', desc: 'Continue talking' },
-  { id: 'voice', type: 'tab', tab: 'Voice', label: 'Voice', icon: 'radio-outline', desc: 'Start a call' },
-  { id: 'safe', type: 'tab', tab: 'Safe', label: 'Safe Call', icon: 'shield-checkmark-outline', desc: 'Safety mode' },
-  {
-    id: 'checkin',
-    type: 'reminder',
-    presetKind: 'check_in',
-    label: 'Set check-in',
-    icon: 'calendar-outline',
-    desc: 'Schedule Voxa',
-  },
-  { id: 'settings', type: 'tab', tab: 'Settings', label: 'Settings', icon: 'settings-outline', desc: 'Preferences' },
-];
-
-function getGreeting() {
+function getTimeGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
 }
 
+function getOrbState(): import('../components/live-companion/live-companion-orb').CompanionOrbState {
+  const hour = new Date().getHours();
+  if (hour >= 23 || hour < 6) return 'sleeping';
+  return 'idle';
+}
+
 export function HomeScreen({ navigation }: Props) {
   const { profile, companion } = useVoxa();
-  const actionWidth = useGridItemWidth(2);
-  const greeting = getGreeting();
-  const [dashboard, setDashboard] = useState<HomeDashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
 
-  const loadDashboard = useCallback(async () => {
-    if (!profile) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await companion.getHomeDashboard(profile.id);
-      setDashboard(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load home data.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [companion, profile]);
+  const fetchDashboard = useCallback(
+    (userId: string) => companion.getHomeDashboard(userId),
+    [companion],
+  );
+
+  const { dashboard, isLoading, load } = useCachedDashboard(profile?.id, fetchDashboard);
 
   useFocusEffect(
     useCallback(() => {
-      loadDashboard();
-    }, [loadDashboard]),
+      if (!profile) return;
+      void load();
+      void companion.getPlanStatusForUser(profile.id).then(setPlanStatus);
+    }, [load, profile, companion]),
   );
+
+  useEffect(() => {
+    if (!dashboard) return;
+    setVoiceDebugState({
+      orbState: getOrbState(),
+      orbMood: dashboard.wowExperience.relationshipMoment?.kind === 'goal_complete' ? 'celebrating' : 'calm',
+      relationshipScore: dashboard.wowExperience.relationshipScore,
+    });
+  }, [dashboard]);
 
   if (isLoading && !dashboard) {
     return (
       <ScreenShell padded={false}>
-        <LoadingState label="Loading your companion..." />
+        <LoadingPulse label="Waking up Voxa..." />
       </ScreenShell>
     );
   }
 
-  if (error && !dashboard) {
-    return (
-      <ScreenShell padded={false}>
-        <ErrorState message={error} onRetry={loadDashboard} />
-      </ScreenShell>
-    );
-  }
+  if (!dashboard || !profile) return null;
 
-  if (!dashboard || !profile) {
-    return (
-      <ScreenShell padded={false}>
-        <ErrorState message="Profile not available." onRetry={loadDashboard} />
-      </ScreenShell>
-    );
-  }
+  const voxaName = getVoxaDisplayName(profile);
+  const voxaTint = getVoxaAvatarTint(profile);
+  const wow = dashboard.wowExperience;
+  const firstName = profile.displayName.split(' ')[0];
+  const orbMood =
+    wow.relationshipMoment?.kind === 'goal_complete' || wow.relationshipMoment?.kind === 'birthday'
+      ? 'celebrating'
+      : 'calm';
 
   return (
     <ScreenShell padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <VoxaText variant="caption" color="textMuted">
-              {greeting}
-            </VoxaText>
-            <VoxaText variant="title">{profile.displayName}</VoxaText>
-          </View>
-          <View style={styles.pill}>
-            <View style={styles.dot} />
-            <VoxaText variant="caption" color="safe">
-              Online
-            </VoxaText>
-          </View>
-        </View>
-
-        <GlassCard variant="highlight" style={styles.heroCard}>
-          <VoxaText variant="label" color="primarySoft">
-            Your companion
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews>
+        <FadeIn>
+          <VoxaText variant="caption" color="textMuted" style={styles.eyebrow}>
+            {getTimeGreeting()}
           </VoxaText>
-          <View style={styles.heroRow}>
-            <VoiceOrb size={96} />
-            <View style={styles.heroCopy}>
-              <VoxaText variant="subtitle">Voxa is ready</VoxaText>
-              <VoxaText variant="body" color="textSecondary" numberOfLines={3}>
-                {dashboard.companionPrompt.startsWith('"')
-                  ? dashboard.companionPrompt
-                  : `"${dashboard.companionPrompt}"`}
-              </VoxaText>
-            </View>
-          </View>
-        </GlassCard>
+        </FadeIn>
 
-        <SectionHeader title="Quick actions" style={styles.section} />
-        <View style={styles.actionsGrid}>
-          {QUICK_ACTIONS.map((item) => (
-            <GlassCard
-              key={item.id}
-              style={{ ...styles.actionCard, width: actionWidth }}
-              onPress={() => {
-                if (item.type === 'tab') {
-                  navigation.navigate(item.tab);
-                  return;
-                }
-                navigation.getParent()?.navigate('CreateReminder', { presetKind: item.presetKind });
-              }}>
-              <View style={styles.actionIconWrap}>
-                <Ionicons name={item.icon} size={20} color={colors.primarySoft} />
-              </View>
-              <VoxaText variant="subtitle" style={styles.actionLabel}>
-                {item.label}
+        <FadeIn delay={40}>
+          <View style={styles.hero}>
+            <LiveCompanionOrb
+              size={220}
+              tint={voxaTint}
+              active
+              state={getOrbState()}
+              mood={orbMood}
+            />
+            <VoxaText variant="title" style={styles.heroTitle}>
+              {getTimeGreeting()}, {firstName}
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.heroMessage}>
+              {wow.heroMessage}
+            </VoxaText>
+            {wow.friendRecallLine ? (
+              <VoxaText variant="caption" color="textMuted" style={styles.recall}>
+                {wow.friendRecallLine}
               </VoxaText>
-              <VoxaText variant="caption" color="textMuted" numberOfLines={1}>
-                {item.desc}
+            ) : null}
+          </View>
+        </FadeIn>
+
+        <FadeIn delay={80}>
+          <View style={styles.actions}>
+            <HeroAction icon="chatbubbles-outline" label="Talk" onPress={() => navigation.navigate('Talk')} />
+            <HeroAction icon="radio-outline" label="Call" onPress={() => navigation.navigate('Voxa', { action: 'voice' })} />
+            <HeroAction icon="sparkles-outline" label="Remember" onPress={() => navigation.navigate('Journey')} />
+          </View>
+        </FadeIn>
+
+        <View style={styles.divider} />
+
+        {dashboard.routineSummary.nextBlock ? (
+          <FadeIn delay={95}>
+            <GlassCard style={styles.routineCard}>
+              <VoxaText variant="label" color="primarySoft">
+                Stay on schedule
+              </VoxaText>
+              <VoxaText variant="subtitle">{dashboard.routineSummary.nextBlock.title}</VoxaText>
+              <VoxaText variant="caption" color="textSecondary">
+                {dashboard.routineMessage ??
+                  `${dashboard.routineSummary.completedCount}/${dashboard.routineSummary.totalCount} done today`}
               </VoxaText>
             </GlassCard>
-          ))}
-        </View>
+          </FadeIn>
+        ) : null}
 
-        <SectionHeader title="Upcoming check-ins" style={styles.section} />
-        {dashboard.upcomingReminders.length === 0 ? (
-          <GlassCard style={styles.emptyReminderCard}>
+        {!planStatus?.isPro ? (
+          <FadeIn delay={100}>
+            <UpgradeCard
+              trialDaysLeft={planStatus?.isTrialActive ? planStatus.trialDaysLeft : undefined}
+              onPress={() => navigation.getParent()?.navigate('Paywall', { source: 'home' })}
+            />
+          </FadeIn>
+        ) : null}
+
+        {wow.surpriseMessage ? (
+          <FadeIn delay={110}>
+            <GlassCard style={styles.surpriseCard}>
+              <Ionicons name="heart-outline" size={18} color={colors.primarySoft} />
+              <VoxaText variant="body" color="textSecondary">
+                {wow.surpriseMessage}
+              </VoxaText>
+            </GlassCard>
+          </FadeIn>
+        ) : null}
+
+        <FadeIn delay={120}>
+          <SectionCard title="Today's focus" subtitle={dashboard.homeIntelligence.dailyFocus}>
             <VoxaText variant="body" color="textSecondary">
-              No upcoming reminders yet. Tap Set check-in to schedule Voxa.
+              {dashboard.homeIntelligence.progressUpdate}
+            </VoxaText>
+          </SectionCard>
+        </FadeIn>
+
+        <FadeIn delay={140}>
+          <GlassCard variant="elevated" style={styles.quoteCard}>
+            <VoxaText variant="label" color="primarySoft">
+              Quote of the day
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.quoteText}>
+              "{wow.dailyQuote}"
             </VoxaText>
           </GlassCard>
-        ) : (
-          dashboard.upcomingReminders.map((reminder) => (
-            <GlassCard key={reminder.id} style={styles.reminderCard}>
-              <View style={styles.reminderTop}>
-                <VoxaText variant="label" color="primarySoft">
-                  {getReminderKindLabel(reminder.kind)}
-                </VoxaText>
-                <VoxaText variant="caption" color="textMuted">
-                  {getModeLabel(reminder.mode)}
-                </VoxaText>
-              </View>
-              <VoxaText variant="subtitle">{reminder.title}</VoxaText>
-              <VoxaText variant="caption" color="textSecondary">
-                {formatReminderDateTime(reminder.scheduledAt)}
-              </VoxaText>
-            </GlassCard>
-          ))
-        )}
+        </FadeIn>
 
-        <SectionHeader title="Today's pulse" style={styles.section} />
-        <View style={styles.insightsRow}>
-          {dashboard.insights.map((item) => (
-            <GlassCard key={item.id} style={styles.insightCard}>
-              <VoxaText variant="label" color="textMuted" numberOfLines={1}>
-                {item.label}
+        {wow.continueConversation ? (
+          <FadeIn delay={160}>
+            <SectionCard
+              title="Continue where you left off"
+              actionLabel="Talk"
+              onPress={() => navigation.navigate('Talk')}>
+              <VoxaText variant="body" color="textSecondary" numberOfLines={2}>
+                "{wow.continueConversation.preview}"
               </VoxaText>
-              <VoxaText variant="subtitle" style={styles.insightValue} numberOfLines={1}>
-                {item.value}
-              </VoxaText>
-              <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
-                {item.detail}
-              </VoxaText>
-            </GlassCard>
-          ))}
-        </View>
+            </SectionCard>
+          </FadeIn>
+        ) : null}
 
-        <SectionHeader title="Companion note" style={styles.section} />
-        <GlassCard style={styles.noteCard}>
-          <VoxaText variant="body" color="textSecondary">
-            {dashboard.companionNote}
-          </VoxaText>
-        </GlassCard>
+        {dashboard.memories[0] ? (
+          <FadeIn delay={180}>
+            <SectionCard
+              title="A memory"
+              subtitle={dashboard.memories[0].category}
+              actionLabel="Journey"
+              onPress={() => navigation.navigate('Journey')}>
+              <VoxaText variant="subtitle">{dashboard.memories[0].title}</VoxaText>
+            </SectionCard>
+          </FadeIn>
+        ) : null}
       </ScrollView>
     </ScreenShell>
+  );
+}
+
+function HeroAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]} onPress={onPress}>
+      <View style={styles.actionIcon}>
+        <Ionicons name={icon} size={22} color={colors.primarySoft} />
+      </View>
+      <VoxaText variant="caption" color="textSecondary">
+        {label}
+      </VoxaText>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.lg,
     paddingBottom: layout.tabBarHeight + spacing.xxl,
+    gap: spacing.xl,
   },
-  header: {
+  eyebrow: { letterSpacing: 1.2, textTransform: 'uppercase' },
+  hero: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  heroTitle: { textAlign: 'center', marginTop: spacing.sm },
+  heroMessage: { textAlign: 'center', maxWidth: 300, lineHeight: 24 },
+  recall: { textAlign: 'center', maxWidth: 280, fontStyle: 'italic' },
+  actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+    justifyContent: 'center',
+    gap: spacing.xl,
+    paddingVertical: spacing.sm,
   },
-  headerText: { flex: 1, gap: 4, paddingRight: spacing.md },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.safe },
-  heroCard: { gap: spacing.md },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  heroCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
-  section: { marginTop: spacing.section },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: layout.cardGap,
-  },
-  actionCard: {
-    minHeight: 108,
-    gap: spacing.sm,
-  },
-  actionIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+  actionBtn: { alignItems: 'center', gap: spacing.sm, minWidth: 72 },
+  actionPressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+  actionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(139, 124, 246, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 124, 246, 0.2)',
+    borderColor: 'rgba(139, 124, 246, 0.25)',
   },
-  actionLabel: { fontSize: 15 },
-  emptyReminderCard: { marginBottom: spacing.sm },
-  reminderCard: { gap: spacing.sm, marginBottom: spacing.sm },
-  reminderTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  divider: {
+    height: 1,
+    backgroundColor: colors.glassBorder,
+    marginVertical: spacing.sm,
   },
-  insightsRow: {
-    flexDirection: 'row',
-    gap: layout.cardGap,
-  },
-  insightCard: {
-    flex: 1,
-    minWidth: 0,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  insightValue: { fontSize: 20, marginVertical: 2 },
-  noteCard: { marginTop: 0 },
+  quoteCard: { gap: spacing.sm },
+  quoteText: { fontStyle: 'italic', lineHeight: 24 },
+  surpriseCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  routineCard: { gap: spacing.sm, paddingVertical: spacing.lg },
 });

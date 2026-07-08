@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from '../../constants/storage-keys';
-import { CreateMessageInput, createId, Message, nowIso } from '../../types';
+import { CreateMessageInput, createId, Message, nowIso, UpdateMessageInput } from '../../types';
 import { IMessageRepository, IStorageService } from '../contracts';
 
 export class LocalMessageRepository implements IMessageRepository {
@@ -30,12 +30,37 @@ export class LocalMessageRepository implements IMessageRepository {
       createdAt: nowIso(),
       status: input.status ?? 'sent',
       metadata: input.metadata,
+      attachments: input.attachments ?? [],
     };
 
     const messages = await this.readAll();
     messages.push(message);
     await this.writeAll(messages);
     return message;
+  }
+
+  async upsertMessage(message: Message): Promise<Message> {
+    const messages = await this.readAll();
+    const index = messages.findIndex((item) => item.id === message.id);
+    if (index >= 0) messages[index] = message;
+    else messages.push(message);
+    await this.writeAll(messages);
+    return message;
+  }
+
+  async updateMessage(id: string, input: UpdateMessageInput): Promise<Message> {
+    const messages = await this.readAll();
+    const index = messages.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error('Message not found');
+
+    const updated: Message = {
+      ...messages[index],
+      ...input,
+      attachments: input.attachments ?? messages[index].attachments,
+    };
+    messages[index] = updated;
+    await this.writeAll(messages);
+    return updated;
   }
 
   async deleteMessagesForConversation(conversationId: string): Promise<void> {

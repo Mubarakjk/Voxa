@@ -7,12 +7,12 @@ type Props = {
   children: ReactNode;
   style?: ViewStyle;
   onPress?: () => void;
-  variant?: 'default' | 'highlight' | 'safe';
+  variant?: 'default' | 'highlight' | 'safe' | 'elevated';
 };
 
 export function GlassCard({ children, style, onPress, variant = 'default' }: Props) {
   const bg =
-    variant === 'highlight'
+    variant === 'highlight' || variant === 'elevated'
       ? colors.surfaceStrong
       : variant === 'safe'
         ? colors.safeGlow
@@ -20,6 +20,7 @@ export function GlassCard({ children, style, onPress, variant = 'default' }: Pro
 
   const borderColor = variant === 'safe' ? 'rgba(52, 211, 153, 0.25)' : colors.glassBorder;
   const cardStyle: ViewStyle[] = [styles.card, { backgroundColor: bg, borderColor }];
+  if (variant === 'elevated') cardStyle.push(styles.elevated);
 
   if (onPress) {
     return (
@@ -38,8 +39,12 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: spacing.lg,
     overflow: 'hidden',
+  },
+  elevated: {
+    padding: spacing.xl,
+    borderColor: 'rgba(139, 124, 246, 0.18)',
   },
   pressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
 });

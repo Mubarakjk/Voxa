@@ -6,7 +6,11 @@ import {
   nowIso,
   UpdateUserProfileInput,
   UserProfile,
+  createDefaultSubscription,
 } from '../../types';
+import { createDefaultCompanionControls } from '../../types/relationship-personality';
+import { createDefaultVoiceIdentity } from '../../types/voice-identity';
+import { createDefaultAvatarAppearance } from '../../types/avatar-appearance';
 import { IStorageService, IUserProfileRepository } from '../contracts';
 
 export class LocalUserProfileRepository implements IUserProfileRepository {
@@ -42,11 +46,38 @@ export class LocalUserProfileRepository implements IUserProfileRepository {
       preferences: {
         ...current.preferences,
         ...input.preferences,
+        companionControls: {
+          ...(current.preferences.companionControls ?? createDefaultCompanionControls()),
+          ...input.preferences?.companionControls,
+        },
       },
       companion: {
         ...current.companion,
         ...input.companion,
       },
+      companionIdentity: input.companionIdentity
+        ? {
+            ...current.companionIdentity,
+            ...input.companionIdentity,
+            voiceIdentity: input.companionIdentity.voiceIdentity
+              ? {
+                  ...createDefaultVoiceIdentity(),
+                  ...(current.companionIdentity?.voiceIdentity ?? {}),
+                  ...input.companionIdentity.voiceIdentity,
+                }
+              : current.companionIdentity?.voiceIdentity,
+            appearance: input.companionIdentity.appearance
+              ? {
+                  ...createDefaultAvatarAppearance(current.companionIdentity?.avatarId),
+                  ...(current.companionIdentity?.appearance ?? {}),
+                  ...input.companionIdentity.appearance,
+                }
+              : current.companionIdentity?.appearance,
+          }
+        : current.companionIdentity,
+      subscription: input.subscription
+        ? { ...(current.subscription ?? createDefaultSubscription()), ...input.subscription }
+        : current.subscription,
       updatedAt: nowIso(),
     };
 

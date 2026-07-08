@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from '../../constants/storage-keys';
-import { USER_NAME } from '../../constants/dummy-data';
-import { CreateMemoryInput, CreateReminderInput, nowIso, UserProfile } from '../../types';
+import { safeContacts, USER_NAME } from '../../constants/dummy-data';
+import { CreateGoalInput, CreateMemoryInput, CreateReminderInput, nowIso, UserProfile } from '../../types';
 import { VoxaRepositories, VoxaServices } from '../contracts';
 
 function tomorrowAt(hour: number, minute = 0): string {
@@ -18,6 +18,14 @@ function daysFromNowAt(days: number, hour: number): string {
 }
 
 export async function seedLocalVoxaData(repositories: VoxaRepositories): Promise<UserProfile> {
+  const existing = await repositories.userProfile.getProfile();
+  if (existing) {
+    const memories = await repositories.memories.listMemories(existing.id);
+    if (memories.length > 0) {
+      return existing;
+    }
+  }
+
   const profile = await repositories.userProfile.createProfile({ displayName: USER_NAME });
 
   const seedMemories: CreateMemoryInput[] = [
@@ -93,6 +101,38 @@ export async function seedLocalVoxaData(repositories: VoxaRepositories): Promise
 
   for (const reminder of seedReminders) {
     await repositories.reminders.createReminder(reminder);
+  }
+
+  const seedGoals: CreateGoalInput[] = [
+    {
+      userId: profile.id,
+      title: 'Morning journal habit',
+      description: '10 minutes of journaling after waking.',
+      category: 'productivity',
+      status: 'active',
+      progress: 35,
+    },
+    {
+      userId: profile.id,
+      title: 'Run 3 times per week',
+      description: 'Build a steady running routine.',
+      category: 'fitness',
+      status: 'active',
+      progress: 20,
+    },
+  ];
+
+  for (const goal of seedGoals) {
+    await repositories.goals.createGoal(goal);
+  }
+
+  for (const contact of safeContacts) {
+    await repositories.trustedContacts.createContact({
+      userId: profile.id,
+      name: contact.name,
+      relation: contact.relation,
+      status: contact.status,
+    });
   }
 
   const conversation = await repositories.conversations.createConversation({

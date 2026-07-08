@@ -24,6 +24,10 @@ export type Reminder = Timestamps & {
   /** When true, Voxa may place a proactive voice call at scheduledAt */
   allowProactiveCall: boolean;
   completedAt?: ISODateString;
+  /** Optional link to a tracked goal */
+  goalId?: EntityId;
+  /** Expo notification identifier when scheduled */
+  notificationId?: string;
 };
 
 export type CreateReminderInput = {
@@ -35,8 +39,20 @@ export type CreateReminderInput = {
   recurrence?: ReminderRecurrence;
   mode?: CompanionModeId;
   allowProactiveCall?: boolean;
+  goalId?: EntityId;
 };
 
 export type UpdateReminderInput = Partial<
-  Pick<Reminder, 'title' | 'body' | 'scheduledAt' | 'recurrence' | 'status' | 'mode' | 'allowProactiveCall' | 'completedAt'>
+  Pick<
+    Reminder,
+    | 'title'
+    | 'body'
+    | 'scheduledAt'
+    | 'recurrence'
+    | 'status'
+    | 'mode'
+    | 'allowProactiveCall'
+    | 'completedAt'
+    | 'notificationId'
+  >
 >;

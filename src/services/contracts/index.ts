@@ -2,18 +2,26 @@ import {
   CompanionModeId,
   Conversation,
   CreateConversationInput,
+  CreateGoalInput,
   CreateMemoryInput,
   CreateMessageInput,
   CreateReminderInput,
+  CreateTrustedContactInput,
   CreateUserProfileInput,
+  CreateVoiceSessionInput,
+  Goal,
   Memory,
   Message,
   Reminder,
+  TrustedContact,
   UpdateConversationInput,
+  UpdateGoalInput,
   UpdateMemoryInput,
   UpdateReminderInput,
   UpdateUserProfileInput,
+  UpdateVoiceSessionInput,
   UserProfile,
+  VoiceSession,
 } from '../../types';
 
 export interface IUserProfileRepository {
@@ -30,6 +38,7 @@ export interface IMemoryRepository {
   createMemory(input: CreateMemoryInput): Promise<Memory>;
   updateMemory(id: string, input: UpdateMemoryInput): Promise<Memory>;
   deleteMemory(id: string): Promise<void>;
+  clearMemoriesForUser(userId: string): Promise<void>;
 }
 
 export interface IConversationRepository {
@@ -43,6 +52,8 @@ export interface IConversationRepository {
 export interface IMessageRepository {
   listMessages(conversationId: string): Promise<Message[]>;
   createMessage(input: CreateMessageInput): Promise<Message>;
+  upsertMessage(message: Message): Promise<Message>;
+  updateMessage(id: string, input: import('../../types').UpdateMessageInput): Promise<Message>;
   deleteMessagesForConversation(conversationId: string): Promise<void>;
 }
 
@@ -55,12 +66,41 @@ export interface IReminderRepository {
   deleteReminder(id: string): Promise<void>;
 }
 
+export interface IGoalRepository {
+  listGoals(userId: string): Promise<Goal[]>;
+  listActiveGoals(userId: string): Promise<Goal[]>;
+  getGoal(id: string): Promise<Goal | null>;
+  createGoal(input: CreateGoalInput): Promise<Goal>;
+  updateGoal(id: string, input: UpdateGoalInput): Promise<Goal>;
+  deleteGoal(id: string): Promise<void>;
+}
+
+export interface IVoiceSessionRepository {
+  listSessions(userId: string): Promise<VoiceSession[]>;
+  getActiveSession(userId: string): Promise<VoiceSession | null>;
+  getSession(id: string): Promise<VoiceSession | null>;
+  createSession(input: CreateVoiceSessionInput): Promise<VoiceSession>;
+  updateSession(id: string, input: UpdateVoiceSessionInput): Promise<VoiceSession>;
+}
+
+export interface ITrustedContactRepository {
+  listContacts(userId: string): Promise<TrustedContact[]>;
+  createContact(input: CreateTrustedContactInput): Promise<TrustedContact>;
+}
+
 export type GenerateReplyInput = {
   mode: CompanionModeId;
   userMessage: string;
   conversationHistory: Message[];
   userProfile: UserProfile;
   memories: Memory[];
+  goals?: Goal[];
+  upcomingReminders?: Reminder[];
+  currentTime?: string;
+  companionContextExtension?: string;
+  /** Base64 data URL or remote URL for vision. */
+  imageUrlForVision?: string;
+  imageAnalysisSummary?: string;
 };
 
 export type GenerateCheckInInput = {
@@ -86,7 +126,42 @@ export type AnalyzeConversationInput = {
   mode: CompanionModeId;
   userProfile: UserProfile;
   existingMemories: Memory[];
+  mediaSource?: import('../../types').MemorySource;
 };
+
+export type SummarizeConversationInput = {
+  userProfile: UserProfile;
+  mode: CompanionModeId;
+  messages: Message[];
+  goals?: Goal[];
+  upcomingReminders?: Reminder[];
+  currentTime?: string;
+};
+
+export type UnderstandActionIntentInput = {
+  message: string;
+  userProfile: UserProfile;
+  mode: CompanionModeId;
+  activeGoals?: Goal[];
+  upcomingReminders?: Reminder[];
+  currentTime?: string;
+};
+
+/** Structured action intent returned by AI understanding (mapped to chat actions). */
+export type AIActionIntentResult =
+  | {
+      action: 'set_reminder';
+      title: string;
+      scheduledAt: string;
+    }
+  | {
+      action: 'create_goal';
+      title: string;
+      category: import('../../types').GoalCategory;
+    }
+  | {
+      action: 'none';
+    };
 
 /**
  * AI companion contract.
@@ -97,6 +172,10 @@ export interface IAIService {
   generateCheckInPrompt(input: GenerateCheckInInput): Promise<string>;
   generateConversationTitle(mode: CompanionModeId, firstMessage: string): Promise<string>;
   extractMemoriesFromExchange(input: AnalyzeConversationInput): Promise<ExtractedMemoryCandidate[]>;
+  understandActionIntent(input: UnderstandActionIntentInput): Promise<AIActionIntentResult>;
+  summarizeConversation(input: SummarizeConversationInput): Promise<string>;
+  transcribeAudio(input: { uri: string; fileName?: string }): Promise<string | null>;
+  analyzeImage(input: { uri: string; mimeType?: string }): Promise<string | null>;
 }
 
 export type VoxaRepositories = {
@@ -105,6 +184,9 @@ export type VoxaRepositories = {
   conversations: IConversationRepository;
   messages: IMessageRepository;
   reminders: IReminderRepository;
+  goals: IGoalRepository;
+  voiceSessions: IVoiceSessionRepository;
+  trustedContacts: ITrustedContactRepository;
 };
 
 export type VoxaServices = {
@@ -112,6 +194,13 @@ export type VoxaServices = {
   ai: IAIService;
   repositories: VoxaRepositories;
   memoryEngine: import('../memory/memory-intelligence-service').MemoryIntelligenceService;
+  companionIntelligence: import('../intelligence/companion-intelligence-service').CompanionIntelligenceService;
+  usageTracking: import('../billing/usage-tracking-service').UsageTrackingService;
+  subscriptionRepo: import('../billing/billing-contracts').ISubscriptionRepository;
+  billing: import('../billing/billing-contracts').IBillingService;
+  purchaseManager: import('../billing/billing-contracts').IPurchaseManager;
+  subscription: import('../billing/subscription-service').SubscriptionService;
+  featureGate: import('../billing/feature-gate-service').FeatureGateService;
 };
 
 export type { IStorageService } from './storage-service';

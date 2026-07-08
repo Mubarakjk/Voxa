@@ -1,4 +1,4 @@
-import { CompanionModeId, Memory, UserProfile } from '../../types';
+import { CompanionModeId, Memory, MemorySource, UserProfile } from '../../types';
 import { IMemoryRepository } from '../contracts';
 import { ExtractedMemoryCandidate, IAIService } from '../contracts';
 import {
@@ -13,6 +13,7 @@ import {
   rankMemories,
   TOP_MEMORY_LIMIT,
 } from './memory-relevance';
+import { memoryAgingEngine } from '../personality/memory-aging-engine';
 import { nowIso } from '../../types';
 
 export type ProcessConversationInput = {
@@ -21,6 +22,7 @@ export type ProcessConversationInput = {
   voxaReply: string;
   mode: CompanionModeId;
   userProfile: UserProfile;
+  mediaSource?: MemorySource;
 };
 
 /**
@@ -37,9 +39,10 @@ export class MemoryIntelligenceService {
     context: MemoryRetrievalContext,
   ): Promise<Memory[]> {
     const allMemories = await this.memories.listMemories(userId);
-    if (allMemories.length === 0) return [];
+    const activeMemories = memoryAgingEngine.filterActive(allMemories);
+    if (activeMemories.length === 0) return [];
 
-    const ranked = rankMemories(allMemories, context, TOP_MEMORY_LIMIT);
+    const ranked = rankMemories(activeMemories, context, TOP_MEMORY_LIMIT);
     const timestamp = nowIso();
 
     const touched = await Promise.all(
@@ -47,6 +50,9 @@ export class MemoryIntelligenceService {
         this.memories.updateMemory(memory.id, {
           lastUsedAt: timestamp,
           useCount: (memory.useCount ?? 0) + 1,
+          ...memoryAgingEngine.enrichOnUpdate(memory, {
+            useCount: (memory.useCount ?? 0) + 1,
+          }),
         }),
       ),
     );
@@ -67,6 +73,7 @@ export class MemoryIntelligenceService {
         mode: input.mode,
         userProfile: input.userProfile,
         existingMemories: existing,
+        mediaSource: input.mediaSource,
       });
     } catch (error) {
       console.warn('[Voxa] Memory extraction failed, using local rules.', error);
@@ -107,21 +114,30 @@ export class MemoryIntelligenceService {
         continue;
       }
 
-      const created = await this.memories.createMemory({
-        userId: input.userId,
-        category: candidate.category,
-        title: candidate.title,
-        content: candidate.content,
-        mood: candidate.mood,
-        importance: candidate.importance,
-        tags: candidate.tags,
-        relatedMode: candidate.relatedMode ?? input.mode,
-        source: 'conversation',
-      });
+      const created = await this.memories.createMemory(
+        memoryAgingEngine.enrichOnCreate({
+          userId: input.userId,
+          category: candidate.category,
+          title: candidate.title,
+          content: candidate.content,
+          mood: candidate.mood,
+          importance: candidate.importance,
+          tags: candidate.tags,
+          relatedMode: candidate.relatedMode ?? input.mode,
+          source: resolveMemorySource(input.mediaSource),
+        }),
+      );
       workingSet.unshift(created);
       upserted.push(created);
     }
 
     return upserted;
   }
+}
+
+function resolveMemorySource(mediaSource?: MemorySource): MemorySource {
+  if (mediaSource && mediaSource !== 'text' && mediaSource !== 'conversation') {
+    return mediaSource;
+  }
+  return 'conversation';
 }

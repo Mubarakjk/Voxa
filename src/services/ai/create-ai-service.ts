@@ -24,3 +24,13 @@ export function createAppAIService(override?: IAIService): IAIService {
 export function isLiveAIEnabled(): boolean {
   return hasOpenAIApiKey();
 }
+
+export type AIProviderInfo = {
+  label: 'OpenAI' | 'FakeAI';
+  isLive: boolean;
+};
+
+export function getAIProviderInfo(): AIProviderInfo {
+  const isLive = hasOpenAIApiKey();
+  return { label: isLive ? 'OpenAI' : 'FakeAI', isLive };
+}
