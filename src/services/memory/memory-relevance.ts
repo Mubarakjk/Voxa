@@ -5,6 +5,7 @@ export type MemoryRetrievalContext = {
   userMessage: string;
   mode: CompanionModeId;
   recentMessageTexts?: string[];
+  memoryLevel?: 'minimal' | 'balanced' | 'deep';
 };
 
 export type ScoredMemory = {
@@ -12,7 +13,16 @@ export type ScoredMemory = {
   score: number;
 };
 
-const TOP_MEMORY_LIMIT = 5;
+const MEMORY_LEVEL_LIMIT: Record<'minimal' | 'balanced' | 'deep', number> = {
+  minimal: 3,
+  balanced: 5,
+  deep: 8,
+};
+
+function isExpired(memory: Memory): boolean {
+  if (!memory.expiresAt) return false;
+  return new Date(memory.expiresAt).getTime() < Date.now();
+}
 
 const STOP_WORDS = new Set([
   'a',
@@ -105,12 +115,16 @@ function modeAffinityScore(memory: Memory, mode: CompanionModeId): number {
 }
 
 export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalContext): number {
+  if (isExpired(memory)) return -1;
+
   const queryText = [context.userMessage, ...(context.recentMessageTexts ?? [])].join(' ');
   const queryTokens = tokenize(queryText);
   const searchable = `${memory.title} ${memory.content} ${memory.tags.join(' ')}`;
 
   const keywordScore = overlapScore(queryTokens, searchable);
   const importanceScore = memory.importance / 5;
+  const emotionalScore = (memory.emotionalSignificance ?? memory.importance) / 5;
+  const confidenceScore = memory.confidence ?? 0.75;
   const recency = recencyScore(memory.updatedAt);
   const usage = usageScore(memory);
   const modeAffinity = modeAffinityScore(memory, context.mode);
@@ -118,6 +132,8 @@ export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalCon
   return (
     keywordScore * 4 +
     importanceScore * 1.5 +
+    emotionalScore * 1.25 +
+    confidenceScore * 0.75 +
     recency * 1 +
     usage * 1.25 +
     modeAffinity * 1.5
@@ -129,13 +145,19 @@ export function rankMemories(
   context: MemoryRetrievalContext,
   limit = TOP_MEMORY_LIMIT,
 ): ScoredMemory[] {
+  const effectiveLimit = MEMORY_LEVEL_LIMIT[context.memoryLevel ?? 'balanced'] ?? limit;
+
   return memories
+    .filter((memory) => !isExpired(memory))
     .map((memory) => ({
       memory,
       score: scoreMemoryRelevance(memory, context),
     }))
+    .filter((item) => item.score >= 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .slice(0, effectiveLimit);
 }
+
+const TOP_MEMORY_LIMIT = 5;
 
 export { TOP_MEMORY_LIMIT };

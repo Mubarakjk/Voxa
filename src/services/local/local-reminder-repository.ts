@@ -55,6 +55,7 @@ export class LocalReminderRepository implements IReminderRepository {
       status: 'scheduled',
       mode: input.mode,
       allowProactiveCall: input.allowProactiveCall ?? input.kind === 'check_in',
+      goalId: input.goalId,
       createdAt: timestamp,
       updatedAt: timestamp,
     };

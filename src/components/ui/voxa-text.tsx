@@ -2,7 +2,7 @@ import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 
 import { colors, typography } from '../../constants/theme';
 
-type ColorKey = 'text' | 'textSecondary' | 'textMuted' | 'primary' | 'primarySoft' | 'safe';
+type ColorKey = 'text' | 'textSecondary' | 'textMuted' | 'primary' | 'primarySoft' | 'safe' | 'danger';
 
 const colorMap: Record<ColorKey, string> = {
   text: colors.text,
@@ -11,6 +11,7 @@ const colorMap: Record<ColorKey, string> = {
   primary: colors.primary,
   primarySoft: colors.primarySoft,
   safe: colors.safe,
+  danger: colors.danger,
 };
 
 type Props = {

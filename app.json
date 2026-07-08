@@ -14,13 +14,24 @@
       "backgroundColor": "#06060C"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Voxa uses the microphone for voice notes and voice calls.",
+        "NSCameraUsageDescription": "Voxa uses the camera to capture photos and videos in chat.",
+        "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#06060C"
       },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -28,7 +39,29 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#8B7CF6"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Voxa uses your photo library to share images and videos in chat.",
+          "cameraPermission": "Voxa uses the camera to capture photos and videos in chat.",
+          "microphonePermission": "Voxa uses the microphone for voice notes and video recording."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Voxa uses the microphone for voice notes and voice calls."
+        }
+      ],
+      "expo-secure-store"
     ]
   }
 }

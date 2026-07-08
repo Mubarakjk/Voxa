@@ -29,7 +29,7 @@ export type MemoryMood =
   | 'stressed'
   | 'neutral';
 
-export type MemorySource = 'conversation' | 'voice_call' | 'manual' | 'check_in';
+export type MemorySource = 'conversation' | 'voice_call' | 'manual' | 'check_in' | 'image' | 'audio' | 'video' | 'text';
 
 /**
  * Long-term knowledge Voxa retains about the user's life, preferences, and important moments.
@@ -50,6 +50,12 @@ export type Memory = Timestamps & {
   lastUsedAt?: ISODateString;
   /** How often this memory has been retrieved for prompts. */
   useCount: number;
+  /** 1–5 emotional weight for retrieval and retention. */
+  emotionalSignificance?: 1 | 2 | 3 | 4 | 5;
+  /** 0–1 confidence that this memory is accurate and still valid. */
+  confidence?: number;
+  /** Optional expiry for transient facts (e.g. temporary projects). */
+  expiresAt?: ISODateString;
 };
 
 export type CreateMemoryInput = {
@@ -65,6 +71,9 @@ export type CreateMemoryInput = {
   occurredAt?: ISODateString;
   lastUsedAt?: ISODateString;
   useCount?: number;
+  emotionalSignificance?: Memory['emotionalSignificance'];
+  confidence?: number;
+  expiresAt?: ISODateString;
 };
 
 export type UpdateMemoryInput = Partial<
@@ -80,5 +89,8 @@ export type UpdateMemoryInput = Partial<
     | 'occurredAt'
     | 'lastUsedAt'
     | 'useCount'
+    | 'emotionalSignificance'
+    | 'confidence'
+    | 'expiresAt'
   >
 >;

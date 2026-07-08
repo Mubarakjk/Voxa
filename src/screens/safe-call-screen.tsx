@@ -1,54 +1,104 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
+import { VoiceCallStateBadge } from '../components/voice/voice-call-state-badge';
+import { VoiceTranscriptPanel } from '../components/voice/voice-transcript-panel';
 import { LoadingState } from '../components/ui/screen-state';
 import { PrimaryButton } from '../components/ui/buttons';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
-import { safeContacts } from '../constants/dummy-data';
+import { VOXA_SAFETY } from '../constants/safety';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
+import { useVoiceCallController } from '../hooks/use-voice-call-controller';
+import { RootStackParamList } from '../navigation/types';
+import { FeatureLimitError } from '../services/billing/subscription-service';
+import { createSafeCallEscalationService } from '../services/safe-call/safe-call-escalation-service';
 import { formatDuration } from '../utils/interactions';
+import { getVoxaDisplayName } from '../utils/companion-display';
+import { TrustedContact } from '../types';
 
 export function SafeCallScreen() {
-  const { profile, companion } = useVoxa();
-  const [active, setActive] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { profile, companion, services } = useVoxa();
+  const voice = useVoiceCallController();
+  const escalation = useMemo(() => createSafeCallEscalationService(services.repositories), [services]);
   const [openingMessage, setOpeningMessage] = useState<string | null>(null);
+  const [wellbeingPrompt, setWellbeingPrompt] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<TrustedContact[]>([]);
+  const lastSpokenPrompt = useRef<string | null>(null);
+
+  const loadContacts = useCallback(async () => {
+    if (!profile) return;
+    const items = await companion.listTrustedContacts(profile.id);
+    setContacts(items);
+  }, [companion, profile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadContacts();
+    }, [loadContacts]),
+  );
 
   useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [active]);
+    if (!voice.isActive || !voice.controller.current?.activeSession) return;
+    const session = voice.controller.current.activeSession;
+    const level = escalation.evaluateEscalation({
+      session,
+      elapsedSeconds: voice.seconds,
+      escalationLevel: 'none',
+    });
+    const prompt = escalation.getWellbeingPrompt(level);
+    if (prompt && escalation.shouldAutoCheckIn({ session, elapsedSeconds: voice.seconds, escalationLevel: level })) {
+      setWellbeingPrompt(prompt);
+      if (lastSpokenPrompt.current !== prompt) {
+        lastSpokenPrompt.current = prompt;
+        void voice.speakPrompt(prompt);
+      }
+    }
+  }, [voice.isActive, voice.seconds, escalation, voice]);
 
   const beginSafeCall = async () => {
     if (!profile) return;
     setIsStarting(true);
     setError(null);
     try {
-      const session = await companion.startSafeCallSession(profile.id);
-      setOpeningMessage(session.openingMessage.content);
-      setActive(true);
-      setSeconds(0);
+      await voice.startSafeCall();
+      const latest = voice.transcript.at(-1);
+      setOpeningMessage(latest?.text ?? null);
+      setWellbeingPrompt(null);
+      lastSpokenPrompt.current = null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Safe Call.');
+      if (err instanceof FeatureLimitError) {
+        Alert.alert('Voice limit reached', err.message, [
+          { text: 'Continue Free', style: 'cancel' },
+          { text: 'Upgrade to Pro', onPress: () => navigation.navigate('Paywall', { source: 'safe-call-limit' }) },
+        ]);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to start Safe Call.');
+      }
     } finally {
       setIsStarting(false);
     }
   };
 
-  const endSafeCall = () => {
-    setActive(false);
-    setSeconds(0);
+  const endSafeCall = async () => {
+    await voice.endCall();
     setOpeningMessage(null);
+    setWellbeingPrompt(null);
+    lastSpokenPrompt.current = null;
   };
 
-  if (isStarting) {
+  const voxaName = getVoxaDisplayName(profile);
+  const active = voice.isActive;
+
+  if (isStarting || voice.connectionState === 'connecting') {
     return (
       <ScreenShell padded={false} glow="safe">
         <LoadingState label="Starting Safe Call..." />
@@ -66,10 +116,16 @@ export function SafeCallScreen() {
           <VoxaText variant="title">Safe Call</VoxaText>
           <VoxaText variant="body" color="textSecondary" style={styles.subtitle}>
             {active
-              ? 'Safety mode is active. Voxa is staying with you.'
+              ? `Safety mode is active. ${voxaName} is staying with you.`
               : 'A calm space when you need someone — or safety — right now.'}
           </VoxaText>
         </View>
+
+        <GlassCard variant="safe" style={styles.disclaimer}>
+          <VoxaText variant="caption" color="textSecondary">
+            {VOXA_SAFETY.safeCallDisclaimer} {VOXA_SAFETY.notEmergency}
+          </VoxaText>
+        </GlassCard>
 
         {error ? (
           <GlassCard variant="safe" style={styles.errorCard}>
@@ -89,13 +145,28 @@ export function SafeCallScreen() {
               </VoxaText>
             </View>
             <VoxaText variant="title" style={styles.timer}>
-              {formatDuration(seconds)}
+              {formatDuration(voice.seconds)}
             </VoxaText>
+            <VoiceCallStateBadge state={voice.connectionState} />
             <VoxaText variant="body" color="textSecondary">
-              {openingMessage ?? 'Voxa is monitoring your session.'}
+              {wellbeingPrompt ?? openingMessage ?? `${voxaName} is with you in voice mode.`}
+            </VoxaText>
+            <VoiceTranscriptPanel entries={voice.transcript.slice(-4)} voxaName={voxaName} />
+            <VoxaText variant="caption" color="textMuted">
+              Safety timer ·{' '}
+              {voice.controller.current?.activeSession
+                ? formatDuration(
+                    escalation.getSafetyTimerRemainingSeconds({
+                      session: voice.controller.current.activeSession,
+                      elapsedSeconds: voice.seconds,
+                      escalationLevel: 'none',
+                    }),
+                  )
+                : '—'}{' '}
+              remaining
             </VoxaText>
             <VoxaText variant="caption" color="textMuted">
-              Trusted contacts on standby · Safe word armed
+              {escalation.getLocationPlaceholder()}
             </VoxaText>
             <PrimaryButton label="End Safe Call" variant="ghost" onPress={endSafeCall} />
           </GlassCard>
@@ -104,16 +175,16 @@ export function SafeCallScreen() {
             <VoxaText variant="label" color="safe">
               Quick connect
             </VoxaText>
-            <VoxaText variant="subtitle">Start a Safe Call with Voxa</VoxaText>
+            <VoxaText variant="subtitle">Start a Safe Call with {voxaName}</VoxaText>
             <VoxaText variant="caption" color="textSecondary">
-              She stays with you, checks in gently, and can alert trusted contacts if needed.
+              Calm presence, gentle check-ins, and trusted contacts if you need them.
             </VoxaText>
             <PrimaryButton label="Begin Safe Call" variant="safe" onPress={beginSafeCall} />
           </GlassCard>
         )}
 
         <SectionHeader title="Trusted contacts" style={styles.section} />
-        {safeContacts.map((contact) => (
+        {contacts.map((contact) => (
           <GlassCard key={contact.id} style={styles.contact}>
             <View style={styles.contactRow}>
               <View style={styles.avatar}>
@@ -140,9 +211,13 @@ export function SafeCallScreen() {
         <SectionHeader title="Safety tools" style={styles.section} />
         <View style={styles.tools}>
           {[
-            { icon: 'timer-outline' as const, label: 'Check-in', value: active ? 'Active' : '30 min' },
+            {
+              icon: 'timer-outline' as const,
+              label: 'Check-in',
+              value: active ? `${voice.controller.current?.activeSession?.checkInIntervalMinutes ?? 30} min` : '30 min',
+            },
             { icon: 'key-outline' as const, label: 'Safe word', value: 'Set' },
-            { icon: 'location-outline' as const, label: 'Location', value: 'Off' },
+            { icon: 'location-outline' as const, label: 'Location', value: escalation.getLocationPlaceholder().split(' ')[0] },
           ].map((tool) => (
             <GlassCard key={tool.label} style={styles.tool}>
               <Ionicons name={tool.icon} size={22} color={colors.safe} />
@@ -165,7 +240,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingBottom: layout.tabBarHeight + spacing.xxl,
   },
-  header: { alignItems: 'center', marginBottom: spacing.xl, gap: spacing.sm },
+  header: { alignItems: 'center', marginBottom: spacing.lg, gap: spacing.sm },
   shield: {
     width: 64,
     height: 64,
@@ -184,6 +259,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   subtitle: { textAlign: 'center', maxWidth: 300, lineHeight: 24 },
+  disclaimer: { marginBottom: spacing.sm },
   errorCard: { gap: spacing.md, marginBottom: spacing.sm },
   cta: { gap: spacing.md, marginBottom: spacing.sm },
   activeCard: { gap: spacing.md, marginBottom: spacing.sm },

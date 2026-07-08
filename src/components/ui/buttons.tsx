@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { colors, radius } from '../../constants/theme';
 import { VoxaText } from './voxa-text';
@@ -9,22 +9,38 @@ type PrimaryButtonProps = {
   onPress: () => void;
   variant?: 'primary' | 'ghost' | 'safe';
   icon?: keyof typeof Ionicons.glyphMap;
+  disabled?: boolean;
+  loading?: boolean;
 };
 
-export function PrimaryButton({ label, onPress, variant = 'primary', icon }: PrimaryButtonProps) {
+export function PrimaryButton({
+  label,
+  onPress,
+  variant = 'primary',
+  icon,
+  disabled = false,
+  loading = false,
+}: PrimaryButtonProps) {
   const bg = variant === 'primary' ? colors.primary : variant === 'safe' ? colors.safe : 'transparent';
   const textColor = variant === 'ghost' ? colors.text : colors.background;
+  const isDisabled = disabled || loading;
 
   return (
     <Pressable
       onPress={onPress}
+      disabled={isDisabled}
       style={({ pressed }) => [
         styles.primary,
         { backgroundColor: bg, borderColor: variant === 'ghost' ? colors.glassBorder : 'transparent' },
         variant === 'ghost' && styles.ghost,
-        pressed && styles.pressed,
+        pressed && !isDisabled && styles.pressed,
+        isDisabled && styles.buttonDisabled,
       ]}>
-      {icon ? <Ionicons name={icon} size={18} color={textColor} /> : null}
+      {loading ? (
+        <ActivityIndicator color={textColor} size="small" />
+      ) : icon ? (
+        <Ionicons name={icon} size={18} color={textColor} />
+      ) : null}
       <VoxaText variant="caption" style={{ color: textColor, fontWeight: '700' }}>
         {label}
       </VoxaText>
@@ -94,6 +110,7 @@ const styles = StyleSheet.create({
   },
   ghost: { backgroundColor: colors.surface },
   pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
+  buttonDisabled: { opacity: 0.55 },
   iconWrap: { alignItems: 'center', gap: 8 },
   iconBtn: {
     alignItems: 'center',

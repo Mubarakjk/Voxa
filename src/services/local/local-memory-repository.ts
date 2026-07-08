@@ -82,4 +82,9 @@ export class LocalMemoryRepository implements IMemoryRepository {
     const memories = await this.readAll();
     await this.writeAll(memories.filter((item) => item.id !== id));
   }
+
+  async clearMemoriesForUser(userId: string): Promise<void> {
+    const memories = await this.readAll();
+    await this.writeAll(memories.filter((item) => item.userId !== userId));
+  }
 }

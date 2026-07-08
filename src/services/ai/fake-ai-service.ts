@@ -6,6 +6,7 @@ import {
   GenerateReplyInput,
   GenerateReplyResult,
   IAIService,
+  SummarizeConversationInput,
 } from '../contracts';
 import { extractMemoriesLocally } from '../memory/local-memory-extractor';
 
@@ -103,5 +104,22 @@ export class FakeAIService implements IAIService {
       mode: input.mode,
       existingMemories: input.existingMemories,
     });
+  }
+
+  async understandActionIntent(): Promise<import('../contracts').AIActionIntentResult> {
+    return { action: 'none' };
+  }
+
+  async summarizeConversation(input: SummarizeConversationInput): Promise<string> {
+    const snippet = input.messages.filter((item) => item.role === 'user').slice(-1)[0]?.content.slice(0, 80) ?? 'a thoughtful chat';
+    return `You and Voxa talked about ${snippet}${snippet.length >= 80 ? '…' : ''}.`;
+  }
+
+  async transcribeAudio(): Promise<string | null> {
+    return null;
+  }
+
+  async analyzeImage(): Promise<string | null> {
+    return null;
   }
 }

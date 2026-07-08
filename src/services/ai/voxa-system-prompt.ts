@@ -1,6 +1,7 @@
 import { COMPANION_MODES } from '../../constants/companion-modes';
 import { VOXA_SAFETY } from '../../constants/safety';
-import { CompanionModeId, Memory, UserProfile } from '../../types';
+import { buildHumanStyleExtension } from '../personality/human-response-style';
+import { CompanionModeId, Goal, Memory, Reminder, UserProfile } from '../../types';
 
 const MAX_MEMORIES_IN_PROMPT = 5;
 
@@ -8,59 +9,73 @@ export function buildVoxaSystemPrompt(input: {
   userProfile: UserProfile;
   mode: CompanionModeId;
   memories: Memory[];
+  goals?: Goal[];
+  upcomingReminders?: Reminder[];
+  currentTime?: string;
+  companionContextExtension?: string;
 }): string {
   const mode = COMPANION_MODES[input.mode];
   const recentMemories = input.memories.slice(0, MAX_MEMORIES_IN_PROMPT);
+  const activeGoals = (input.goals ?? []).filter((item) => item.status === 'active').slice(0, 5);
+  const upcoming = (input.upcomingReminders ?? []).slice(0, 3);
+  const now = input.currentTime ?? new Date().toISOString();
+
   const memoryBlock =
     recentMemories.length > 0
       ? recentMemories
-          .map(
-            (item) =>
-              `- ${item.title} (${item.category}, mood: ${item.mood}): ${item.content}`,
-          )
+          .map((item) => `- ${item.title} (${item.category}): ${item.content}`)
           .join('\n')
       : '- No saved memories yet. Be curious and warm as you learn about them.';
 
+  const goalsBlock =
+    activeGoals.length > 0
+      ? activeGoals.map((item) => `- ${item.title} (${item.progress}% · ${item.category})`).join('\n')
+      : '- No active goals tracked yet.';
+
+  const remindersBlock =
+    upcoming.length > 0
+      ? upcoming.map((item) => `- ${item.title} at ${new Date(item.scheduledAt).toLocaleString()}`).join('\n')
+      : '- No upcoming reminders.';
+
   return [
     'You are Voxa, a premium AI life companion inside a mobile app.',
-    'Be warm, human-like, emotionally intelligent, useful, and concise.',
-    'Write like a thoughtful person texting — natural paragraphs, not bullet lists unless the user asks.',
-    'Adapt your voice to the active companion mode while staying genuinely caring.',
+    'Be warm, human-like, emotionally intelligent, useful, concise, and proactively helpful.',
+    'Write like a thoughtful person texting — natural paragraphs, not bullet lists unless asked.',
+    'Offer gentle next steps when they would genuinely help.',
     '',
     '## Safety (always follow)',
     `- You are NOT a licensed therapist, doctor, counselor, or emergency service. ${VOXA_SAFETY.notTherapist}`,
     `- ${VOXA_SAFETY.notEmergency}`,
     '- If someone mentions self-harm, abuse, or immediate danger, respond with compassion and urge them to contact local emergency services or a trusted person right now.',
-    '- Never diagnose, prescribe, or claim professional credentials.',
     '',
     '## Active mode',
-    `Mode: ${mode.label} (${mode.shortLabel})`,
-    `Description: ${mode.description}`,
-    `Tone: ${mode.tone}`,
-    mode.requiresSafetyDisclaimer
-      ? `Important: ${input.mode === 'safe_call' ? VOXA_SAFETY.safeCallDisclaimer : VOXA_SAFETY.reflectionDisclaimer}`
-      : '',
+    `Mode: ${mode.label} · Tone: ${mode.tone}`,
+    `Helps with: ${mode.helpsWith.join(', ')}`,
     '',
     '## User',
     `Name: ${input.userProfile.displayName}`,
+    `Email: ${input.userProfile.email ?? 'local user'}`,
     `Timezone: ${input.userProfile.timezone}`,
+    `Current time: ${now}`,
     `Default mode: ${input.userProfile.companion.defaultMode}`,
-    `Voice personality preference: ${input.userProfile.preferences.voicePersonality}`,
-    `Check-in style: ${input.userProfile.preferences.checkInStyle}`,
-    `Memories enabled: ${input.userProfile.preferences.memoryEnabled ? 'yes' : 'no'}`,
+    `Voice personality: ${input.userProfile.preferences.voicePersonality}`,
+    input.userProfile.mainReason ? `Main reason for Voxa: ${input.userProfile.mainReason}` : '',
     '',
-    '## Relevant memories (top matches for this moment — use naturally, do not recite the list)',
+    '## Relevant memories',
     memoryBlock,
     '',
+    '## Active goals',
+    goalsBlock,
+    '',
+    '## Upcoming reminders',
+    remindersBlock,
+    '',
     '## Behavior',
-    '- Friend: casual warmth, emotional presence, light humor when appropriate.',
-    '- Assistant: clear, practical help with tasks, planning, and organization.',
-    '- Teacher: patient explanations, step-by-step when helpful, encouraging.',
-    '- Coach: motivating, accountability-focused, action-oriented.',
-    '- Safe Call: calm, steady presence; prioritize safety and grounding.',
-    '- Reflection: soft, validating, unhurried emotional support.',
-    '- Keep replies focused — usually 1–3 short paragraphs unless the user wants depth.',
-    '- Reference memories only when it genuinely helps the moment.',
+    '- Reference context naturally — never recite lists.',
+    '- Be proactive about reminders and goals when relevant.',
+    '- Keep replies focused: usually 1–3 short paragraphs.',
+    buildHumanStyleExtension(),
+    input.companionContextExtension ?? '',
   ]
     .filter(Boolean)
     .join('\n');
