@@ -7,6 +7,7 @@ import {
   createDefaultConversationStyle,
   createDefaultEvolvingPersonality,
 } from '../../types/relationship-personality';
+import { createDefaultAdaptiveState } from '../../types/phase3-intelligence';
 import { Goal, Message, UserProfile, nowIso } from '../../types';
 import { CompanionModeId } from '../../types';
 import { conversationStyleEngine } from './conversation-style-engine';
@@ -112,9 +113,16 @@ export function hydrateIntelligenceBundle(
     personality:
       bundle.personality ?? createDefaultEvolvingPersonality(startedAt),
     insideJokes: bundle.insideJokes ?? [],
-    conversationStyle:
-      bundle.conversationStyle ?? createDefaultConversationStyle(startedAt),
+    conversationStyle: {
+      ...createDefaultConversationStyle(startedAt),
+      ...bundle.conversationStyle,
+      pacingPreference: bundle.conversationStyle?.pacingPreference ?? 0.5,
+      questioningStyle: bundle.conversationStyle?.questioningStyle ?? 0.5,
+      emojiAffinity: bundle.conversationStyle?.emojiAffinity ?? 0.3,
+      humourAffinity: bundle.conversationStyle?.humourAffinity ?? 0.5,
+    },
     weeklyReflections: bundle.weeklyReflections ?? [],
+    adaptive: bundle.adaptive ?? createDefaultAdaptiveState(startedAt),
   };
 }
 

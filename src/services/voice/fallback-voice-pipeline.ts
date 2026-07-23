@@ -25,6 +25,7 @@ export type FallbackVoicePipelineConfig = {
   personality: VoicePersonality;
   profile: UserProfile;
   isSafeCall?: boolean;
+  buildReplyExtension?: (userText: string) => Promise<string>;
 };
 
 export type FallbackVoicePipelineEvents = {
@@ -110,7 +111,9 @@ export class FallbackVoicePipeline {
     this.announcing = true;
     this.turnBusy = true;
     try {
+      voiceLog('VOICE TURN START', 'opening');
       await this.announce(config, openingText);
+      voiceLog('VOICE TURN END', 'opening');
     } finally {
       this.announcing = false;
       this.turnBusy = false;
@@ -126,6 +129,11 @@ export class FallbackVoicePipeline {
 
   async stop() {
     voiceLog('VOICE END');
+    await this.forceStop();
+    this.setState('disconnected');
+  }
+
+  async forceStop() {
     this.active = false;
     this.listenLoopRunning = false;
     this.turnBusy = false;
@@ -133,7 +141,7 @@ export class FallbackVoicePipeline {
     await this.recording.cancel();
     await this.tts.stop();
     await this.recording.resetAudioMode();
-    this.setState('disconnected');
+    this.currentState = 'idle';
   }
 
   setMicMuted(muted: boolean) {
@@ -170,7 +178,6 @@ export class FallbackVoicePipeline {
       return;
     }
     this.listenLoopRunning = true;
-    voiceLog('VOICE LISTENING');
 
     try {
       while (this.active) {
@@ -187,6 +194,7 @@ export class FallbackVoicePipeline {
         this.setState('listening');
 
         try {
+          voiceLog('VOICE TURN START');
           const uri = await this.captureChunk();
           if (!this.active) break;
           if (!uri) continue;
@@ -226,6 +234,7 @@ export class FallbackVoicePipeline {
           if (!this.active) break;
 
           await this.playVoxaSpeech(config, voxaText, { persistMessages: true, userText });
+          voiceLog('VOICE TURN END');
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Voice loop failed.';
           recordVoiceError(message);
@@ -284,13 +293,17 @@ export class FallbackVoicePipeline {
       });
     }
 
+    const extension = config.buildReplyExtension
+      ? await config.buildReplyExtension(userText)
+      : buildHumanStyleExtension(true);
+
     const aiResult = await this.ai.generateReply({
       mode: config.mode,
       userMessage: userText,
       conversationHistory: history,
       userProfile: config.profile,
       memories,
-      companionContextExtension: buildHumanStyleExtension(true),
+      companionContextExtension: extension,
     });
     return aiResult.content;
   }
@@ -335,34 +348,37 @@ export class FallbackVoicePipeline {
       });
     }
 
-    voiceLog('VOICE SPEAKING');
-    this.setState('speaking');
-
     if (this.speakerEnabled && this.speechConfig) {
+      this.setState('speaking');
       const pauseMs = options.system ? 200 : 350 + Math.min(text.length * 6, 900);
       await sleep(pauseMs);
+      await this.recording.resetAudioMode();
       await this.speakWithRetry(text, this.speechConfig);
+      await this.waitForSpeechEnd(18_000);
     }
 
     if (this.active) {
-      await sleep(200);
-      this.setState('listening');
+      await sleep(150);
+    }
+  }
+
+  /** Hard cap so speaking state cannot block the listen loop forever. */
+  private async waitForSpeechEnd(maxMs: number) {
+    const deadline = Date.now() + maxMs;
+    while (this.active && this.tts.isSpeaking() && Date.now() < deadline) {
+      await sleep(50);
+    }
+    if (this.tts.isSpeaking()) {
+      voiceLog('VOICE SPEECH CAP', 'forcing TTS stop');
+      await this.tts.stop();
     }
   }
 
   private async speakWithRetry(text: string, config: VoiceSpeechConfig) {
     try {
       await this.tts.speak(text, config);
-      return;
-    } catch (first) {
-      recordVoiceError(first instanceof Error ? first.message : 'TTS failed');
-      voiceLog('VOICE TTS retry');
-      await sleep(400);
-      try {
-        await this.tts.speak(text, config);
-      } catch (second) {
-        recordVoiceError(second instanceof Error ? second.message : 'TTS retry failed');
-      }
+    } catch (err) {
+      recordVoiceError(err instanceof Error ? err.message : 'TTS failed');
     }
   }
 

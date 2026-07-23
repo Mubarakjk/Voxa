@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { HomeDashboardData } from '../services/voxa-companion-service';
+import { recordDashboardCacheHit, recordDashboardCacheMiss } from '../utils/performance-metrics';
 
-const CACHE_TTL_MS = 45_000;
+const CACHE_TTL_MS = 60_000;
 
 type CacheEntry = {
   data: HomeDashboardData;
@@ -36,6 +37,7 @@ export function useCachedDashboard(
       ) {
         setDashboard(globalCache.data);
         setIsLoading(false);
+        recordDashboardCacheHit();
         return globalCache.data;
       }
 
@@ -44,13 +46,20 @@ export function useCachedDashboard(
       }
 
       setIsLoading(true);
-      const task = fetcher(userId).then((data) => {
-        globalCache = { data, fetchedAt: Date.now(), userId };
-        setDashboard(data);
-        setIsLoading(false);
-        inflight.current = null;
-        return data;
-      });
+      recordDashboardCacheMiss();
+      const task = fetcher(userId)
+        .then((data) => {
+          globalCache = { data, fetchedAt: Date.now(), userId };
+          setDashboard(data);
+          setIsLoading(false);
+          inflight.current = null;
+          return data;
+        })
+        .catch((err) => {
+          setIsLoading(false);
+          inflight.current = null;
+          throw err;
+        });
 
       inflight.current = task;
       return task;

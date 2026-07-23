@@ -3,7 +3,6 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { PrimaryButton } from '../ui/buttons';
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
-import { PRICING_CONFIG } from '../../constants/pricing';
 import { colors, layout, radius, spacing } from '../../constants/theme';
 
 type LimitReachedModalProps = {
@@ -29,18 +28,18 @@ export function LimitReachedModal({
               {message}
             </VoxaText>
             <VoxaText variant="caption" color="textMuted">
-              Free limits reset daily. Upgrade to Pro for unlimited access, or continue tomorrow.
+              Free limits reset daily. Voxa Pro includes generous fair use — upgrade only if you want to continue now.
             </VoxaText>
             <View style={styles.actions}>
-              <PrimaryButton label="Upgrade to Pro" onPress={onUpgrade} />
+              <PrimaryButton label="See Voxa Pro" onPress={onUpgrade} />
               <PrimaryButton
-                label="Continue Free tomorrow"
+                label="Continue with Free"
                 variant="ghost"
                 onPress={onContinueFree}
               />
             </View>
             <VoxaText variant="caption" color="textMuted" style={styles.trialHint}>
-              Try {PRICING_CONFIG.trialDays} days free — no payment required yet.
+              Free trial availability depends on App Store or Google Play eligibility.
             </VoxaText>
           </GlassCard>
         </Pressable>

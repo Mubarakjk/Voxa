@@ -114,12 +114,18 @@ export function memoryFromRow(row: Record<string, unknown>): Memory {
     occurredAt: row.occurred_at as string | undefined,
     lastUsedAt: row.last_used_at as string | undefined,
     useCount: (row.use_count as number) ?? 0,
+    emotionalSignificance: row.emotional_significance as Memory['emotionalSignificance'],
+    confidence: row.confidence as number | undefined,
+    expiresAt: row.expires_at as string | undefined,
+    pinned: ((row.tags as string[]) ?? []).includes('pinned'),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
 }
 
 export function memoryToInsert(input: CreateMemoryInput, id: string, timestamp: string) {
+  const tags = [...(input.tags ?? [])];
+  if (input.pinned && !tags.includes('pinned')) tags.unshift('pinned');
   return {
     id,
     user_id: input.userId,
@@ -128,15 +134,36 @@ export function memoryToInsert(input: CreateMemoryInput, id: string, timestamp: 
     content: input.content,
     mood: input.mood ?? 'neutral',
     importance: input.importance ?? 3,
-    tags: input.tags ?? [],
+    tags,
     source: input.source ?? 'manual',
     related_mode: input.relatedMode,
     occurred_at: input.occurredAt,
     last_used_at: input.lastUsedAt,
     use_count: input.useCount ?? 0,
+    emotional_significance: input.emotionalSignificance,
+    confidence: input.confidence,
+    expires_at: input.expiresAt,
     created_at: timestamp,
     updated_at: timestamp,
   };
+}
+
+export function memoryToUpdate(input: UpdateMemoryInput, tags?: string[]): Record<string, unknown> {
+  const patch: Record<string, unknown> = { updated_at: nowIso() };
+  if (input.category !== undefined) patch.category = input.category;
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.content !== undefined) patch.content = input.content;
+  if (input.mood !== undefined) patch.mood = input.mood;
+  if (input.importance !== undefined) patch.importance = input.importance;
+  if (input.relatedMode !== undefined) patch.related_mode = input.relatedMode;
+  if (input.occurredAt !== undefined) patch.occurred_at = input.occurredAt;
+  if (input.lastUsedAt !== undefined) patch.last_used_at = input.lastUsedAt;
+  if (input.useCount !== undefined) patch.use_count = input.useCount;
+  if (input.emotionalSignificance !== undefined) patch.emotional_significance = input.emotionalSignificance;
+  if (input.confidence !== undefined) patch.confidence = input.confidence;
+  if (input.expiresAt !== undefined) patch.expires_at = input.expiresAt;
+  if (tags !== undefined) patch.tags = tags;
+  return patch;
 }
 
 export function goalFromRow(row: Record<string, unknown>): Goal {
@@ -169,9 +196,24 @@ export function reminderFromRow(row: Record<string, unknown>): Reminder {
     allowProactiveCall: Boolean(row.allow_proactive_call),
     completedAt: row.completed_at as string | undefined,
     goalId: row.goal_id as string | undefined,
+    notificationId: row.notification_id as string | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
+}
+
+export function reminderToUpdate(input: UpdateReminderInput): Record<string, unknown> {
+  const patch: Record<string, unknown> = { updated_at: nowIso() };
+  if (input.title !== undefined) patch.title = input.title;
+  if (input.body !== undefined) patch.body = input.body;
+  if (input.scheduledAt !== undefined) patch.scheduled_at = input.scheduledAt;
+  if (input.recurrence !== undefined) patch.recurrence = input.recurrence;
+  if (input.status !== undefined) patch.status = input.status;
+  if (input.mode !== undefined) patch.mode = input.mode;
+  if (input.allowProactiveCall !== undefined) patch.allow_proactive_call = input.allowProactiveCall;
+  if (input.completedAt !== undefined) patch.completed_at = input.completedAt;
+  if (input.notificationId !== undefined) patch.notification_id = input.notificationId;
+  return patch;
 }
 
 export function conversationFromRow(row: Record<string, unknown>): Conversation {
@@ -183,6 +225,7 @@ export function conversationFromRow(row: Record<string, unknown>): Conversation 
     title: row.title as string | undefined,
     status: row.status as Conversation['status'],
     lastMessageAt: row.last_message_at as string | undefined,
+    summary: row.summary as string | undefined,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -228,6 +271,7 @@ export function trustedContactFromRow(row: Record<string, unknown>): TrustedCont
     relation: row.relation as string,
     status: row.status as string,
     phone: row.phone as string | undefined,
+    isEmergency: Boolean(row.is_emergency),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };

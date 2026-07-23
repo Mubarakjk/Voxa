@@ -1,5 +1,7 @@
 import { getCompanionMode } from '../../constants/companion-modes';
+import { isFeatureVisible } from '../../config/feature-status';
 import { CompanionModeId, CreateMemoryInput, CreateReminderInput, Reminder } from '../../types';
+import { liveVoiceUnavailableMessage } from '../../utils/voice-navigation';
 import { IStorageService, VoxaRepositories } from '../contracts';
 import { formatReminderTime } from '../../utils/reminders';
 import { notificationService } from '../notifications/notification-service';
@@ -13,7 +15,7 @@ import {
 import { ParseMessageContext, parseMessageIntent } from './action-intent-resolver';
 
 export type ChatSideEffect =
-  | { type: 'navigate'; tab: 'Voxa'; action?: 'voice' | 'safe' }
+  | { type: 'open_voice_conversation'; safe?: boolean; autoStart?: boolean }
   | { type: 'switch_mode'; mode: CompanionModeId; conversationId: string };
 
 export type ChatActionExecutionResult = {
@@ -136,23 +138,34 @@ export class ChatActionExecutor {
   }
 
   private async executeStartSafeCall(context: ExecuteContext): Promise<ChatActionExecutionResult> {
+    if (!isFeatureVisible('safeCall')) {
+      return {
+        success: true,
+        confirmationMessage: liveVoiceUnavailableMessage(true),
+      };
+    }
     await this.deps.startSafeCallSession(context.userId);
 
     return {
       success: true,
-      confirmationMessage:
-        "I'm starting Safe Call mode for you now. I'm here with you — you're not alone.",
-      sideEffect: { type: 'navigate', tab: 'Voxa', action: 'safe' },
+      confirmationMessage: "I'm starting Safe Call mode for you now. I'm here with you — you're not alone.",
+      sideEffect: { type: 'open_voice_conversation', safe: true, autoStart: true },
     };
   }
 
   private async executeStartVoiceCall(context: ExecuteContext): Promise<ChatActionExecutionResult> {
+    if (!isFeatureVisible('voiceCall')) {
+      return {
+        success: true,
+        confirmationMessage: liveVoiceUnavailableMessage(false),
+      };
+    }
     await this.deps.startVoiceSession(context.userId, context.mode);
 
     return {
       success: true,
-      confirmationMessage: 'Connecting you now — opening Voxa.',
-      sideEffect: { type: 'navigate', tab: 'Voxa', action: 'voice' },
+      confirmationMessage: 'Connecting you now — opening voice.',
+      sideEffect: { type: 'open_voice_conversation', autoStart: true },
     };
   }
 

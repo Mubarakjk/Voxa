@@ -13,6 +13,8 @@ import {
   VoxaServices,
 } from '../services';
 import { UserProfile } from '../types';
+import { validateBillingEnvironment } from '../services/billing/billing-validation';
+import { BillingLog } from '../services/billing/billing-logger';
 
 type VoxaContextValue = {
   isReady: boolean;
@@ -32,7 +34,7 @@ const VoxaContext = createContext<VoxaContextValue | null>(null);
 
 export function VoxaProvider({ children }: { children: ReactNode }) {
   const [services, setServices] = useState(() => getVoxaServices());
-  const background = useMemo(() => createBackgroundServices(services.repositories), [services]);
+  const background = useMemo(() => createBackgroundServices(services.repositories, services.storage), [services]);
   const companion = useMemo(
     () =>
       new VoxaCompanionService(
@@ -64,6 +66,7 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
         const cachedProfile = await services.repositories.userProfile.getProfile();
         if (authUser && cachedProfile && cachedProfile.id !== authUser.id) {
           console.warn('[Voxa] Stale local profile cache detected — clearing before cloud sync.');
+          await services.subscription.signOutBilling(cachedProfile.id);
           await clearAllLocalVoxaData(services.storage);
         }
       }
@@ -86,6 +89,14 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
 
       if (!currentProfile) {
         throw new Error('User profile not found. Please sign in again.');
+      }
+
+      const billingValidation = validateBillingEnvironment();
+      if (!billingValidation.allRequiredOk) {
+        const failedLabels = billingValidation.checks.filter((check) => !check.ok).map((check) => check.label);
+        BillingLog.configureFailure(`Startup billing validation: ${failedLabels.join(', ')}`);
+      } else {
+        BillingLog.configureSuccess();
       }
 
       await services.subscription.syncProfile(currentProfile);
@@ -141,6 +152,9 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
 
   const signOutCleanup = useCallback(async () => {
     try {
+      if (profile?.id) {
+        await services.subscription.signOutBilling(profile.id);
+      }
       if (hasSupabaseConfig()) {
         await clearAllLocalVoxaData(services.storage);
       }
@@ -152,7 +166,7 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setIsReady(false);
     setError(null);
-  }, [services.storage]);
+  }, [services.storage, services.subscription, profile?.id]);
 
   const value = useMemo(
     () => ({

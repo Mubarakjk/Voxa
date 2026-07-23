@@ -18,6 +18,13 @@ import { lifeTimelineEngine } from './life-timeline-engine';
 import { proactiveDecisionEngine } from './proactive-decision-engine';
 import { relationshipEngine } from './relationship-engine';
 import { relationshipPersonalityService } from '../personality/relationship-personality-service';
+import { adaptiveIntelligenceService } from './adaptive-intelligence-service';
+import { emotionalAwarenessEngine } from './emotional-awareness-engine';
+import { modeInferenceEngine } from './mode-inference-engine';
+import { sportsIntelligenceEngine } from './sports-intelligence-engine';
+import { memoryAgingEngine } from '../personality/memory-aging-engine';
+import { nowIso } from '../../types';
+import { MoodHistoryEntry } from '../check-in/daily-check-in-service';
 
 export type AfterConversationInput = {
   userId: string;
@@ -48,6 +55,8 @@ export class CompanionIntelligenceService {
     mode: CompanionModeId;
     conversationId: string;
     userMessage: string;
+    moodHistory?: MoodHistoryEntry[];
+    online?: boolean;
   }): Promise<UnifiedCompanionContext> {
     const bundle = await this.getBundle(input.userId, input.userProfile.displayName);
 
@@ -59,23 +68,44 @@ export class CompanionIntelligenceService {
       this.repositories.messages.listMessages(input.conversationId),
     ]);
 
+    const { signals, plan, graphPrompt } = await adaptiveIntelligenceService.planResponse({
+      userMessage: input.userMessage,
+      bundle,
+      memories,
+      goals,
+      moodHistory: input.moodHistory ?? [],
+      online: input.online,
+    });
+
+    const effectiveMode = plan.companionMode;
+
     const topMemories = await this.memoryEngine.retrieveForPrompt(input.userId, {
       userMessage: input.userMessage,
-      mode: input.mode,
+      mode: effectiveMode,
       recentMessageTexts: messages.slice(-6).map((m) => m.content),
       memoryLevel: input.userProfile.preferences.companionControls?.memoryLevel ?? 'balanced',
     });
 
-    return contextEngine.build({
+    const base = contextEngine.build({
       userProfile: input.userProfile,
       bundle,
-      mode: input.mode,
+      mode: effectiveMode,
       topMemories,
       activeGoals: goals,
       upcomingReminders: getUpcomingReminders(reminders, 5),
       recentMessages: messages,
       recentConversations: conversations.slice(0, 5),
     });
+
+    const adaptiveExtension = adaptiveIntelligenceService.toPromptExtension(plan, graphPrompt);
+
+    return {
+      ...base,
+      mode: effectiveMode,
+      adaptivePlan: plan,
+      adaptiveModeLabel: plan.modeLabel,
+      principlesBlock: `${base.principlesBlock}\n\n${adaptiveExtension}`,
+    };
   }
 
   async afterConversation(input: AfterConversationInput): Promise<CompanionIntelligenceBundle> {
@@ -156,6 +186,7 @@ export class CompanionIntelligenceService {
         insideJokes: bundle.insideJokes,
         conversationStyle: bundle.conversationStyle,
         weeklyReflections: bundle.weeklyReflections,
+        adaptive: bundle.adaptive,
       },
       userProfile: input.userProfile,
       userMessage: input.userMessage,
@@ -166,7 +197,41 @@ export class CompanionIntelligenceService {
       birthdayRemembered,
     });
 
-    const next: CompanionIntelligenceBundle = personalityBundle;
+    const signals = modeInferenceEngine.inferSignals(input.userMessage, personalityBundle);
+    const modeLabel = modeInferenceEngine.inferModeLabel(signals, personalityBundle);
+    const sportsPrefs = sportsIntelligenceEngine.extractPreferences(memories, personalityBundle.adaptive.sportsPreferences);
+    const emotional = emotionalAwarenessEngine.analyze({
+      profile: updatedProfile,
+      moodHistory: [],
+      baseline: personalityBundle.adaptive.emotionalBaseline,
+      userMessage: input.userMessage,
+    });
+
+    let adaptive = {
+      ...personalityBundle.adaptive,
+      lastModeLabel: modeLabel,
+      lastSignals: signals,
+      sportsPreferences: sportsPrefs,
+      emotionalBaseline: emotional.baseline,
+      updatedAt: nowIso(),
+    };
+    if (emotional.checkInOffer) {
+      adaptive = {
+        ...adaptive,
+        emotionalBaseline: emotionalAwarenessEngine.recordCheckInOffered(adaptive.emotionalBaseline),
+      };
+    }
+
+    const fadeCandidates = memoryAgingEngine.fadeTrivial(memories);
+    for (const candidate of fadeCandidates.slice(0, 2)) {
+      await this.repositories.memories
+        .updateMemory(candidate.memory.id, {
+          importance: candidate.suggestedImportance as 1 | 2 | 3 | 4 | 5,
+        })
+        .catch(() => undefined);
+    }
+
+    const next: CompanionIntelligenceBundle = { ...personalityBundle, adaptive };
 
     await this.store.save(input.userId, next);
     return next;

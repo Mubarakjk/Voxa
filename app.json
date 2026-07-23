@@ -15,13 +15,16 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "app.voxa.companion",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Voxa uses the microphone for voice notes and voice calls.",
+        "NSMicrophoneUsageDescription": "Voxa uses your microphone when you choose to record a voice note.",
         "NSCameraUsageDescription": "Voxa uses the camera to capture photos and videos in chat.",
-        "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat."
+        "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat.",
+        "NSLocationWhenInUseUsageDescription": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually."
       }
     },
     "android": {
+      "package": "app.voxa.companion",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#06060C"
@@ -30,7 +33,9 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO"
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -61,7 +66,28 @@
           "microphonePermission": "Voxa uses the microphone for voice notes and voice calls."
         }
       ],
-      "expo-secure-store"
-    ]
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Voxa uses the microphone for voice notes."
+        }
+      ],
+      "expo-secure-store",
+      "expo-dev-client",
+      "expo-font",
+      "expo-audio",
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "replace-with-eas-project-id"
+      }
+    }
   }
 }

@@ -1,134 +1,56 @@
-import { Audio } from 'expo-av';
-
 import { requestMicrophonePermission } from '../attachments/attachment-permissions';
+import { audioSessionManager } from '../audio/audio-session-manager';
 import { recordVoiceError, setVoiceDebugState, voiceLog } from './voice-debug-state';
 
 export class VoiceRecordingService {
-  private recording: Audio.Recording | null = null;
-  private operationLock: Promise<void> = Promise.resolve();
-  private isStarting = false;
+  private readonly owner = 'voice' as const;
 
   async ensurePermission(): Promise<boolean> {
     return requestMicrophonePermission();
   }
 
   isRecording() {
-    return Boolean(this.recording);
-  }
-
-  private runExclusive<T>(label: string, fn: () => Promise<T>): Promise<T> {
-    const task = this.operationLock.then(async () => {
-      try {
-        return await fn();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        recordVoiceError(`${label}: ${message}`);
-        throw error;
-      }
-    });
-    this.operationLock = task.then(
-      () => undefined,
-      () => undefined,
-    );
-    return task;
-  }
-
-  private async forceRelease() {
-    const active = this.recording;
-    if (!active) {
-      setVoiceDebugState({ recorderActive: false });
-      return;
-    }
-
-    try {
-      const status = await active.getStatusAsync();
-      if (status.isRecording) {
-        await active.stopAndUnloadAsync();
-      } else if (status.canRecord) {
-        await active.stopAndUnloadAsync();
-      } else {
-        await active.stopAndUnloadAsync();
-      }
-    } catch {
-      try {
-        await active.stopAndUnloadAsync();
-      } catch {
-        // ignore secondary unload errors
-      }
-    } finally {
-      this.recording = null;
-      this.isStarting = false;
-      setVoiceDebugState({ recorderActive: false });
-    }
+    return audioSessionManager.isRecording() && audioSessionManager.isLockedBy(this.owner);
   }
 
   async start(): Promise<void> {
-    if (this.isStarting || this.recording) {
-      voiceLog('VOICE RECORDING START skipped', 'recorder busy');
-      return;
+    if (audioSessionManager.isMicBusy() && !audioSessionManager.isLockedBy(this.owner)) {
+      voiceLog('VOICE RECORDING START skipped', 'audio lock held');
+      await audioSessionManager.forceReset();
     }
 
-    return this.runExclusive('VOICE RECORDING START', async () => {
-      this.isStarting = true;
-      await this.forceRelease();
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-      this.recording = recording;
-      this.isStarting = false;
+    try {
+      await audioSessionManager.startRecording(this.owner);
       setVoiceDebugState({ recorderActive: true });
       voiceLog('VOICE RECORDING START');
-    });
+    } catch (error) {
+      setVoiceDebugState({ recorderActive: false });
+      const message = error instanceof Error ? error.message : 'Recording failed';
+      recordVoiceError(message);
+      await audioSessionManager.releaseLock(this.owner);
+      throw error;
+    }
   }
 
   async stop(): Promise<string | null> {
-    return this.runExclusive('VOICE RECORDING STOP', async () => {
-      const active = this.recording;
-      if (!active) {
-        voiceLog('VOICE RECORDING STOP skipped', 'no recorder');
-        return null;
-      }
-
-      try {
-        await active.stopAndUnloadAsync();
-        const uri = active.getURI();
-        voiceLog('VOICE RECORDING STOP', uri ? 'ok' : 'empty');
-        return uri;
-      } finally {
-        this.recording = null;
-        this.isStarting = false;
-        setVoiceDebugState({ recorderActive: false });
-      }
-    });
+    try {
+      const uri = await audioSessionManager.stopRecording();
+      voiceLog('VOICE RECORDING STOP', uri ? 'ok' : 'empty');
+      return uri;
+    } finally {
+      setVoiceDebugState({ recorderActive: false });
+      await audioSessionManager.releaseLock(this.owner);
+    }
   }
 
   async cancel() {
-    await this.runExclusive('VOICE RECORDING CANCEL', async () => {
-      await this.forceRelease();
-      voiceLog('VOICE RECORDING CANCEL');
-    });
+    await audioSessionManager.cancelRecording();
+    await audioSessionManager.releaseLock(this.owner);
+    setVoiceDebugState({ recorderActive: false });
+    voiceLog('VOICE RECORDING CANCEL');
   }
 
   async resetAudioMode() {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-    } catch {
-      // ignore
-    }
+    await audioSessionManager.setPlaybackMode();
   }
 }

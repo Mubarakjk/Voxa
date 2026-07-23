@@ -24,13 +24,18 @@ import { createSupabaseRepositories } from './supabase/supabase-repositories';
 import {
   FeatureGateService,
   LocalSubscriptionRepository,
-  StubBillingService,
-  StubPurchaseManager,
   SubscriptionService,
   UsageTrackingService,
 } from './billing';
 import { createMusicRecognitionService } from './music/music-recognition-service';
 import { IBillingService, IPurchaseManager, ISubscriptionRepository } from './billing/billing-contracts';
+import { RevenueCatPurchaseManager } from './billing/revenuecat-purchase-manager';
+import { RevenueCatBillingService } from './billing/revenuecat-billing-service';
+import { RevenueCatSubscriptionSynchroniser } from './billing/revenuecat-subscription-synchroniser';
+import { SubscriptionEntitlementService } from './billing/subscription-entitlement-service';
+import { SubscriptionAnalyticsService } from './billing/subscription-analytics-service';
+import { PaywallImpressionService } from './billing/paywall-impression-service';
+import { ModelRoutingService } from './billing/model-routing-service';
 
 export type CreateVoxaServicesOptions = {
   storage?: IStorageService;
@@ -71,10 +76,30 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     repositories.userProfile,
     usageTracking,
   );
-  const billing: IBillingService = new StubBillingService(subscriptionRepo);
-  const purchaseManager: IPurchaseManager = new StubPurchaseManager();
-  const subscription = new SubscriptionService(subscriptionRepo, billing, usageTracking);
+  const entitlementService = new SubscriptionEntitlementService(storage);
+  const purchaseManager: IPurchaseManager = new RevenueCatPurchaseManager(entitlementService);
+  const synchroniser = new RevenueCatSubscriptionSynchroniser(
+    subscriptionRepo,
+    entitlementService,
+    purchaseManager as RevenueCatPurchaseManager,
+  );
+  const billing: IBillingService = new RevenueCatBillingService(
+    purchaseManager as RevenueCatPurchaseManager,
+    synchroniser,
+    entitlementService,
+    subscriptionRepo,
+  );
+  const subscription = new SubscriptionService(
+    subscriptionRepo,
+    billing,
+    usageTracking,
+    entitlementService,
+    storage,
+  );
   const featureGate = new FeatureGateService();
+  const subscriptionAnalytics = new SubscriptionAnalyticsService(storage);
+  const paywallImpressions = new PaywallImpressionService(storage);
+  const modelRouting = new ModelRoutingService();
   createMusicRecognitionService(storage);
 
   return {
@@ -89,6 +114,11 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     purchaseManager,
     subscription,
     featureGate,
+    entitlementService,
+    subscriptionAnalytics,
+    paywallImpressions,
+    modelRouting,
+    synchroniser,
   };
 }
 

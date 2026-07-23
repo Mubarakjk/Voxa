@@ -10,6 +10,7 @@ import {
 } from './relationship-personality';
 import { GoalCategory } from './goal';
 import { MemoryCategory, MemoryMood } from './memory';
+import { AdaptiveIntelligenceState, createDefaultAdaptiveState } from './phase3-intelligence';
 
 /** Continuously updated understanding of who the user is. */
 export type CompanionIntelligenceProfile = {
@@ -115,6 +116,7 @@ export type CompanionIntelligenceBundle = {
   insideJokes: InsideJoke[];
   conversationStyle: ConversationStyleProfile;
   weeklyReflections: WeeklyReflection[];
+  adaptive: AdaptiveIntelligenceState;
 };
 
 /** Built before every AI reply. */
@@ -139,6 +141,8 @@ export type UnifiedCompanionContext = {
   availableInsideJokes: InsideJoke[];
   companionControls: import('./relationship-personality').CompanionControlPreferences;
   weeklyReflectionHint?: string;
+  adaptivePlan?: import('./phase3-intelligence').ResponsePlan;
+  adaptiveModeLabel?: import('./phase3-intelligence').AdaptiveModeLabel;
 };
 
 export type HomeIntelligenceSnapshot = {
@@ -220,5 +224,6 @@ export function createDefaultIntelligenceBundle(
     insideJokes: [],
     conversationStyle: createDefaultConversationStyle(startedAt),
     weeklyReflections: [],
+    adaptive: createDefaultAdaptiveState(startedAt),
   };
 }

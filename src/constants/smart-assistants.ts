@@ -1,3 +1,4 @@
+import { FeatureKey, isAssistantFeatureAvailable } from '../config/feature-status';
 import { CompanionModeId } from '../types';
 
 export type SmartAssistantFeature = {
@@ -8,7 +9,9 @@ export type SmartAssistantFeature = {
   mode: CompanionModeId;
   starterPrompt: string;
   category: 'productivity' | 'life' | 'creative' | 'vision' | 'health';
+  /** @deprecated use isSmartAssistantAvailable() */
   available: boolean;
+  featureKey?: FeatureKey;
 };
 
 export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
@@ -20,7 +23,8 @@ export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
     mode: 'assistant',
     starterPrompt: 'Help me plan my schedule for today.',
     category: 'productivity',
-    available: true,
+    available: false,
+    featureKey: 'calendarAssistant',
   },
   {
     id: 'email',
@@ -30,7 +34,8 @@ export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
     mode: 'assistant',
     starterPrompt: 'Help me draft a professional email.',
     category: 'productivity',
-    available: true,
+    available: false,
+    featureKey: 'emailAssistant',
   },
   {
     id: 'meeting-prep',
@@ -140,7 +145,8 @@ export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
     mode: 'assistant',
     starterPrompt: 'Summarise this document for me.',
     category: 'productivity',
-    available: true,
+    available: false,
+    featureKey: 'documents',
   },
   {
     id: 'pdf-chat',
@@ -150,7 +156,8 @@ export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
     mode: 'assistant',
     starterPrompt: 'I want to discuss a document with you.',
     category: 'productivity',
-    available: true,
+    available: false,
+    featureKey: 'documents',
   },
   {
     id: 'camera',
@@ -194,10 +201,17 @@ export const SMART_ASSISTANT_FEATURES: SmartAssistantFeature[] = [
   },
 ];
 
+export function isSmartAssistantAvailable(feature: SmartAssistantFeature): boolean {
+  if (feature.featureKey) return isAssistantFeatureAvailable(feature.featureKey);
+  return feature.available;
+}
+
 export function getSmartFeatureById(id: string) {
   return SMART_ASSISTANT_FEATURES.find((f) => f.id === id);
 }
 
 export function getSmartFeaturesByCategory(category: SmartAssistantFeature['category']) {
-  return SMART_ASSISTANT_FEATURES.filter((f) => f.category === category && f.available);
+  return SMART_ASSISTANT_FEATURES.filter(
+    (f) => f.category === category && isSmartAssistantAvailable(f),
+  );
 }

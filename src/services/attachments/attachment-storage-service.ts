@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { hasSupabaseConfig } from '../../config/env';
+import { recordVoiceNoteUploadStatus } from '../../utils/voice-note-debug-state';
 import { MessageAttachment, createId, nowIso } from '../../types';
 import { getSupabaseClient } from '../supabase/client';
 
@@ -27,8 +28,13 @@ export async function getStorageBucketStatus(): Promise<string> {
   try {
     const client = getSupabaseClient();
     const { data, error } = await client.storage.getBucket(BUCKET);
-    if (error) return `Unavailable · ${error.message}`;
-    return data ? 'Ready' : 'Not found';
+    if (error) {
+      if (/not found|does not exist/i.test(error.message)) {
+        return 'Missing · Run storage bucket SQL migration (chat-attachments)';
+      }
+      return `Unavailable · ${error.message}`;
+    }
+    return data ? 'Ready · chat-attachments' : 'Missing · Run storage bucket SQL migration (chat-attachments)';
   } catch (err) {
     return err instanceof Error ? err.message : 'Unknown';
   }
@@ -72,6 +78,7 @@ export class AttachmentStorageService {
       const { data: signed } = await client.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
       input.onProgress?.(1);
       recordUploadStatus(`Uploaded · ${path} · ${new Date().toLocaleTimeString()}`);
+      if (input.attachment.type === 'audio') recordVoiceNoteUploadStatus('uploaded');
 
       return {
         ...input.attachment,
@@ -81,6 +88,9 @@ export class AttachmentStorageService {
     } catch (err) {
       console.warn('[Voxa] Attachment upload failed — keeping local URI.', err);
       recordUploadStatus(`Failed · ${err instanceof Error ? err.message : 'error'} · ${new Date().toLocaleTimeString()}`);
+      if (input.attachment.type === 'audio') {
+        recordVoiceNoteUploadStatus(err instanceof Error ? err.message : 'failed');
+      }
       return { ...input.attachment, uploadStatus: 'failed' };
     }
   }

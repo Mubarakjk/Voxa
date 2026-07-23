@@ -1,7 +1,6 @@
 import { useVoxa } from '../context/voxa-context';
 import {
   createVoiceCallController,
-  VoiceCallController,
   VoiceCallControllerEvents,
 } from '../services/voice/voice-call-controller';
 import { VoiceConnectionState, VoiceTranscriptEntry } from '../services/voice/voice-engine';
@@ -9,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function useVoiceCallController() {
   const { companion, services } = useVoxa();
-  const controllerRef = useRef<VoiceCallController | null>(null);
+  const controllerRef = useRef<ReturnType<typeof createVoiceCallController> | null>(null);
   const [connectionState, setConnectionState] = useState<VoiceConnectionState>('idle');
   const [transcript, setTranscript] = useState<VoiceTranscriptEntry[]>([]);
   const [seconds, setSeconds] = useState(0);
@@ -17,8 +16,6 @@ export function useVoiceCallController() {
   const [isActive, setIsActive] = useState(false);
 
   const ensureController = useCallback(() => {
-    if (controllerRef.current) return controllerRef.current;
-
     const events: VoiceCallControllerEvents = {
       onStateChange: (state) => {
         setConnectionState(state);
@@ -30,7 +27,7 @@ export function useVoiceCallController() {
             state === 'speaking' ||
             state === 'interrupted',
         );
-        if (state === 'disconnected') {
+        if (state === 'disconnected' || state === 'idle') {
           setIsActive(false);
         }
       },
@@ -41,7 +38,7 @@ export function useVoiceCallController() {
       onError: (err) => setError(err.message),
     };
 
-    controllerRef.current = createVoiceCallController({
+    const controller = createVoiceCallController({
       companion,
       ai: services.ai,
       repositories: services.repositories,
@@ -49,16 +46,16 @@ export function useVoiceCallController() {
       storage: services.storage,
       events,
     });
-
-    return controllerRef.current;
+    controllerRef.current = controller;
+    return controller;
   }, [companion, services]);
 
   useEffect(() => {
+    ensureController();
     return () => {
-      void controllerRef.current?.endCall();
-      controllerRef.current = null;
+      void controllerRef.current?.forceResetVoice();
     };
-  }, []);
+  }, [ensureController]);
 
   const startCall = useCallback(
     async (mode: import('../types').CompanionModeId = 'friend') => {
@@ -91,6 +88,13 @@ export function useVoiceCallController() {
     setIsActive(false);
   }, []);
 
+  const forceResetVoice = useCallback(async () => {
+    const controller = ensureController();
+    await controller.forceResetVoice();
+    setConnectionState('disconnected');
+    setIsActive(false);
+  }, [ensureController]);
+
   const listCallHistory = useCallback(
     async (userId: string) => ensureController().listCallHistory(userId),
     [ensureController],
@@ -105,10 +109,39 @@ export function useVoiceCallController() {
     startCall,
     startSafeCall,
     endCall,
+    forceResetVoice,
     setMicMuted: (muted: boolean) => controllerRef.current?.setMicMuted(muted),
     setSpeakerEnabled: (enabled: boolean) => controllerRef.current?.setSpeakerEnabled(enabled),
     interrupt: () => controllerRef.current?.interrupt(),
     speakPrompt: (text: string) => controllerRef.current?.speakPrompt(text),
+    testVoiceOutput: async () => {
+      const controller = ensureController();
+      setError(null);
+      try {
+        await controller.testVoiceOutput();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Voice test failed.';
+        setError(message);
+        throw err;
+      }
+    },
+    testMicrophone: async () => {
+      const controller = ensureController();
+      setError(null);
+      await controller.testMicrophone();
+    },
+    testSpeaker: async () => {
+      const controller = ensureController();
+      setError(null);
+      await controller.testSpeaker();
+    },
+    resetAudio: async () => {
+      const controller = ensureController();
+      await controller.resetAudio();
+      setConnectionState('disconnected');
+      setIsActive(false);
+      setError(null);
+    },
     listCallHistory,
     controller: controllerRef,
   };

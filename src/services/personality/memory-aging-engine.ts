@@ -80,7 +80,53 @@ export class MemoryAgingEngine {
     if (memory.emotionalSignificance) parts.push(`emotional ${memory.emotionalSignificance}/5`);
     if (memory.confidence !== undefined) parts.push(`confidence ${Math.round(memory.confidence * 100)}%`);
     if (memory.expiresAt) parts.push(`expires ${new Date(memory.expiresAt).toLocaleDateString()}`);
+    const rank = this.longTermRank(memory);
+    if (rank >= 0.75) parts.push('long-term meaningful');
+    else if (rank <= 0.35) parts.push('peripheral');
     return parts.join(', ');
+  }
+
+  /** 0–1 score for long-term memory importance (promote meaningful, fade trivial). */
+  longTermRank(memory: Memory, now = new Date()): number {
+    const emotional = (memory.emotionalSignificance ?? memory.importance) / 5;
+    const importance = memory.importance / 5;
+    const confidence = memory.confidence ?? 0.7;
+    const useBoost = Math.min((memory.useCount ?? 0) / 8, 1) * 0.25;
+    const pinned = memory.pinned ? 0.2 : 0;
+
+    const ageDays = (now.getTime() - new Date(memory.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+    const recency =
+      ageDays <= 7 ? 1 : ageDays <= 30 ? 0.75 : ageDays <= 180 ? 0.5 : ageDays <= 365 ? 0.35 : 0.2;
+
+    let base = emotional * 0.35 + importance * 0.3 + confidence * 0.15 + useBoost + pinned + recency * 0.15;
+
+    if (TRANSIENT_CATEGORIES.includes(memory.category) && ageDays > 60) {
+      base *= 0.65;
+    }
+    if (memory.importance <= 2 && (memory.useCount ?? 0) < 2 && ageDays > 30) {
+      base *= 0.5;
+    }
+
+    return Math.min(1, Math.max(0, base));
+  }
+
+  /** Returns memories that should have reduced importance over time. */
+  fadeTrivial(memories: Memory[]): Array<{ memory: Memory; suggestedImportance: number }> {
+    const results: Array<{ memory: Memory; suggestedImportance: number }> = [];
+
+    for (const memory of memories) {
+      const rank = this.longTermRank(memory);
+      if (rank < 0.3 && memory.importance > 2 && !memory.pinned) {
+        results.push({ memory, suggestedImportance: Math.max(1, memory.importance - 1) });
+      }
+      if (this.isExpired(memory)) continue;
+      const decayed = this.decayConfidence(memory);
+      if ((decayed.confidence ?? 1) < (memory.confidence ?? 0.7) - 0.04) {
+        // confidence decay handled separately
+      }
+    }
+
+    return results.slice(0, 5);
   }
 }
 

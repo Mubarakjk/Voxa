@@ -9,6 +9,7 @@ import { PrimaryButton } from '../components/ui/buttons';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
+import { isFeatureVisible } from '../config/feature-status';
 import { hasSupabaseConfig, getDataSourceMode } from '../config/env';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -17,10 +18,18 @@ import { RootStackParamList } from '../navigation/types';
 import { getAIProviderInfo } from '../services/ai/create-ai-service';
 import { notificationService } from '../services/notifications/notification-service';
 import { DebugPanelInfo, getDebugPanelInfo } from '../utils/debug-info';
-import { buildSettingsSections, cycleCompanionControl } from '../utils/settings';
-import { showComingSoon } from '../utils/interactions';
+import {
+  buildSettingsSections,
+  cycleCheckInStyle,
+  cycleCompanionControl,
+  cycleQuietHours,
+  cycleTheme,
+} from '../utils/settings';
 import { createDefaultCompanionControls } from '../types/relationship-personality';
+import { openPlatformSubscriptionManagement } from '../services/billing/revenuecat-purchase-manager';
+import { PlanStatus } from '../types/subscription';
 import { getVoxaDisplayName } from '../utils/companion-display';
+import { getWeatherService } from '../services/weather/weather-service';
 
 export function YouScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -28,6 +37,15 @@ export function YouScreen() {
   const { profile, refreshProfile, resetLocalData, services, signOutCleanup } = useVoxa();
   const [debugInfo, setDebugInfo] = useState<DebugPanelInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
+  const [weatherLocationLabel, setWeatherLocationLabel] = useState('Not set');
+
+  const loadPlanStatus = useCallback(async () => {
+    if (!profile) return;
+    setPlanStatus(await services.subscription.getPlanStatus(profile.id));
+    const pref = await getWeatherService(services.storage).getPreference();
+    setWeatherLocationLabel(getWeatherService(services.storage).formatLocationLabel(pref));
+  }, [profile, services.storage, services.subscription]);
 
   const loadDebugInfo = useCallback(async () => {
     if (!profile) return;
@@ -38,7 +56,8 @@ export function YouScreen() {
     useCallback(() => {
       void refreshProfile();
       void loadDebugInfo();
-    }, [refreshProfile, loadDebugInfo]),
+      void loadPlanStatus();
+    }, [refreshProfile, loadDebugInfo, loadPlanStatus]),
   );
 
   const exportData = async () => {
@@ -61,15 +80,58 @@ export function YouScreen() {
     await signOut();
   };
 
-  const handlePress = async (itemId: string, label: string) => {
+  const handlePress = async (itemId: string, label: string, displayOnly?: boolean) => {
+    if (displayOnly) return;
     if (itemId === 'companion-customise') return navigation.navigate('CompanionStudio');
+    if (itemId === 'voice') return navigation.navigate('CompanionStudioVoice');
+    if (itemId === 'weather-location') return navigation.navigate('WeatherLocationSetup');
+    if (itemId === 'news-digest') return navigation.navigate('DailyNews');
+    if (itemId === 'theme' && profile) {
+      await services.repositories.userProfile.updateProfile({
+        preferences: { ...profile.preferences, ...cycleTheme(profile) },
+      });
+      await refreshProfile();
+      return;
+    }
+    if (itemId === 'checkins' && profile) {
+      await services.repositories.userProfile.updateProfile({
+        preferences: { ...profile.preferences, ...cycleCheckInStyle(profile) },
+      });
+      await refreshProfile();
+      return;
+    }
+    if (itemId === 'quiet-hours' && profile) {
+      await services.repositories.userProfile.updateProfile({
+        preferences: { ...profile.preferences, ...cycleQuietHours(profile) },
+      });
+      await refreshProfile();
+      return;
+    }
     if (itemId === 'features') return navigation.navigate('Features');
+    if (itemId === 'life-os') return navigation.navigate('LifeOSHub');
     if (itemId === 'memory-debug') return navigation.navigate('Memory');
-    if (itemId === 'music') return navigation.navigate('Music');
+    if (itemId === 'music' && isFeatureVisible('musicRecognition')) return navigation.navigate('Music');
     if (itemId === 'subscription-upgrade' || itemId === 'subscription-plan' || itemId === 'subscription-usage') {
       return navigation.navigate('Paywall', { source: 'you' });
     }
-    if (itemId === 'subscription-manage') return showComingSoon('Manage subscription');
+    if (itemId === 'subscription-manage') {
+      const opened = await openPlatformSubscriptionManagement();
+      if (!opened) {
+        Alert.alert(
+          'Manage subscription',
+          'Open your device subscription settings to manage or cancel Voxa Pro.',
+        );
+      }
+      return;
+    }
+    if (itemId === 'subscription-restore') {
+      if (!profile) return;
+      await services.subscription.restorePurchases(profile.id);
+      await refreshProfile();
+      await loadPlanStatus();
+      Alert.alert('Restore complete', 'Your subscription status has been refreshed.');
+      return;
+    }
     if (itemId === 'export-data') return exportData();
     if (itemId === 'delete-account') {
       Alert.alert('Delete account', hasSupabaseConfig() ? 'This will sign you out.' : 'This resets local data.', [
@@ -95,11 +157,40 @@ export function YouScreen() {
       return;
     }
     if (itemId === 'notifications' && profile) {
-      await notificationService.requestPermissions();
-      await notificationService.scheduleDailyCheckIns(profile.id, {
-        morningEnabled: profile.preferences.morningGreetingEnabled ?? true,
-        eveningEnabled: profile.preferences.eveningReflectionEnabled ?? true,
+      const nextEnabled = !(profile.preferences.morningGreetingEnabled ?? true);
+      await services.repositories.userProfile.updateProfile({
+        preferences: {
+          ...profile.preferences,
+          morningGreetingEnabled: nextEnabled,
+          eveningReflectionEnabled: nextEnabled,
+        },
       });
+      if (nextEnabled) {
+        const granted = await notificationService.requestPermissions();
+        if (!granted) {
+          Alert.alert('Notifications off', 'Enable notifications in Settings to receive check-ins.');
+        } else {
+          await notificationService.scheduleDailyCheckIns(profile.id, {
+            morningEnabled: true,
+            eveningEnabled: true,
+          });
+          Alert.alert('Notifications on', 'Voxa will send gentle daily check-ins.');
+        }
+      } else {
+        await notificationService.cancelAll();
+        Alert.alert('Notifications off', 'Daily check-ins paused.');
+      }
+      await refreshProfile();
+      return;
+    }
+    if (itemId === 'memory' && profile) {
+      await services.repositories.userProfile.updateProfile({
+        preferences: {
+          ...profile.preferences,
+          memoryEnabled: !profile.preferences.memoryEnabled,
+        },
+      });
+      await refreshProfile();
       return;
     }
 
@@ -114,27 +205,32 @@ export function YouScreen() {
         },
       });
       await refreshProfile();
-      return;
     }
-    showComingSoon(label);
   };
 
   if (!profile) {
     return (
       <ScreenShell padded={false}>
-        <VoxaText variant="body" color="textSecondary" style={styles.centered}>
-          Loading profile...
-        </VoxaText>
+        <View style={styles.centered}>
+          <VoxaText variant="body" color="textSecondary">
+            Loading profile...
+          </VoxaText>
+          <Pressable onPress={() => void refreshProfile()}>
+            <VoxaText variant="caption" color="primarySoft">
+              Tap to retry
+            </VoxaText>
+          </Pressable>
+        </View>
       </ScreenShell>
     );
   }
 
-  const sections = buildSettingsSections(profile);
+  const sections = buildSettingsSections(profile, planStatus ?? undefined, weatherLocationLabel);
   const subscription = sections.find((s) => s.title === 'Subscription');
   const companion = sections.find((s) => s.title === 'Companion');
+  const personalisation = sections.find((s) => s.title === 'Personalisation');
   const notifications = sections.find((s) => s.title === 'Notifications & check-ins');
-  const privacy = sections.find((s) => s.title === 'Privacy');
-  const experience = sections.find((s) => s.title === 'Experience');
+  const privacy = sections.find((s) => s.title === 'Privacy & data');
   const voxaName = getVoxaDisplayName(profile);
 
   return (
@@ -177,7 +273,7 @@ export function YouScreen() {
                   label={item.label}
                   value={item.value}
                   isLast={index === subscription.items.length - 1}
-                  onPress={() => handlePress(item.id, item.label)}
+                  onPress={() => handlePress(item.id, item.label, item.displayOnly)}
                 />
               ))}
             </GlassCard>
@@ -196,14 +292,14 @@ export function YouScreen() {
                     label={item.label}
                     value={item.value}
                     isLast={index === arr.length - 1}
-                    onPress={() => handlePress(item.id, item.label)}
+                    onPress={() => handlePress(item.id, item.label, item.displayOnly)}
                   />
                 ))}
             </GlassCard>
           </>
         ) : null}
 
-        {[notifications, experience].map((section) =>
+        {[personalisation, notifications].map((section) =>
           section ? (
             <View key={section.title}>
               <SectionHeader title={section.title} />
@@ -213,8 +309,9 @@ export function YouScreen() {
                     key={item.id}
                     label={item.label}
                     value={item.value}
+                    displayOnly={item.displayOnly}
                     isLast={index === section.items.length - 1}
-                    onPress={() => handlePress(item.id, item.label)}
+                    onPress={() => handlePress(item.id, item.label, item.displayOnly)}
                   />
                 ))}
               </GlassCard>
@@ -224,7 +321,7 @@ export function YouScreen() {
 
         {privacy ? (
           <>
-            <SectionHeader title="Privacy" />
+            <SectionHeader title="Privacy & data" />
             <GlassCard style={styles.group}>
               {privacy.items.map((item, index) => (
                 <SettingRow
@@ -232,7 +329,7 @@ export function YouScreen() {
                   label={item.label}
                   value={item.value}
                   isLast={index === privacy.items.length - 1}
-                  onPress={() => handlePress(item.id, item.label)}
+                  onPress={() => handlePress(item.id, item.label, item.displayOnly)}
                 />
               ))}
             </GlassCard>
@@ -242,8 +339,10 @@ export function YouScreen() {
         <SectionHeader title="More" />
         <GlassCard style={styles.group}>
           <SettingRow label="All features" value="" onPress={() => navigation.navigate('Features')} />
-          <SettingRow label="Memories" value="View" onPress={() => navigation.navigate('Memory')} />
-          <SettingRow label="Music recognition" value="" onPress={() => navigation.navigate('Music')} isLast />
+          <SettingRow label="Memories" value="View" onPress={() => navigation.navigate('Memory')} isLast={!isFeatureVisible('musicRecognition')} />
+          {isFeatureVisible('musicRecognition') ? (
+            <SettingRow label="Music recognition" value="" onPress={() => navigation.navigate('Music')} isLast />
+          ) : null}
         </GlassCard>
 
         <Pressable style={styles.debugToggle} onPress={() => setShowDebug((v) => !v)}>
@@ -255,9 +354,35 @@ export function YouScreen() {
 
         {showDebug ? (
           <GlassCard style={styles.group}>
+            <SettingRow
+              label="System health"
+              value="QA"
+              onPress={() => navigation.navigate('HealthCheck')}
+            />
+            {__DEV__ ? (
+              <SettingRow
+                label="Billing QA"
+                value="RevenueCat"
+                onPress={() => navigation.navigate('BillingQA')}
+              />
+            ) : null}
             {[
+              { label: 'Experimental features', value: debugInfo?.experimentalFeatures ?? '—' },
               { label: 'Supabase', value: debugInfo?.supabaseConnected ? 'Connected' : 'Off' },
               { label: 'OpenAI', value: debugInfo?.openAIConnected ? 'Connected' : 'Off' },
+              { label: 'Chat provider', value: debugInfo?.chatProvider ?? '—' },
+              { label: 'Last chat latency', value: debugInfo?.lastChatLatency ?? '—' },
+              { label: 'Last chat save', value: debugInfo?.lastChatSaveStatus ?? '—' },
+              { label: 'Camera permission', value: debugInfo?.cameraPermission ?? '—' },
+              { label: 'Last photo analysis', value: debugInfo?.lastPhotoAnalysisStatus ?? '—' },
+              { label: 'Routine sync', value: debugInfo?.routineSyncStatus ?? '—' },
+              { label: 'Memory extraction', value: debugInfo?.memoryExtractionStatus ?? '—' },
+              { label: 'Voice note duration', value: debugInfo?.voiceNoteDuration ?? '—' },
+              { label: 'Voice note URI', value: debugInfo?.voiceNoteUri ?? '—' },
+              { label: 'Voice note size', value: debugInfo?.voiceNoteFileSize ?? '—' },
+              { label: 'Transcription', value: debugInfo?.voiceNoteTranscription ?? '—' },
+              { label: 'Voice upload', value: debugInfo?.voiceNoteUpload ?? '—' },
+              { label: 'Audio error', value: debugInfo?.voiceNoteAudioError ?? 'None' },
               { label: 'AudD', value: debugInfo?.audDConfigured ? 'Configured' : 'Not configured' },
               { label: 'Storage bucket', value: debugInfo?.storageBucketStatus ?? '—' },
               { label: 'ID mode', value: debugInfo?.idMode ?? 'UUID' },
@@ -314,16 +439,16 @@ function SettingRow({
   value,
   onPress,
   isLast,
+  displayOnly,
 }: {
   label: string;
   value?: string;
   onPress: () => void;
   isLast?: boolean;
+  displayOnly?: boolean;
 }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
+  const content = (
+    <>
       <VoxaText variant="body" style={styles.rowLabel}>
         {label}
       </VoxaText>
@@ -333,8 +458,20 @@ function SettingRow({
             {value}
           </VoxaText>
         ) : null}
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        {!displayOnly ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
       </View>
+    </>
+  );
+
+  if (displayOnly) {
+    return <View style={[styles.row, !isLast && styles.rowBorder]}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
+      {content}
     </Pressable>
   );
 }
@@ -344,7 +481,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingBottom: layout.tabBarHeight + spacing.xxl,
   },
-  centered: { textAlign: 'center', marginTop: spacing.xxl },
+  centered: { alignItems: 'center', gap: spacing.md, marginTop: spacing.xxl, paddingHorizontal: layout.screenPadding },
   profile: { marginBottom: spacing.md },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {

@@ -55,6 +55,7 @@ export type PlanLimits = {
   memoriesMax: number;
   goalsMax: number;
   remindersMax: number;
+  routinesMax: number;
   historyDays: number;
 };
 
@@ -67,6 +68,8 @@ export type GateFeature =
   | 'document_upload'
   | 'unlimited_memory'
   | 'advanced_memory'
+  | 'pinned_memory'
+  | 'memory_connections'
   | 'timeline'
   | 'multiple_personalities'
   | 'premium_voices'
@@ -75,7 +78,23 @@ export type GateFeature =
   | 'document_understanding'
   | 'priority_ai'
   | 'unlimited_goals'
-  | 'unlimited_reminders';
+  | 'unlimited_reminders'
+  | 'life_os'
+  | 'future_self'
+  | 'vision_board'
+  | 'bucket_list'
+  | 'life_book'
+  | 'decision_simulator'
+  | 'debate_mode'
+  | 'weekly_letter'
+  | 'mood_insights'
+  | 'conversation_worlds'
+  | 'coaching_hub'
+  | 'dream_journal'
+  | 'arcade_full'
+  | 'premium_cosmetics'
+  | 'sports_intelligence'
+  | 'exports';
 
 export type GateResult = {
   allowed: boolean;
@@ -94,6 +113,12 @@ export type PlanStatus = {
   trialEnd?: ISODateString;
   subscriptionPlan: SubscriptionPlan;
   isFoundingMember: boolean;
+  billingPeriod?: BillingPeriod;
+  renewalDate?: ISODateString;
+  billingIssue?: boolean;
+  gracePeriod?: boolean;
+  entitlementSource?: 'revenuecat' | 'platform_trial' | 'dev_override' | 'none';
+  productId?: string;
 };
 
 export function createDefaultSubscription(): UserSubscription {

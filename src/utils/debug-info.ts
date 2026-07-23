@@ -1,5 +1,6 @@
 import { hasOpenAIApiKey, hasSupabaseConfig, getDataSourceMode, hasAudDApiToken, hasACRCloudConfig } from '../config/env';
-import { isFoundingMemberOfferEnabled, PRICING_CONFIG } from '../constants/pricing';
+import { hasRevenueCatConfig } from '../config/revenuecat-env';
+import { PRICING_CONFIG } from '../constants/pricing';
 import { getAccentById } from '../constants/voice-accents';
 import { getSpeakingStyleById } from '../constants/voice-speaking-styles';
 import { getAIProviderInfo } from '../services/ai/create-ai-service';
@@ -17,6 +18,8 @@ import { createRealtimeVoiceService } from '../services/voice/realtime-voice-ser
 import { getVoiceDebugSnapshot } from '../services/voice/voice-debug-state';
 import { UserProfile } from '../types';
 import { getChatSaveSnapshot } from './chat-save-status';
+import { getChatDebugSnapshot } from './chat-debug-state';
+import { getVoiceNoteDebugSnapshot } from './voice-note-debug-state';
 
 export type DebugPanelInfo = {
   supabaseConnected: boolean;
@@ -38,6 +41,7 @@ export type DebugPanelInfo = {
   usageSummary: string;
   remainingLimits: string;
   foundingMemberFlag: string;
+  revenueCatConfigured: string;
   billingProvider: string;
   selectedVoice: string;
   selectedAccent: string;
@@ -65,6 +69,18 @@ export type DebugPanelInfo = {
   musicLastStep: string;
   musicLastError: string;
   musicLastResponse: string;
+  experimentalFeatures: string;
+  lastChatLatency: string;
+  chatProvider: string;
+  lastPhotoAnalysisStatus: string;
+  routineSyncStatus: string;
+  memoryExtractionStatus: string;
+  voiceNoteDuration: string;
+  voiceNoteUri: string;
+  voiceNoteFileSize: string;
+  voiceNoteTranscription: string;
+  voiceNoteUpload: string;
+  voiceNoteAudioError: string;
 };
 
 let lastSyncAt: string | null = null;
@@ -91,6 +107,8 @@ export async function getDebugPanelInfo(
   const realtime = createRealtimeVoiceService();
   const voiceDebug = getVoiceDebugSnapshot();
   const chatSave = getChatSaveSnapshot();
+  const chatDebug = getChatDebugSnapshot();
+  const voiceNoteDebug = getVoiceNoteDebugSnapshot();
   const musicService = getMusicRecognitionService();
   const musicDebug = getMusicDebugSnapshot();
 
@@ -148,8 +166,9 @@ export async function getDebugPanelInfo(
     trialStatus,
     usageSummary,
     remainingLimits,
-    foundingMemberFlag: isFoundingMemberOfferEnabled() ? 'Enabled' : 'Off',
-    billingProvider: 'stub',
+    foundingMemberFlag: 'Deprecated',
+    revenueCatConfigured: hasRevenueCatConfig() ? 'Yes' : 'No',
+    billingProvider: 'revenuecat',
     selectedVoice: voiceIdentity ? `${voiceIdentity.gender} · ${voiceIdentity.ageStyle}` : '—',
     selectedAccent: accent?.label ?? '—',
     selectedGender: voiceIdentity?.gender ?? '—',
@@ -176,6 +195,21 @@ export async function getDebugPanelInfo(
     musicLastStep: musicDebug.step,
     musicLastError: musicDebug.lastError,
     musicLastResponse: musicDebug.lastResponseStatus,
+    experimentalFeatures: chatDebug.experimentalFeatures ? 'On' : 'Off',
+    lastChatLatency:
+      chatDebug.lastChatLatencyMs !== null ? `${chatDebug.lastChatLatencyMs}ms` : '—',
+    chatProvider: chatDebug.lastChatProvider,
+    lastPhotoAnalysisStatus: chatDebug.lastPhotoAnalysisStatus,
+    routineSyncStatus: chatDebug.lastRoutineSyncStatus,
+    memoryExtractionStatus: chatDebug.lastMemoryExtractionStatus,
+    voiceNoteDuration:
+      voiceNoteDebug.durationMs > 0 ? `${Math.round(voiceNoteDebug.durationMs / 1000)}s` : '—',
+    voiceNoteUri: voiceNoteDebug.uriExists ? 'saved' : '—',
+    voiceNoteFileSize:
+      voiceNoteDebug.fileSizeBytes !== null ? `${voiceNoteDebug.fileSizeBytes} B` : '—',
+    voiceNoteTranscription: voiceNoteDebug.lastTranscriptionStatus,
+    voiceNoteUpload: voiceNoteDebug.lastUploadStatus,
+    voiceNoteAudioError: voiceNoteDebug.lastError ?? 'None',
   };
 }
 

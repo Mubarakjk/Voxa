@@ -56,6 +56,8 @@ export type Memory = Timestamps & {
   confidence?: number;
   /** Optional expiry for transient facts (e.g. temporary projects). */
   expiresAt?: ISODateString;
+  /** User-pinned memories surface first in retrieval and Journey. */
+  pinned?: boolean;
 };
 
 export type CreateMemoryInput = {
@@ -74,6 +76,7 @@ export type CreateMemoryInput = {
   emotionalSignificance?: Memory['emotionalSignificance'];
   confidence?: number;
   expiresAt?: ISODateString;
+  pinned?: boolean;
 };
 
 export type UpdateMemoryInput = Partial<
@@ -92,5 +95,6 @@ export type UpdateMemoryInput = Partial<
     | 'emotionalSignificance'
     | 'confidence'
     | 'expiresAt'
+    | 'pinned'
   >
 >;

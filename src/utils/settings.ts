@@ -1,8 +1,8 @@
+import { formatPrice, PRICING_CONFIG } from '../constants/pricing';
 import { hasSupabaseConfig, getDataSourceMode } from '../config/env';
 import {
   CheckInStyle,
   UserProfile,
-  VoicePersonality,
   mergePreferences,
 } from '../types';
 import {
@@ -10,19 +10,27 @@ import {
   MemoryLevel,
   createDefaultCompanionControls,
 } from '../types/relationship-personality';
+import { PlanStatus } from '../types/subscription';
 
-const VOICE_LABELS: Record<VoicePersonality, string> = {
-  warm_calm: 'Warm & calm',
-  energetic: 'Energetic',
-  direct: 'Direct',
-  gentle: 'Gentle',
-};
+const CHECKIN_STYLES: CheckInStyle[] = ['off', 'gentle', 'proactive'];
 
 const CHECKIN_LABELS: Record<CheckInStyle, string> = {
   off: 'Off',
   gentle: 'Gentle',
   proactive: 'Proactive',
 };
+
+const QUIET_HOUR_PRESETS: Array<{ label: string; start?: string; end?: string }> = [
+  { label: 'Off' },
+  { label: '22:00 – 07:00', start: '22:00', end: '07:00' },
+  { label: '23:00 – 08:00', start: '23:00', end: '08:00' },
+  { label: '21:00 – 06:00', start: '21:00', end: '06:00' },
+];
+
+const THEME_LABELS = {
+  dark: 'Dark',
+  system: 'System',
+} as const;
 
 const MEMORY_LEVEL_LABELS: Record<MemoryLevel, string> = {
   minimal: 'Minimal',
@@ -47,19 +55,39 @@ function controls(profile: UserProfile): CompanionControlPreferences {
   return profile.preferences.companionControls ?? createDefaultCompanionControls();
 }
 
-function getTrialDaysLeft(profile: UserProfile): number | null {
-  if (!profile.subscription?.trialActive || !profile.subscription.trialEnd) return null;
-  return Math.max(
-    0,
-    Math.ceil((new Date(profile.subscription.trialEnd).getTime() - Date.now()) / 86400000),
-  );
+function formatPlanLabel(planStatus?: PlanStatus): string {
+  if (!planStatus) return 'Free';
+  if (planStatus.isTrialActive) return `Pro trial · ${planStatus.trialDaysLeft}d left`;
+  if (planStatus.isPro) {
+    const period = planStatus.billingPeriod === 'annual' ? 'Annual' : 'Monthly';
+    return `Pro · ${period}`;
+  }
+  return 'Free';
 }
 
-export function buildSettingsSections(profile: UserProfile) {
+function formatRenewalLabel(planStatus?: PlanStatus): string {
+  if (!planStatus?.renewalDate) return '—';
+  const date = new Date(planStatus.renewalDate);
+  if (Number.isNaN(date.getTime())) return '—';
+  if (planStatus.billingIssue) return `Billing issue · renews ${date.toLocaleDateString()}`;
+  return planStatus.isTrialActive ? `Trial ends ${date.toLocaleDateString()}` : `Renews ${date.toLocaleDateString()}`;
+}
+
+export type SettingsItem = {
+  id: string;
+  label: string;
+  value?: string;
+  displayOnly?: boolean;
+};
+
+export function buildSettingsSections(
+  profile: UserProfile,
+  planStatus?: PlanStatus,
+  weatherLocationLabel = 'Not set',
+) {
   const c = controls(profile);
-  const trialDays = getTrialDaysLeft(profile);
-  const planLabel = profile.subscription?.subscriptionPlan === 'pro' ? 'Pro' : 'Free';
-  const trialLabel = trialDays !== null ? `Trial · ${trialDays}d left` : undefined;
+  const planLabel = formatPlanLabel(planStatus);
+  const renewalLabel = formatRenewalLabel(planStatus);
 
   return [
     {
@@ -68,12 +96,13 @@ export function buildSettingsSections(profile: UserProfile) {
         {
           id: 'subscription-plan',
           label: 'Current plan',
-          value: trialLabel ?? planLabel,
+          value: planLabel,
         },
         {
-          id: 'subscription-trial',
-          label: 'Days left in trial',
-          value: trialDays !== null ? String(trialDays) : '—',
+          id: 'subscription-renewal',
+          label: planStatus?.isTrialActive ? 'Trial ends' : 'Renewal / expiry',
+          value: renewalLabel,
+          displayOnly: true,
         },
         {
           id: 'subscription-usage',
@@ -82,13 +111,18 @@ export function buildSettingsSections(profile: UserProfile) {
         },
         {
           id: 'subscription-upgrade',
-          label: 'Upgrade to Pro',
-          value: profile.subscription?.subscriptionPlan === 'pro' ? 'Active' : 'Unlock',
+          label: planStatus?.isPro ? 'Pro benefits' : 'Upgrade to Pro',
+          value: planStatus?.isPro ? 'Active' : formatPrice(PRICING_CONFIG.prices.monthly) + '/mo',
         },
         {
           id: 'subscription-manage',
           label: 'Manage subscription',
-          value: 'Coming soon',
+          value: planStatus?.isPro ? 'App Store / Play' : '—',
+        },
+        {
+          id: 'subscription-restore',
+          label: 'Restore purchases',
+          value: 'Restore',
         },
       ],
     },
@@ -106,9 +140,14 @@ export function buildSettingsSections(profile: UserProfile) {
           value: 'Features',
         },
         {
+          id: 'life-os',
+          label: 'Life OS',
+          value: 'Planning & reflection',
+        },
+        {
           id: 'voice',
-          label: 'Voice personality',
-          value: VOICE_LABELS[profile.preferences.voicePersonality],
+          label: 'Voice & accent',
+          value: 'Companion Studio',
         },
         {
           id: 'memory',
@@ -168,6 +207,26 @@ export function buildSettingsSections(profile: UserProfile) {
       ],
     },
     {
+      title: 'Personalisation',
+      items: [
+        {
+          id: 'weather-location',
+          label: 'Weather location',
+          value: weatherLocationLabel,
+        },
+        {
+          id: 'news-digest',
+          label: 'Daily digest',
+          value: 'Your updates',
+        },
+        {
+          id: 'theme',
+          label: 'Appearance',
+          value: THEME_LABELS[profile.preferences.theme ?? 'dark'],
+        },
+      ],
+    },
+    {
       title: 'Notifications & check-ins',
       items: [
         {
@@ -185,25 +244,16 @@ export function buildSettingsSections(profile: UserProfile) {
           label: 'Quiet hours',
           value: formatQuietHours(profile),
         },
-        {
-          id: 'calls',
-          label: 'Proactive voice calls',
-          value: profile.preferences.proactiveVoiceCalls ? 'On' : 'Off',
-        },
       ],
     },
     {
-      title: 'Privacy',
+      title: 'Privacy & data',
       items: [
-        {
-          id: 'safe-word',
-          label: 'Safe word',
-          value: 'Configured',
-        },
         {
           id: 'data',
           label: 'Data storage',
           value: getDataSourceMode() === 'supabase' ? 'Supabase cloud' : 'Local only',
+          displayOnly: true,
         },
         {
           id: 'export-data',
@@ -214,26 +264,6 @@ export function buildSettingsSections(profile: UserProfile) {
           id: 'delete-account',
           label: 'Delete account',
           value: hasSupabaseConfig() ? 'Cloud' : 'Local',
-        },
-        {
-          id: 'sign-out',
-          label: 'Sign out',
-          value: hasSupabaseConfig() ? 'Account' : 'N/A',
-        },
-      ],
-    },
-    {
-      title: 'Experience',
-      items: [
-        {
-          id: 'haptics',
-          label: 'Haptic feedback',
-          value: profile.preferences.hapticsEnabled ? 'On' : 'Off',
-        },
-        {
-          id: 'ambient',
-          label: 'Ambient glow',
-          value: profile.preferences.ambientGlowEnabled ? 'On' : 'Off',
         },
       ],
     },
@@ -246,6 +276,27 @@ function cycleLevel(current: number) {
   if (current <= 0.33) return 0.5;
   if (current <= 0.5) return 0.85;
   return 0.15;
+}
+
+export function cycleCheckInStyle(profile: UserProfile): Partial<UserProfile['preferences']> {
+  const index = CHECKIN_STYLES.indexOf(profile.preferences.checkInStyle);
+  const next = CHECKIN_STYLES[(index + 1) % CHECKIN_STYLES.length];
+  return { checkInStyle: next };
+}
+
+export function cycleQuietHours(profile: UserProfile): Partial<UserProfile['preferences']> {
+  const current = formatQuietHours(profile);
+  const index = QUIET_HOUR_PRESETS.findIndex((preset) => preset.label === current);
+  const next = QUIET_HOUR_PRESETS[(Math.max(0, index) + 1) % QUIET_HOUR_PRESETS.length];
+  return {
+    quietHoursStart: next.start,
+    quietHoursEnd: next.end,
+  };
+}
+
+export function cycleTheme(profile: UserProfile): Partial<UserProfile['preferences']> {
+  const current = profile.preferences.theme ?? 'dark';
+  return { theme: current === 'dark' ? 'system' : 'dark' };
 }
 
 export function cycleCompanionControl(

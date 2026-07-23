@@ -7,7 +7,7 @@ import { VoiceCallHistory } from '../components/voice/voice-call-history';
 import { VoiceCallStateBadge } from '../components/voice/voice-call-state-badge';
 import { VoiceTranscriptPanel } from '../components/voice/voice-transcript-panel';
 import { ErrorState, LoadingState } from '../components/ui/screen-state';
-import { IconButton } from '../components/ui/buttons';
+import { IconButton, PrimaryButton } from '../components/ui/buttons';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { VoiceOrb } from '../components/ui/voice-orb';
@@ -37,6 +37,7 @@ export function VoiceCallScreen() {
   const [speakerOn, setSpeakerOn] = useState(true);
   const [history, setHistory] = useState<VoiceSession[]>([]);
   const [isStarting, setIsStarting] = useState(false);
+  const [isTestingVoice, setIsTestingVoice] = useState(false);
 
   const modeConfig = getCompanionMode(profile?.companion.lastUsedMode ?? 'friend');
   const voxaName = getVoxaDisplayName(profile);
@@ -99,6 +100,17 @@ export function VoiceCallScreen() {
     voice.setSpeakerEnabled(next);
   };
 
+  const testVoiceOutput = async () => {
+    setIsTestingVoice(true);
+    try {
+      await voice.testVoiceOutput();
+    } catch (err) {
+      Alert.alert('Voice test failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setIsTestingVoice(false);
+    }
+  };
+
   const statusLine = voice.isActive ? formatDuration(voice.seconds) : undefined;
   const latestVoxaLine =
     [...voice.transcript].reverse().find((entry) => entry.role === 'voxa')?.text ??
@@ -158,7 +170,16 @@ export function VoiceCallScreen() {
           {voice.isActive ? (
             <VoiceTranscriptPanel entries={voice.transcript} voxaName={voxaName} />
           ) : (
-            <VoiceCallHistory sessions={history} />
+            <>
+              <PrimaryButton
+                label={isTestingVoice ? 'Testing…' : 'Test voice output'}
+                variant="ghost"
+                onPress={testVoiceOutput}
+                disabled={isTestingVoice || isStarting}
+                loading={isTestingVoice}
+              />
+              <VoiceCallHistory sessions={history} />
+            </>
           )}
 
           <View style={styles.waves}>

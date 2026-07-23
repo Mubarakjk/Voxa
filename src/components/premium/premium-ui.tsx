@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { colors, layout, radius, spacing, typography } from '../../constants/theme';
+import { PREMIUM_MOTION, staggerDelay } from '../../utils/premium-motion';
 import { VoxaText } from '../ui/voxa-text';
 import {
   CompanionOrbMood,
@@ -321,16 +322,53 @@ export function TypingDots({ tint = colors.primarySoft }: { tint?: string }) {
 
 export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(10)).current;
+  const translateY = useRef(new Animated.Value(PREMIUM_MOTION.slideUp.distance)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 420, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: PREMIUM_MOTION.fadeIn.duration, delay, useNativeDriver: true }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: PREMIUM_MOTION.slideUp.duration,
+        delay,
+        easing: PREMIUM_MOTION.fadeIn.easing,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, [delay, opacity, translateY]);
 
   return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+}
+
+export function StaggerFade({ children, index = 0, baseDelay = 0 }: { children: ReactNode; index?: number; baseDelay?: number }) {
+  return <FadeIn delay={baseDelay + staggerDelay(index)}>{children}</FadeIn>;
+}
+
+export function SpringPressable({
+  children,
+  onPress,
+  style,
+  disabled,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+  style?: ViewStyle;
+  disabled?: boolean;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const pressIn = () => {
+    Animated.spring(scale, { toValue: PREMIUM_MOTION.buttonScale.pressIn, useNativeDriver: true, ...PREMIUM_MOTION.spring }).start();
+  };
+  const pressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, ...PREMIUM_MOTION.spring }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={pressIn} onPressOut={pressOut} disabled={disabled}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+    </Pressable>
+  );
 }
 
 export function VoiceWavePulse({ active, tint = colors.primarySoft }: { active: boolean; tint?: string }) {

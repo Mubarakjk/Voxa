@@ -112,6 +112,12 @@ export function CompanionStudioScreen() {
 
         <SectionHeader title="Relationship" />
         <FadeInView delay={160}>
+          <StudioSectionCard
+            title="Relationship profile"
+            subtitle="Framing, boundaries, proactive behaviour"
+            actionLabel="Open"
+            onPress={() => navigation.navigate('RelationshipProfile')}
+          />
           <GlassCard style={styles.relationship}>
             <VoxaText variant="body" color="textSecondary">
               {relationshipSummary}

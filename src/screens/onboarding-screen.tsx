@@ -24,6 +24,7 @@ import {
 } from '../constants/companion-identity';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
+import { createDefaultCompanionControls } from '../types/relationship-personality';
 import {
   CheckInStyle,
   CompanionModeId,
@@ -47,6 +48,8 @@ const STEPS = [
   'topics',
   'schedule',
   'notifications',
+  'memory',
+  'coaching',
   'subscription',
 ] as const;
 
@@ -91,7 +94,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [skipSchedule, setSkipSchedule] = useState(false);
   const [notificationPref, setNotificationPref] = useState<NotificationPreference>('gentle');
   const [checkInStyle, setCheckInStyle] = useState<CheckInStyle>('gentle');
-  const [subscriptionChoice, setSubscriptionChoice] = useState<'trial' | 'free' | null>(null);
+  const [memoryLevel, setMemoryLevel] = useState<'minimal' | 'balanced' | 'deep'>('balanced');
+  const [subscriptionChoice, setSubscriptionChoice] = useState<'explore_pro' | 'free' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,6 +201,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           checkInStyle,
           morningGreetingEnabled: notificationPref !== 'off',
           eveningReflectionEnabled: notificationPref !== 'off',
+          companionControls: {
+            ...createDefaultCompanionControls(),
+            ...(profile.preferences.companionControls ?? {}),
+            memoryLevel,
+          },
         },
         companion: {
           ...profile.companion,
@@ -243,9 +252,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       await refreshProfile();
 
-      if (subscriptionChoice === 'trial') {
-        await services.subscription.startTrial(profile.id);
-        await refreshProfile();
+      if (subscriptionChoice === 'explore_pro') {
+        await services.subscriptionAnalytics.track('paywall_viewed', { source: 'onboarding' });
       } else if (subscriptionChoice === 'free') {
         await services.subscription.continueFree(profile.id);
         await refreshProfile();
@@ -529,18 +537,70 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </GlassCard>
           ) : null}
 
+          {step === 'memory' ? (
+            <GlassCard style={styles.card}>
+              <VoxaText variant="subtitle">Voxa remembers your life</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                Important moments, goals, and feelings are saved to your Journey. Voxa recalls them naturally — never to overwhelm you.
+              </VoxaText>
+              {(
+                [
+                  { id: 'minimal' as const, label: 'Light', detail: 'Only the most important moments' },
+                  { id: 'balanced' as const, label: 'Balanced', detail: 'Recommended — thoughtful recall' },
+                  { id: 'deep' as const, label: 'Deep', detail: 'Rich memory for a closer bond' },
+                ] as const
+              ).map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={[styles.option, memoryLevel === item.id && styles.optionActive]}
+                  onPress={() => setMemoryLevel(item.id)}>
+                  <VoxaText variant="body">{item.label}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted">
+                    {item.detail}
+                  </VoxaText>
+                </Pressable>
+              ))}
+            </GlassCard>
+          ) : null}
+
+          {step === 'coaching' ? (
+            <GlassCard style={styles.card}>
+              <VoxaText variant="subtitle">Daily coaching & rituals</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                Each morning and evening, Voxa offers a gentle check-in — focus for the day, reflection at night, and coaching adapted to your routines and goals.
+              </VoxaText>
+              {(
+                [
+                  { id: 'off' as const, label: 'Off', detail: 'No proactive check-ins' },
+                  { id: 'gentle' as const, label: 'Gentle', detail: 'Morning & evening rituals when you open Voxa' },
+                  { id: 'proactive' as const, label: 'Proactive', detail: 'More nudges and coaching prompts' },
+                ] as const
+              ).map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={[styles.option, checkInStyle === item.id && styles.optionActive]}
+                  onPress={() => setCheckInStyle(item.id)}>
+                  <VoxaText variant="body">{item.label}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted">
+                    {item.detail}
+                  </VoxaText>
+                </Pressable>
+              ))}
+            </GlassCard>
+          ) : null}
+
           {step === 'subscription' ? (
             <GlassCard style={styles.card}>
               <VoxaText variant="subtitle">Choose your experience</VoxaText>
               <VoxaText variant="body" color="textSecondary">
-                Start with a {PRICING_CONFIG.trialDays}-day Pro trial, or continue free. You can change anytime.
+                Explore Voxa Pro after onboarding, or continue free. Trial eligibility comes from the App Store or Google Play when you subscribe.
               </VoxaText>
               <Pressable
-                style={[styles.option, subscriptionChoice === 'trial' && styles.optionActive]}
-                onPress={() => setSubscriptionChoice('trial')}>
-                <VoxaText variant="body">Start {PRICING_CONFIG.trialDays}-day Pro trial</VoxaText>
+                style={[styles.option, subscriptionChoice === 'explore_pro' && styles.optionActive]}
+                onPress={() => setSubscriptionChoice('explore_pro')}>
+                <VoxaText variant="body">Explore Voxa Pro</VoxaText>
                 <VoxaText variant="caption" color="textSecondary">
-                  Unlimited conversations, voice & premium intelligence
+                  See Pro benefits — subscribe when you are ready
                 </VoxaText>
               </Pressable>
               <Pressable

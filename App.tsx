@@ -1,4 +1,4 @@
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, useNavigationContainerRef } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -12,6 +12,9 @@ import { VoxaProvider, useVoxa } from './src/context/voxa-context';
 import { AuthNavigator } from './src/navigation/auth-navigator';
 import { RootNavigator } from './src/navigation/root-navigator';
 import { OnboardingScreen } from './src/screens/onboarding-screen';
+import { CelebrationOverlay } from './src/components/phase10/celebration-overlay';
+import { useProactiveCheckInNotifications } from './src/hooks/use-proactive-check-in-notifications';
+import { RootStackParamList } from './src/navigation/types';
 
 const navTheme = {
   ...DarkTheme,
@@ -26,8 +29,16 @@ const navTheme = {
 };
 
 function AppRoot() {
-  const { isLoading, error, isReady, reinitialize, profile } = useVoxa();
+  const { isLoading, error, isReady, reinitialize, profile, services } = useVoxa();
   const [onboardingDone, setOnboardingDone] = useState(false);
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+
+  useProactiveCheckInNotifications({
+    profile,
+    services,
+    navigationRef,
+    enabled: isReady && Boolean(profile?.onboardingComplete),
+  });
 
   if (isLoading) {
     return (
@@ -57,9 +68,10 @@ function AppRoot() {
   const initialRoute = hasSupabaseConfig() ? 'MainTabs' : 'Welcome';
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <StatusBar style="light" />
       <RootNavigator initialRouteName={initialRoute} />
+      <CelebrationOverlay />
     </NavigationContainer>
   );
 }

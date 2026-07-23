@@ -1,18 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { isFeatureVisible } from '../../config/feature-status';
 import { colors, layout, radius, spacing } from '../../constants/theme';
+import { useVoxa } from '../../context/voxa-context';
 import { PendingAttachmentInput } from '../../types';
 import {
   permissionErrorLabel,
   requestCameraPermission,
   requestMediaLibraryPermission,
-  requestMicrophonePermission,
 } from '../../services/attachments/attachment-permissions';
+import { getUpgradeCopy } from '../../services/billing/feature-registry';
+import { checkVoiceNoteGate } from '../../services/voice-notes/voice-note-access';
+import { voiceNotePlaybackService } from '../../services/voice-notes/voice-note-playback-service';
+import { voiceNoteLog } from '../../services/voice-notes/voice-note-logger';
+import { voiceNoteRecordingService } from '../../services/voice-notes/voice-note-recording-service';
 import { GlassCard } from '../ui/glass-card';
-import { VoxaText } from '../ui/voxa-text';
 import { AttachmentPreviewTray } from './attachment-preview-tray';
 import { VoiceNoteRecorder } from './voice-note-recorder';
 
@@ -22,13 +27,8 @@ type ChatInputBarProps = {
   onSend: (attachments: PendingAttachmentInput[]) => void;
   disabled?: boolean;
   voxaName: string;
-};
-
-type AttachmentMenuItem = {
-  id: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  action: () => Promise<void>;
+  onOpenTools?: () => void;
+  onVoiceNoteLimit?: (message: string) => void;
 };
 
 export function ChatInputBar({
@@ -37,33 +37,38 @@ export function ChatInputBar({
   onSend,
   disabled,
   voxaName,
+  onOpenTools,
+  onVoiceNoteLimit,
 }: ChatInputBarProps) {
+  const { profile, services } = useVoxa();
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachmentInput[]>([]);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [recordingMode, setRecordingMode] = useState(false);
+  const [voiceNoteBusy, setVoiceNoteBusy] = useState(false);
+
+  const showCamera = isFeatureVisible('cameraPhoto');
+  const showVoiceNote = isFeatureVisible('voiceNote');
+  const showGallery = isFeatureVisible('galleryPicker');
+
+  useEffect(() => {
+    if (showVoiceNote) {
+      voiceNoteLog('BUTTON_RENDERED');
+    }
+  }, [showVoiceNote]);
 
   const addAttachment = (attachment: PendingAttachmentInput) => {
     setPendingAttachments((current) => [...current, attachment]);
   };
 
-  const pickImage = async (fromCamera: boolean) => {
-    setMenuOpen(false);
-    const granted = fromCamera ? await requestCameraPermission() : await requestMediaLibraryPermission();
+  const takePhoto = async () => {
+    const granted = await requestCameraPermission();
     if (!granted) {
-      Alert.alert('Permission needed', permissionErrorLabel(fromCamera ? 'camera' : 'mediaLibrary'));
+      Alert.alert('Permission needed', permissionErrorLabel('camera'));
       return;
     }
-
-    const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.85,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.85,
-        });
-
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+    });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     addAttachment({
@@ -75,58 +80,68 @@ export function ChatInputBar({
     });
   };
 
-  const pickVideo = async (fromCamera: boolean) => {
-    setMenuOpen(false);
-    const granted = fromCamera ? await requestCameraPermission() : await requestMediaLibraryPermission();
+  const pickFromGallery = async () => {
+    const granted = await requestMediaLibraryPermission();
     if (!granted) {
-      Alert.alert('Permission needed', permissionErrorLabel(fromCamera ? 'camera' : 'mediaLibrary'));
+      Alert.alert('Permission needed', permissionErrorLabel('mediaLibrary'));
       return;
     }
-
-    const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ['videos'],
-          videoMaxDuration: 60,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['videos'],
-          videoMaxDuration: 120,
-        });
-
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+    });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     addAttachment({
-      type: 'video',
+      type: 'image',
       localUri: asset.uri,
-      mimeType: asset.mimeType ?? 'video/mp4',
-      fileName: asset.fileName ?? `video-${Date.now()}.mp4`,
+      mimeType: asset.mimeType ?? 'image/jpeg',
+      fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
       sizeBytes: asset.fileSize,
-      durationSeconds: asset.duration ? asset.duration / 1000 : undefined,
     });
   };
 
-  const startVoiceMode = async () => {
-    setMenuOpen(false);
-    const granted = await requestMicrophonePermission();
-    if (!granted) {
-      Alert.alert('Permission needed', permissionErrorLabel('microphone'));
-      return;
-    }
-    setRecordingMode(true);
+  const closeVoicePanel = () => {
+    voiceNoteLog('PANEL_CLOSE');
+    setRecordingMode(false);
+    void voiceNoteRecordingService.reset();
+    void voiceNotePlaybackService.stop();
   };
 
-  const menuItems: AttachmentMenuItem[] = [
-    { id: 'photo-lib', label: 'Photo library', icon: 'images-outline', action: () => pickImage(false) },
-    { id: 'photo-cam', label: 'Take photo', icon: 'camera-outline', action: () => pickImage(true) },
-    { id: 'video-lib', label: 'Video library', icon: 'film-outline', action: () => pickVideo(false) },
-    { id: 'video-cam', label: 'Record video', icon: 'videocam-outline', action: () => pickVideo(true) },
-    { id: 'voice', label: 'Voice note', icon: 'mic-outline', action: startVoiceMode },
-  ];
+  const startVoiceMode = async () => {
+    if (disabled || voiceNoteBusy) return;
+    voiceNoteLog('BUTTON_TAP');
+    setVoiceNoteBusy(true);
+    try {
+      if (profile) {
+        const gate = await checkVoiceNoteGate({
+          userId: profile.id,
+          subscription: services.subscription,
+          featureGate: services.featureGate,
+          usageTracking: services.usageTracking,
+        });
+        if (!gate.allowed) {
+          const message = gate.reason ?? getUpgradeCopy('voice_note');
+          onVoiceNoteLimit?.(message);
+          return;
+        }
+      }
+      await voiceNotePlaybackService.stop();
+      voiceNoteLog('PANEL_OPEN');
+      setRecordingMode(true);
+    } finally {
+      setVoiceNoteBusy(false);
+    }
+  };
 
-  const canSend = (value.trim().length > 0 || pendingAttachments.length > 0) && !disabled;
+  const canSend = (value.trim().length > 0 || pendingAttachments.length > 0) && !disabled && !recordingMode;
 
   const handleSend = () => {
     if (!canSend) return;
+    const hasVoiceNote = pendingAttachments.some((item) => item.type === 'audio');
+    if (hasVoiceNote) {
+      voiceNoteLog('SEND_SUCCESS');
+    }
     onSend(pendingAttachments);
     setPendingAttachments([]);
     setRecordingMode(false);
@@ -142,75 +157,83 @@ export function ChatInputBar({
       />
 
       <View style={styles.inputBar}>
-        <Pressable
-          style={styles.iconBtn}
-          onPress={() => setMenuOpen(true)}
-          disabled={disabled}>
-          <Ionicons name="add" size={22} color={colors.textMuted} />
-        </Pressable>
-
-        <GlassCard style={styles.inputCard}>
-          <TextInput
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={`Message ${voxaName}...`}
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
-            editable={!disabled}
-          />
-          <Pressable onPress={handleSend} disabled={!canSend} style={[styles.send, !canSend && styles.sendDisabled]}>
-            <Ionicons name="arrow-up" size={16} color={colors.background} />
+        {onOpenTools && !recordingMode ? (
+          <Pressable
+            style={styles.iconBtn}
+            onPress={onOpenTools}
+            disabled={disabled}
+            accessibilityLabel="Open chat tools">
+            <Ionicons name="add" size={22} color={colors.primarySoft} />
           </Pressable>
-        </GlassCard>
+        ) : null}
+
+        {showCamera && !recordingMode ? (
+          <Pressable style={styles.iconBtn} onPress={() => void takePhoto()} disabled={disabled}>
+            <Ionicons name="camera-outline" size={22} color={colors.primarySoft} />
+          </Pressable>
+        ) : null}
 
         {recordingMode ? (
           <VoiceNoteRecorder
             disabled={disabled}
-            onCancel={() => setRecordingMode(false)}
-            onRecorded={(uri, durationSeconds) => {
+            onCancel={closeVoicePanel}
+            onRecorded={(result) => {
+              voiceNoteLog('PREVIEW_READY');
               setRecordingMode(false);
-              onSend([
-                {
-                  type: 'audio',
-                  localUri: uri,
-                  mimeType: 'audio/m4a',
-                  fileName: `voice-${Date.now()}.m4a`,
-                  durationSeconds,
-                },
-              ]);
+              addAttachment({
+                type: 'audio',
+                localUri: result.uri,
+                mimeType: result.mimeType,
+                fileName: `voice-${Date.now()}.m4a`,
+                durationSeconds: Math.max(1, Math.round(result.durationMs / 1000)),
+                sizeBytes: result.sizeBytes,
+              });
             }}
           />
         ) : (
-          <Pressable style={styles.iconBtn} onPress={startVoiceMode} disabled={disabled}>
-            <Ionicons name="mic-outline" size={20} color={colors.textMuted} />
-          </Pressable>
-        )}
+          <>
+            <GlassCard style={styles.inputCard}>
+              <TextInput
+                value={value}
+                onChangeText={onChangeText}
+                placeholder={`Message ${voxaName}...`}
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                editable={!disabled}
+                multiline
+              />
+            </GlassCard>
 
-        <Pressable style={styles.iconBtn} onPress={() => pickImage(true)} disabled={disabled}>
-          <Ionicons name="camera-outline" size={20} color={colors.textMuted} />
-        </Pressable>
+            {showVoiceNote ? (
+              <Pressable
+                style={styles.iconBtn}
+                onPress={() => void startVoiceMode()}
+                disabled={disabled || voiceNoteBusy}
+                accessibilityLabel="Record voice note">
+                <Ionicons name="mic-outline" size={22} color={colors.primarySoft} />
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={handleSend}
+              disabled={!canSend}
+              style={[styles.sendBtn, !canSend && styles.sendDisabled]}
+              accessibilityLabel="Send message">
+              <Ionicons name="arrow-up" size={16} color={colors.background} />
+            </Pressable>
+          </>
+        )}
       </View>
 
-      <Modal visible={menuOpen} transparent animationType="fade">
-        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <VoxaText variant="subtitle" style={styles.modalTitle}>
-              Attach
-            </VoxaText>
-            {menuItems.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.menuRow}
-                onPress={() => void item.action()}>
-                <Ionicons name={item.icon} size={18} color={colors.primarySoft} />
-                <VoxaText variant="body">{item.label}</VoxaText>
-              </Pressable>
-            ))}
+      {showGallery && !recordingMode ? (
+        <View style={styles.secondaryRow}>
+          <Pressable style={styles.secondaryBtn} onPress={() => void pickFromGallery()} disabled={disabled}>
+            <Ionicons name="images-outline" size={18} color={colors.textMuted} />
           </Pressable>
-        </Pressable>
-      </Modal>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -219,15 +242,27 @@ const styles = StyleSheet.create({
   wrap: { gap: spacing.xs },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: layout.screenPadding,
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
+  secondaryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: spacing.xs,
+  },
+  secondaryBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -237,44 +272,27 @@ const styles = StyleSheet.create({
   inputCard: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingLeft: spacing.md,
-    paddingRight: 6,
-    gap: spacing.sm,
+    alignItems: 'flex-end',
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    minHeight: 48,
+    borderRadius: radius.xl,
   },
-  input: { flex: 1, color: colors.text, fontSize: 15, paddingVertical: 10 },
-  send: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  input: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 24,
+    paddingVertical: 6,
+    maxHeight: 140,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendDisabled: { opacity: 0.45 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-    padding: layout.screenPadding,
-    paddingBottom: layout.tabBarHeight,
-  },
-  modalCard: {
-    backgroundColor: colors.surfaceStrong,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  modalTitle: { marginBottom: spacing.sm },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.glassBorder,
-  },
 });

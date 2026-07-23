@@ -1,3 +1,5 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 export type AuthStackParamList = {
   Login: undefined;
   SignUp: undefined;
@@ -6,7 +8,7 @@ export type AuthStackParamList = {
 
 export type RootStackParamList = {
   Welcome: undefined;
-  MainTabs: { screen?: keyof MainTabParamList } | undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   CreateReminder: { presetKind?: import('../types').ReminderKind } | undefined;
   CreateGoal: undefined;
   Memory: undefined;
@@ -21,12 +23,61 @@ export type RootStackParamList = {
   Paywall: { source?: string } | undefined;
   VoiceCall: undefined;
   SafeCall: undefined;
+  ConversationHistory: undefined;
+  RoutineCoach: undefined;
+  DailyCheckIn: { period?: 'morning' | 'evening' } | undefined;
+  WeeklyRecap: undefined;
+  VoiceNoteRecorderDiagnostic: undefined;
+  HealthCheck: undefined;
+  BillingQA: undefined;
+  LifeOSHub: undefined;
+  GoalDetail: { goalId?: string } | undefined;
+  FutureSelf: undefined;
+  VisionBoard: undefined;
+  BucketList: undefined;
+  DreamJournal: undefined;
+  DecisionSimulator: undefined;
+  DebateMode: undefined;
+  CoachScore: undefined;
+  MemoryConnections: undefined;
+  LifeBook: undefined;
+  MemoryMovie: undefined;
+  RelationshipProfile: undefined;
+  Activities: undefined;
+  FeatureDiscovery: undefined;
+  MonthlyReplay: undefined;
+  SharedChallenges: undefined;
+  FocusMode: undefined;
+  CompanionArcade: undefined;
+  AchievementCentre: undefined;
+  ConversationDecks: undefined;
+  DailySpin: undefined;
+  DailyChallenge: undefined;
+  WeeklyMission: undefined;
+  ArcadeGameSession: { gameId: import('../types/phase10-play').ArcadeGameId };
+  ScheduledCheckIns: undefined;
+  ProactiveCheckIns: undefined;
+  WeeklyLetter: undefined;
+  PhotoMemories: undefined;
+  MoodJournal: undefined;
+  RelationshipGrowth: undefined;
+  DailyReflection: undefined;
+  MoodTimeline: undefined;
+  VoiceConversation: { autoStart?: boolean; safe?: boolean } | undefined;
+  CoachingHub: undefined;
+  ConversationWorlds: undefined;
+  RelationshipTimeline: undefined;
+  CompanionChallenges: undefined;
+  GiftsCollection: undefined;
+  DailyNews: undefined;
+  WeatherLocationSetup: undefined;
 };
 
 export type MainTabParamList = {
   Home: undefined;
-  Talk: undefined;
-  Voxa: { action?: 'voice' | 'safe' | 'music' } | undefined;
+  Talk: { starterPrompt?: string; mode?: import('../types').CompanionModeId; conversationId?: string } | undefined;
+  Voxa: { action?: 'voice' | 'safe' | 'music' | 'camera' } | undefined;
+  Routine: undefined;
   Journey: undefined;
   You: undefined;
 };

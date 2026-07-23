@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { getAudDApiToken } from '../../config/env';
 import { MusicRecognitionResult } from '../../types';
 import { recordAudDRequest } from '../voice/voice-debug-state';
-import { setMusicDebugStep, setMusicResponseStatus } from './music-debug-state';
+import { setMusicAuddDetail, setMusicDebugStep, setMusicResponseStatus } from './music-debug-state';
 
 export class AudDProvider {
   readonly id = 'audd';
@@ -75,20 +75,23 @@ export class AudDProvider {
 
     const status = typeof json.status === 'string' ? json.status : 'unknown';
     recordAudDRequest(status);
+    setMusicAuddDetail(status, resultSummary(json));
 
     if (status === 'error') {
       const errorCode = typeof json.error === 'object' && json.error && 'error_code' in json.error
         ? String((json.error as { error_code?: number }).error_code)
         : 'unknown';
+      setMusicAuddDetail(errorCode, 'error');
       setMusicDebugStep('failed', `AudD error ${errorCode}`);
-      throw new Error('AudD request failed. Check your API token and try again.');
+      throw new Error(`AudD error (${errorCode}). Check your connection and try again.`);
     }
 
     const result = json.result as Record<string, unknown> | null;
     if (!result?.title) {
+      setMusicAuddDetail(status, 'no_match');
       setMusicDebugStep('failed', 'No song recognised');
       recordAudDRequest('no match');
-      throw new Error('No song recognised. Hold the phone closer to the speaker and try again.');
+      throw new Error('No song recognised. Play louder, move closer, and try again.');
     }
 
     setMusicDebugStep('parsed');
@@ -96,6 +99,8 @@ export class AudDProvider {
 
     const spotify = result.spotify as { external_urls?: { spotify?: string } } | undefined;
     const appleMusic = result.apple_music as { url?: string } | undefined;
+
+    setMusicAuddDetail(status, String(result.title));
 
     return {
       title: String(result.title),
@@ -112,4 +117,11 @@ export class AudDProvider {
       },
     };
   }
+}
+
+function resultSummary(json: Record<string, unknown>): string {
+  const result = json.result as Record<string, unknown> | null;
+  if (!result) return 'empty';
+  if (result.title) return String(result.title);
+  return 'no_match';
 }

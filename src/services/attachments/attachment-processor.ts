@@ -1,4 +1,9 @@
 import { IAIService } from '../contracts';
+import { recordPhotoAnalysisStatus } from '../../utils/chat-debug-state';
+import {
+  recordVoiceNoteTranscriptionStatus,
+  recordVoiceNoteUploadStatus,
+} from '../../utils/voice-note-debug-state';
 import {
   MessageAttachment,
   MemorySource,
@@ -46,8 +51,10 @@ export class AttachmentProcessor {
         let transcription: string | null = null;
         try {
           transcription = await this.ai.transcribeAudio({ uri: item.localUri, fileName: item.fileName });
+          recordVoiceNoteTranscriptionStatus(transcription ? 'OK' : 'Empty');
         } catch (err) {
           console.warn('[Voxa] Audio transcription failed.', err);
+          recordVoiceNoteTranscriptionStatus(err instanceof Error ? err.message : 'Failed');
         }
         attachments.push({
           ...base,
@@ -67,8 +74,10 @@ export class AttachmentProcessor {
         let summary: string | null = null;
         try {
           summary = await this.ai.analyzeImage({ uri: item.localUri, mimeType: item.mimeType });
+          recordPhotoAnalysisStatus(summary ? 'OK' : 'Empty response');
         } catch (err) {
           console.warn('[Voxa] Image analysis failed.', err);
+          recordPhotoAnalysisStatus(err instanceof Error ? err.message : 'Failed');
         }
         imageUrlForVision = item.localUri;
         imageAnalysisSummary = summary ?? undefined;
@@ -125,6 +134,9 @@ export class AttachmentProcessor {
         attachment: { ...attachment, uploadStatus: 'uploading' },
       });
       uploaded.push(next);
+      if (next.type === 'audio') {
+        recordVoiceNoteUploadStatus(next.uploadStatus ?? 'unknown');
+      }
     }
     return uploaded;
   }

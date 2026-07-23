@@ -1,16 +1,22 @@
-import { CompanionModeId, Message, UserProfile, VoiceSession } from '../../types';
-import { VoicePersonality } from '../../types/user-profile';
+import { CompanionModeId, Message, VoiceSession } from '../../types';
 import { IAIService, VoxaRepositories } from '../contracts';
 import { MemoryIntelligenceService } from '../memory/memory-intelligence-service';
 import { SessionStartResult, VoxaCompanionService } from '../voxa-companion-service';
 import { FallbackVoicePipeline, FallbackVoicePipelineConfig } from './fallback-voice-pipeline';
 import { createRealtimeVoiceService, IRealtimeVoiceService } from './realtime-voice-service';
 import { createSpeechToTextService, ISpeechToTextService } from './speech-to-text-service';
-import { createTextToSpeechService, ITextToSpeechService } from './text-to-speech-service';
+import {
+  getSharedTextToSpeechService,
+  ITextToSpeechService,
+  forceStopAllTts,
+} from './text-to-speech-service';
 import { VoiceRecordingService } from './voice-recording-service';
 import { VoiceConnectionState, VoiceTranscriptEntry } from './voice-engine';
 import { VoiceTranscriptStore, StoredVoiceTranscript } from './voice-transcript-store';
+import { audioSessionManager } from '../audio/audio-session-manager';
 import { recordVoiceError, setVoiceDebugState, voiceLog } from './voice-debug-state';
+import { resolveVoiceIdentity, resolveVoiceSpeechConfig } from './voice-identity-resolver';
+import { VoiceWatchdog, VOICE_STUCK_MESSAGE } from './voice-watchdog';
 
 export type VoiceCallControllerEvents = {
   onStateChange: (state: VoiceConnectionState) => void;
@@ -27,11 +33,24 @@ export type ActiveVoiceCall = {
   isSafeCall: boolean;
 };
 
+const noopEvents: VoiceCallControllerEvents = {
+  onStateChange: () => undefined,
+  onTranscript: () => undefined,
+  onTimerTick: () => undefined,
+  onError: () => undefined,
+};
+
 export class VoiceCallController {
   private pipeline: FallbackVoicePipeline | null = null;
   private timerHandle: ReturnType<typeof setInterval> | null = null;
   private seconds = 0;
   private activeCall: ActiveVoiceCall | null = null;
+  private events: VoiceCallControllerEvents = noopEvents;
+  private watchdog = new VoiceWatchdog({
+    onTimeout: () => {
+      void this.forceResetVoice(VOICE_STUCK_MESSAGE);
+    },
+  });
 
   readonly stt: ISpeechToTextService;
   readonly tts: ITextToSpeechService;
@@ -45,13 +64,16 @@ export class VoiceCallController {
     private readonly repositories: VoxaRepositories,
     private readonly memoryEngine: MemoryIntelligenceService,
     private readonly transcriptStoreInstance: VoiceTranscriptStore,
-    private readonly events: VoiceCallControllerEvents,
   ) {
     this.stt = createSpeechToTextService(ai);
-    this.tts = createTextToSpeechService();
+    this.tts = getSharedTextToSpeechService();
     this.realtime = createRealtimeVoiceService();
     this.recording = new VoiceRecordingService();
     this.transcriptStore = transcriptStoreInstance;
+  }
+
+  bindEvents(events: VoiceCallControllerEvents) {
+    this.events = events;
   }
 
   get activeSession() {
@@ -71,21 +93,68 @@ export class VoiceCallController {
     return this.transcriptStore.getTranscript(sessionId);
   }
 
-  async startCall(userId: string, mode: CompanionModeId = 'friend'): Promise<ActiveVoiceCall> {
-    if (this.activeCall) {
-      throw new Error('A voice call is already active.');
+  async forceResetVoice(errorMessage?: string): Promise<void> {
+    voiceLog('VOICE FORCE RESET');
+    audioSessionManager.voiceCallActive = false;
+    this.watchdog.stop();
+    this.stopTimer();
+
+    const call = this.activeCall;
+    const duration = this.seconds;
+    this.activeCall = null;
+    this.seconds = 0;
+
+    try {
+      await this.pipeline?.forceStop();
+    } catch {
+      // ignore
     }
-    voiceLog('VOICE START', 'standard call');
+    this.pipeline = null;
+
+    try {
+      await this.recording.cancel();
+    } catch {
+      // ignore
+    }
+    try {
+      await forceStopAllTts();
+    } catch {
+      // ignore
+    }
+    try {
+      await audioSessionManager.forceReset();
+    } catch {
+      // ignore
+    }
+
+    setVoiceDebugState({ recorderActive: false, callState: 'disconnected' });
+    this.events.onStateChange('disconnected');
+
+    if (call) {
+      try {
+        await this.companion.endVoiceSession(call.session.id, duration);
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+
+    if (errorMessage) {
+      recordVoiceError(errorMessage);
+      this.events.onError(new Error(errorMessage));
+    }
+  }
+
+  async startCall(userId: string, mode: CompanionModeId = 'friend'): Promise<ActiveVoiceCall> {
+    await this.forceResetVoice();
+    voiceLog('VOICE SESSION CLEAN START', 'standard call');
     const result = await this.companion.startVoiceSession(userId, mode);
     await this.bootPipeline(result, false);
     return this.activeCall!;
   }
 
   async startSafeCall(userId: string): Promise<ActiveVoiceCall> {
-    if (this.activeCall) {
-      throw new Error('A voice call is already active.');
-    }
-    voiceLog('VOICE START', 'safe call');
+    await this.forceResetVoice();
+    voiceLog('VOICE SESSION CLEAN START', 'safe call');
     const result = await this.companion.startSafeCallSession(userId);
     await this.bootPipeline(result, true);
     return this.activeCall!;
@@ -102,6 +171,7 @@ export class VoiceCallController {
       mode: result.voiceSession.mode,
       isSafeCall,
     };
+    audioSessionManager.voiceCallActive = true;
 
     const history = await this.repositories.messages.listMessages(result.conversation.id);
     const personality = profile.preferences.voicePersonality;
@@ -114,6 +184,13 @@ export class VoiceCallController {
       personality,
       profile,
       isSafeCall,
+      buildReplyExtension: (userText) =>
+        this.companion.buildVoiceIntelligenceExtension({
+          userId: profile.id,
+          conversationId: result.conversation.id,
+          userMessage: userText,
+          mode: result.voiceSession.mode,
+        }),
     };
 
     this.pipeline = new FallbackVoicePipeline(
@@ -125,6 +202,7 @@ export class VoiceCallController {
       this.memoryEngine,
       {
         onStateChange: (state) => {
+          this.watchdog.setState(state);
           setVoiceDebugState({ callState: state });
           this.events.onStateChange(state);
         },
@@ -139,34 +217,13 @@ export class VoiceCallController {
     this.pipeline.setConversationHistory(history);
 
     this.startTimer();
+    this.watchdog.start();
+    this.watchdog.setState('connecting');
     await this.pipeline.start(config, result.openingMessage.content);
   }
 
   async endCall() {
-    const call = this.activeCall;
-    if (!call) return;
-
-    voiceLog('VOICE END');
-    const duration = this.seconds;
-    this.activeCall = null;
-    this.stopTimer();
-
-    try {
-      await this.pipeline?.stop();
-    } catch (error) {
-      recordVoiceError(error instanceof Error ? error.message : 'End call cleanup failed');
-    } finally {
-      this.pipeline = null;
-      setVoiceDebugState({ recorderActive: false, callState: 'disconnected' });
-    }
-
-    try {
-      await this.companion.endVoiceSession(call.session.id, duration);
-    } catch (error) {
-      recordVoiceError(error instanceof Error ? error.message : 'Failed to end voice session');
-    }
-    this.seconds = 0;
-    this.events.onStateChange('disconnected');
+    await this.forceResetVoice();
   }
 
   setMicMuted(muted: boolean) {
@@ -198,6 +255,54 @@ export class VoiceCallController {
       },
       text,
     );
+  }
+
+  async testVoiceOutput(): Promise<void> {
+    const profile = await this.repositories.userProfile.getProfile();
+    if (!profile) throw new Error('Profile not found.');
+
+    await this.recording.cancel();
+    await audioSessionManager.forceReset();
+
+    const identity = resolveVoiceIdentity(profile);
+    const config = resolveVoiceSpeechConfig(identity, profile.preferences.voicePersonality);
+
+    try {
+      await this.tts.speak("Hi, I'm Voxa. I can hear you.", config);
+    } catch {
+      await forceStopAllTts();
+      throw new Error('Voice test failed. Try Reset audio, then test again.');
+    } finally {
+      await forceStopAllTts();
+      setVoiceDebugState({ callState: 'idle' });
+    }
+  }
+
+  async testMicrophone(): Promise<void> {
+    if (audioSessionManager.voiceCallActive) {
+      throw new Error('End the voice call before testing the microphone.');
+    }
+    const locked = await audioSessionManager.acquireLock('voice');
+    if (!locked) throw new Error('Audio is busy. Try Reset audio first.');
+    try {
+      await audioSessionManager.startRecording('voice');
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const uri = await audioSessionManager.stopRecording();
+      if (!uri) throw new Error('No audio captured. Check microphone permission.');
+      voiceLog('VOICE MIC TEST OK');
+    } finally {
+      await audioSessionManager.releaseLock('voice');
+    }
+  }
+
+  async testSpeaker(): Promise<void> {
+    await this.testVoiceOutput();
+  }
+
+  async resetAudio(): Promise<void> {
+    await this.forceResetVoice();
+    await audioSessionManager.forceReset();
+    voiceLog('AUDIO RESET COMPLETE');
   }
 
   private async persistVoiceTurn(input: {
@@ -238,6 +343,18 @@ export class VoiceCallController {
       const history = await this.repositories.messages.listMessages(input.conversationId);
       this.pipeline.setConversationHistory(history);
     }
+
+    if (input.userText && this.activeCall) {
+      const profile = await this.repositories.userProfile.getProfile();
+      if (profile) {
+        void this.companion.afterVoiceTurn({
+          userId: profile.id,
+          userMessage: input.userText,
+          voxaReply: input.voxaText,
+          mode: input.mode,
+        });
+      }
+    }
   }
 
   private startTimer() {
@@ -254,6 +371,28 @@ export class VoiceCallController {
   }
 }
 
+let globalVoiceController: VoiceCallController | null = null;
+
+export function getOrCreateVoiceCallController(input: {
+  companion: VoxaCompanionService;
+  ai: IAIService;
+  repositories: VoxaRepositories;
+  memoryEngine: MemoryIntelligenceService;
+  storage: import('../contracts').IStorageService;
+}): VoiceCallController {
+  if (!globalVoiceController) {
+    const transcriptStore = new VoiceTranscriptStore(input.storage);
+    globalVoiceController = new VoiceCallController(
+      input.companion,
+      input.ai,
+      input.repositories,
+      input.memoryEngine,
+      transcriptStore,
+    );
+  }
+  return globalVoiceController;
+}
+
 export function createVoiceCallController(input: {
   companion: VoxaCompanionService;
   ai: IAIService;
@@ -262,15 +401,9 @@ export function createVoiceCallController(input: {
   storage: import('../contracts').IStorageService;
   events: VoiceCallControllerEvents;
 }) {
-  const transcriptStore = new VoiceTranscriptStore(input.storage);
-  return new VoiceCallController(
-    input.companion,
-    input.ai,
-    input.repositories,
-    input.memoryEngine,
-    transcriptStore,
-    input.events,
-  );
+  const controller = getOrCreateVoiceCallController(input);
+  controller.bindEvents(input.events);
+  return controller;
 }
 
 export type { StoredVoiceTranscript };

@@ -7,6 +7,7 @@ import {
   PlanStatus,
   UsageBucket,
 } from '../../types/subscription';
+import { FEATURE_GATE_REGISTRY, getUpgradeCopy } from './feature-registry';
 
 type LimitCheck = {
   daily: number;
@@ -18,6 +19,63 @@ type LimitCheck = {
 };
 
 export class FeatureGateService {
+  getGateDefinition(feature: GateFeature) {
+    return FEATURE_GATE_REGISTRY[feature];
+  }
+
+  canAccessFeature(feature: GateFeature, status: PlanStatus, usage?: UsageBucket): GateResult {
+    const definition = FEATURE_GATE_REGISTRY[feature];
+    if (!definition?.implemented) {
+      return {
+        allowed: false,
+        feature,
+        reason: 'This feature is not available yet.',
+      };
+    }
+
+    switch (feature) {
+      case 'ai_chat':
+        return usage ? this.canUseAiChat(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'voice_call':
+        return usage ? this.canUseVoice(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'voice_note':
+        return usage ? this.canUseVoiceNote(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'image_upload':
+        return usage ? this.canUploadImage(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'video_upload':
+        return usage ? this.canUploadVideo(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'document_upload':
+        return usage ? this.canUploadDocument(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'unlimited_memory':
+        return usage ? this.canUseUnlimitedMemory(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'unlimited_goals':
+        return usage ? this.canCreateGoal(status, usage) : this.proOnly(feature, definition.label, status);
+      case 'unlimited_reminders':
+        return usage ? this.canCreateReminder(status, usage) : this.proOnly(feature, definition.label, status);
+      default:
+        return this.canUseProFeature(feature, status);
+    }
+  }
+
+  canUseProFeature(feature: GateFeature, status: PlanStatus): GateResult {
+    const definition = FEATURE_GATE_REGISTRY[feature];
+    if (!definition) return { allowed: true, feature };
+    if (definition.freeAvailability === 'yes' || definition.freeAvailability === 'limited') {
+      return status.isPro ? { allowed: true, feature } : this.proOnly(feature, definition.label, status);
+    }
+    if (definition.freeAvailability === 'preview') {
+      return status.isPro
+        ? { allowed: true, feature }
+        : {
+            allowed: false,
+            feature,
+            upgradeRequired: true,
+            reason: getUpgradeCopy(feature),
+          };
+    }
+    return this.proOnly(feature, definition.label, status);
+  }
+
   resolveLimits(status: PlanStatus): PlanLimits {
     return status.isPro ? PRO_PLAN_LIMITS : FREE_PLAN_LIMITS;
   }
@@ -58,7 +116,7 @@ export class FeatureGateService {
       allowed: false,
       feature,
       upgradeRequired: true,
-      reason: `${label} is a Voxa Pro feature.`,
+      reason: getUpgradeCopy(feature) || `${label} is a Voxa Pro feature.`,
     };
   }
 
@@ -208,7 +266,75 @@ export class FeatureGateService {
   }
 
   canUsePriorityAi(status: PlanStatus): GateResult {
-    return this.proOnly('priority_ai', 'Priority AI', status);
+    return this.canUseProFeature('priority_ai', status);
+  }
+
+  canUseLifeOs(status: PlanStatus): GateResult {
+    return this.canUseProFeature('life_os', status);
+  }
+
+  canUseFutureSelf(status: PlanStatus): GateResult {
+    return this.canUseProFeature('future_self', status);
+  }
+
+  canUseVisionBoard(status: PlanStatus): GateResult {
+    return this.canUseProFeature('vision_board', status);
+  }
+
+  canUseBucketList(status: PlanStatus): GateResult {
+    return this.canUseProFeature('bucket_list', status);
+  }
+
+  canUseLifeBook(status: PlanStatus): GateResult {
+    return this.canUseProFeature('life_book', status);
+  }
+
+  canUseDecisionSimulator(status: PlanStatus): GateResult {
+    return this.canUseProFeature('decision_simulator', status);
+  }
+
+  canUseDebateMode(status: PlanStatus): GateResult {
+    return this.canUseProFeature('debate_mode', status);
+  }
+
+  canUseWeeklyLetter(status: PlanStatus): GateResult {
+    return this.canUseProFeature('weekly_letter', status);
+  }
+
+  canUseMoodInsights(status: PlanStatus): GateResult {
+    return this.canUseProFeature('mood_insights', status);
+  }
+
+  canUseConversationWorlds(status: PlanStatus): GateResult {
+    return this.canUseProFeature('conversation_worlds', status);
+  }
+
+  canUseCoachingHub(status: PlanStatus): GateResult {
+    return this.canUseProFeature('coaching_hub', status);
+  }
+
+  canUseDreamJournal(status: PlanStatus): GateResult {
+    return this.canUseProFeature('dream_journal', status);
+  }
+
+  canUseArcadeFull(status: PlanStatus): GateResult {
+    return this.canUseProFeature('arcade_full', status);
+  }
+
+  canUsePremiumCosmetics(status: PlanStatus): GateResult {
+    return this.canUseProFeature('premium_cosmetics', status);
+  }
+
+  canUseSportsIntelligence(status: PlanStatus): GateResult {
+    return this.canUseProFeature('sports_intelligence', status);
+  }
+
+  canUseMemoryConnections(status: PlanStatus): GateResult {
+    return this.canUseProFeature('memory_connections', status);
+  }
+
+  canUsePinnedMemory(status: PlanStatus): GateResult {
+    return this.canUseProFeature('pinned_memory', status);
   }
 
   getRemainingLimits(status: PlanStatus, usage: UsageBucket) {

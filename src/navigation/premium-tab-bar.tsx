@@ -6,16 +6,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, layout, radius } from '../constants/theme';
 import { VoxaText } from '../components/ui/voxa-text';
 
-const TAB_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; label: string; center?: boolean }> = {
-  Home: { icon: 'home', label: 'Home' },
-  Talk: { icon: 'chatbubbles', label: 'Talk' },
-  Voxa: { icon: 'radio', label: 'Voxa', center: true },
-  Journey: { icon: 'compass', label: 'Journey' },
-  You: { icon: 'person', label: 'You' },
-};
+type TabConfig = { icon: keyof typeof Ionicons.glyphMap; label: string; center?: boolean };
 
-export function PremiumTabBar({ state, navigation }: BottomTabBarProps) {
+function buildTabConfig(experimental: boolean): Record<string, TabConfig> {
+  return {
+    Home: { icon: 'home', label: 'Home' },
+    Talk: { icon: 'chatbubbles', label: 'Talk' },
+    ...(experimental
+      ? { Voxa: { icon: 'radio', label: 'Voxa', center: true } }
+      : { Routine: { icon: 'calendar', label: 'Routine', center: true } }),
+    Journey: { icon: 'compass', label: 'Journey' },
+    You: { icon: 'person', label: 'You' },
+  };
+}
+
+type Props = BottomTabBarProps & { experimental?: boolean };
+
+export function PremiumTabBar({ state, navigation, experimental = false }: Props) {
   const insets = useSafeAreaInsets();
+  const TAB_CONFIG = buildTabConfig(experimental);
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>

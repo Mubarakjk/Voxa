@@ -48,6 +48,7 @@ export type ChatMessageView = {
   role: 'user' | 'voxa';
   text: string;
   time: string;
+  createdAt: string;
   status?: MessageDeliveryStatus;
   attachments?: MessageAttachment[];
 };
@@ -62,6 +63,7 @@ export function toChatMessageView(message: Message): ChatMessageView {
     role: message.role,
     text: message.content,
     time: new Date(message.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    createdAt: message.createdAt,
     status: message.status,
     attachments: message.attachments,
   };

@@ -1,4 +1,5 @@
 import { hasOpenAIApiKey, getOpenAIApiKey } from '../../config/env';
+import { shouldPreferAiGateway, isAiGatewayConfigured } from '../billing/billing-validation';
 import { IAIService } from '../contracts';
 import { FakeAIService } from './fake-ai-service';
 import { FallbackAIService } from './fallback-ai-service';
@@ -16,6 +17,10 @@ export function createAppAIService(override?: IAIService): IAIService {
 
   if (!apiKey) {
     return fallback;
+  }
+
+  if (shouldPreferAiGateway() && !isAiGatewayConfigured()) {
+    console.warn('[Voxa AI] Production prefers server gateway but EXPO_PUBLIC_AI_GATEWAY_URL is not configured.');
   }
 
   return new FallbackAIService(new OpenAIService({ apiKey }), fallback);

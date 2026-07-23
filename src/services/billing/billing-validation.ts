@@ -1,0 +1,164 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+import { hasSupabaseConfig, getSupabaseUrl } from '../../config/env';
+import {
+  getRevenueCatAndroidApiKey,
+  getRevenueCatEntitlementId,
+  getRevenueCatIosApiKey,
+  getRevenueCatOfferingId,
+  getRevenueCatApiKeyForPlatform,
+  hasRevenueCatConfig,
+} from '../../config/revenuecat-env';
+import { VOXA_PRICING } from '../../constants/voxa-pricing';
+import { getBillingRuntime } from './runtime-environment';
+import { maskSecret } from './billing-logger';
+
+export type BillingValidationCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+};
+
+export type BillingValidationReport = {
+  checkedAt: string;
+  runtime: string;
+  allRequiredOk: boolean;
+  checks: BillingValidationCheck[];
+};
+
+const EXPECTED_IOS_BUNDLE = 'app.voxa.companion';
+const EXPECTED_ANDROID_PACKAGE = 'app.voxa.companion';
+
+export function getConfiguredPlatformKeyPrefix(): string {
+  return maskSecret(getRevenueCatApiKeyForPlatform());
+}
+
+export function getAiGatewayUrl(): string | undefined {
+  return process.env.EXPO_PUBLIC_AI_GATEWAY_URL?.trim() || undefined;
+}
+
+export function isAiGatewayConfigured(): boolean {
+  return Boolean(getAiGatewayUrl() && hasSupabaseConfig());
+}
+
+export function shouldPreferAiGateway(): boolean {
+  return isAiGatewayConfigured() && !__DEV__;
+}
+
+export function validateBillingEnvironment(): BillingValidationReport {
+  const runtime = getBillingRuntime();
+  const expoConfig = Constants.expoConfig;
+  const iosBundle = expoConfig?.ios?.bundleIdentifier;
+  const androidPackage = expoConfig?.android?.package;
+  const easProjectId = expoConfig?.extra?.eas?.projectId as string | undefined;
+  const platformKey = Platform.OS === 'ios' ? getRevenueCatIosApiKey() : getRevenueCatAndroidApiKey();
+
+  const checks: BillingValidationCheck[] = [
+    {
+      id: 'rc_ios_key',
+      label: 'RevenueCat iOS key',
+      ok: Platform.OS !== 'ios' || Boolean(getRevenueCatIosApiKey()),
+      detail: Platform.OS === 'ios' ? maskSecret(getRevenueCatIosApiKey()) : 'n/a (not iOS)',
+    },
+    {
+      id: 'rc_android_key',
+      label: 'RevenueCat Android key',
+      ok: Platform.OS !== 'android' || Boolean(getRevenueCatAndroidApiKey()),
+      detail: Platform.OS === 'android' ? maskSecret(getRevenueCatAndroidApiKey()) : 'n/a (not Android)',
+    },
+    {
+      id: 'rc_platform_key',
+      label: 'Platform SDK key selected',
+      ok: !runtime.supportsNativePurchases || hasRevenueCatConfig(),
+      detail: maskSecret(platformKey),
+    },
+    {
+      id: 'rc_entitlement',
+      label: 'Entitlement ID',
+      ok: getRevenueCatEntitlementId() === VOXA_PRICING.entitlementId,
+      detail: getRevenueCatEntitlementId(),
+    },
+    {
+      id: 'rc_offering',
+      label: 'Offering ID',
+      ok: Boolean(getRevenueCatOfferingId()),
+      detail: getRevenueCatOfferingId(),
+    },
+    {
+      id: 'supabase',
+      label: 'Supabase URL + anon key',
+      ok: hasSupabaseConfig(),
+      detail: hasSupabaseConfig() ? maskSecret(getSupabaseUrl()) : 'not configured',
+    },
+    {
+      id: 'eas_project',
+      label: 'EAS project ID',
+      ok: Boolean(easProjectId && easProjectId !== 'replace-with-eas-project-id'),
+      detail: easProjectId && easProjectId !== 'replace-with-eas-project-id' ? maskSecret(easProjectId) : 'placeholder',
+    },
+    {
+      id: 'ios_bundle',
+      label: 'iOS bundle ID',
+      ok: iosBundle === EXPECTED_IOS_BUNDLE,
+      detail: iosBundle ?? 'missing',
+    },
+    {
+      id: 'android_package',
+      label: 'Android package',
+      ok: androidPackage === EXPECTED_ANDROID_PACKAGE,
+      detail: androidPackage ?? 'missing',
+    },
+    {
+      id: 'ai_gateway',
+      label: 'AI gateway URL',
+      ok: __DEV__ || isAiGatewayConfigured(),
+      detail: getAiGatewayUrl() ? maskSecret(getAiGatewayUrl()) : __DEV__ ? 'dev client OK' : 'required in production',
+    },
+  ];
+
+  const requiredForPurchases = checks.filter((check) =>
+    ['rc_platform_key', 'rc_entitlement', 'rc_offering', 'ios_bundle', 'android_package'].includes(check.id),
+  );
+
+  return {
+    checkedAt: new Date().toISOString(),
+    runtime: runtime.environmentLabel,
+    allRequiredOk: requiredForPurchases.every((check) => check.ok),
+    checks,
+  };
+}
+
+export function validateOfferingPackages(offerings: {
+  source: 'store' | 'fallback';
+  monthly?: { productId: string };
+  annual?: { productId: string };
+}): { monthlyValid: boolean; annualValid: boolean; setupMessage?: string } {
+  if (offerings.source === 'fallback') {
+    return {
+      monthlyValid: false,
+      annualValid: false,
+      setupMessage: 'Showing development fallback prices. Connect a dev build and store products for real purchases.',
+    };
+  }
+
+  const monthlyValid = offerings.monthly?.productId === VOXA_PRICING.productIds.monthly;
+  const annualValid = offerings.annual?.productId === VOXA_PRICING.productIds.annual;
+
+  if (!monthlyValid || !annualValid) {
+    const missing = [
+      !monthlyValid ? VOXA_PRICING.productIds.monthly : null,
+      !annualValid ? VOXA_PRICING.productIds.annual : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return {
+      monthlyValid,
+      annualValid,
+      setupMessage: `Missing RevenueCat packages for: ${missing}. Check offering "${getRevenueCatOfferingId()}" in the RevenueCat dashboard.`,
+    };
+  }
+
+  return { monthlyValid, annualValid };
+}
