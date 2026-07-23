@@ -1,49 +1,25 @@
-import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
-
-import { requestMicrophonePermission } from '../attachments/attachment-permissions';
 
 import { hasAudDApiToken } from '../../config/env';
 import { STORAGE_KEYS } from '../../constants/storage-keys';
 import { CreateRecognizedSongInput, MusicRecognitionResult, RecognizedSong, createUuid } from '../../types';
+import { requestMicrophonePermission } from '../attachments/attachment-permissions';
+import { audioSessionManager } from '../audio/audio-session-manager';
 import { IStorageService } from '../contracts';
 import {
-  AudDProvider,
   ACRCloudProvider,
   AppleMusicProvider,
+  AudDProvider,
   IMusicRecognitionProvider,
 } from './music-providers';
-import { resetMusicDebug, setMusicDebugStep } from './music-debug-state';
+import {
+  recordFailedMusicAttempt,
+  resetMusicDebug,
+  setMusicDebugStep,
+  setMusicRecordingMeta,
+} from './music-debug-state';
 
-const RECOGNITION_DURATION_MS = 10_000;
-
-/** AudD-friendly AAC recording (m4a on iOS/Android). */
-const MUSIC_RECORDING_OPTIONS: Audio.RecordingOptions = {
-  isMeteringEnabled: false,
-  android: {
-    extension: '.m4a',
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-  },
-  ios: {
-    extension: '.m4a',
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
-  },
-  web: {
-    mimeType: 'audio/webm',
-    bitsPerSecond: 128000,
-  },
-};
+const RECOGNITION_DURATION_MS = 14_000;
 
 export interface IMusicRecognitionService {
   recognizeFromAudio(audioUri: string): Promise<MusicRecognitionResult | null>;
@@ -106,6 +82,11 @@ export class HybridMusicRecognitionService implements IMusicRecognitionService {
   async recordAndRecognize(): Promise<MusicRecognitionResult | null> {
     resetMusicDebug();
 
+    if (audioSessionManager.voiceCallActive) {
+      setMusicDebugStep('failed', 'Voice call active');
+      throw new Error('Finish your voice call before identifying music.');
+    }
+
     if (!hasAudDApiToken()) {
       setMusicDebugStep('failed', 'AudD token missing');
       throw new Error('AudD token missing. Add EXPO_PUBLIC_AUDD_API_TOKEN to your .env file.');
@@ -123,24 +104,17 @@ export class HybridMusicRecognitionService implements IMusicRecognitionService {
       throw new Error('Microphone permission denied. Enable mic access in Settings.');
     }
 
-    const recording = new Audio.Recording();
+    let uri: string | null = null;
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      await recording.prepareToRecordAsync(MUSIC_RECORDING_OPTIONS);
-      setMusicDebugStep('recording_started');
-      await recording.startAsync();
-      await sleep(RECOGNITION_DURATION_MS);
-      await recording.stopAndUnloadAsync();
-      setMusicDebugStep('recording_saved');
-
-      const uri = recording.getURI();
-      if (!uri) {
-        setMusicDebugStep('failed', 'Recording failed');
-        throw new Error('Recording failed. No audio was captured.');
+      const locked = await audioSessionManager.acquireLock('music');
+      if (!locked) {
+        setMusicDebugStep('failed', 'Audio busy');
+        throw new Error('Audio is busy. End your voice call or wait for recording to finish.');
       }
+
+      setMusicDebugStep('recording_started');
+      uri = await audioSessionManager.recordSample('music', RECOGNITION_DURATION_MS);
+      setMusicDebugStep('recording_saved');
 
       const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) {
@@ -148,18 +122,37 @@ export class HybridMusicRecognitionService implements IMusicRecognitionService {
         throw new Error('Audio file missing after recording.');
       }
 
+      const fileSizeBytes = info.size ?? 0;
+      setMusicRecordingMeta(fileSizeBytes, RECOGNITION_DURATION_MS);
+      setMusicDebugStep('file_exists', `${fileSizeBytes} bytes · ${Math.round(RECOGNITION_DURATION_MS / 1000)}s`);
+
+      if (fileSizeBytes < 8000) {
+        recordFailedMusicAttempt({
+          fileSizeBytes,
+          durationMs: RECOGNITION_DURATION_MS,
+          auddStatus: 'local',
+          auddCode: 'small_file',
+          message: 'Recording too small',
+        });
+        throw new Error('Recording too small — play the song louder or hold your phone closer.');
+      }
+
       return await this.recognizeFromAudio(uri);
     } catch (err) {
-      if (err instanceof Error && err.message.includes('permission')) {
-        setMusicDebugStep('failed', err.message);
-        throw err;
-      }
       const message = err instanceof Error ? err.message : 'Music recording failed.';
       setMusicDebugStep('failed', message);
       throw err instanceof Error ? err : new Error(message);
     } finally {
+      if (uri) {
+        try {
+          await FileSystem.deleteAsync(uri, { idempotent: true });
+        } catch {
+          // ignore
+        }
+      }
+      await audioSessionManager.releaseLock('music');
       try {
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+        await audioSessionManager.setPlaybackMode();
       } catch {
         // ignore
       }
@@ -197,10 +190,6 @@ export class HybridMusicRecognitionService implements IMusicRecognitionService {
     setMusicDebugStep('saved_history');
     return song;
   }
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 let musicService: HybridMusicRecognitionService | null = null;

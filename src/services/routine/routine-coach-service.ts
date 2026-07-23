@@ -128,6 +128,13 @@ export class RoutineCoachService {
       ? all.map((c) => (c.id === existing.id ? entry : c))
       : [...all, entry];
     await this.storage.setItem(STORAGE_KEYS.routineCompletions, next);
+    if (status === 'completed') {
+      const { getAchievementTriggersService } = await import('../phase10/achievement-triggers-service');
+      const completed = next.filter((c) => c.userId === userId && c.status === 'completed');
+      if (completed.length === 1) {
+        void getAchievementTriggersService(this.storage).onRoutineCompleted(userId);
+      }
+    }
     return entry;
   }
 
@@ -236,16 +243,45 @@ export class RoutineCoachService {
   private async computeStreak(userId: string, from: Date): Promise<number> {
     let streak = 0;
     const cursor = new Date(from);
+    const blocks = await this.listBlocks(userId);
 
     for (let i = 0; i < 30; i++) {
-      const summary = await this.getTodaySchedule(userId, cursor);
-      if (summary.totalCount === 0) break;
-      if (summary.completionPercent < 50) break;
+      const dayOfWeek = cursor.getDay();
+      const dateKey = cursor.toISOString().slice(0, 10);
+      const dayBlocks = blocks.filter((b) => b.enabled && b.repeatDays.includes(dayOfWeek));
+      if (dayBlocks.length === 0) break;
+
+      const completions = await this.listCompletions(userId, dateKey);
+      const completed = dayBlocks.filter((b) =>
+        completions.some((c) => c.blockId === b.id && c.status === 'completed'),
+      ).length;
+      const percent = Math.round((completed / dayBlocks.length) * 100);
+      if (percent < 50) break;
+
       streak += 1;
       cursor.setDate(cursor.getDate() - 1);
     }
 
     return streak;
+  }
+
+  async getDailyNudge(userId: string, displayName?: string): Promise<string> {
+    const schedule = await this.getTodaySchedule(userId);
+    const firstName = displayName?.split(' ')[0] ?? 'there';
+
+    if (schedule.totalCount === 0) {
+      return `${firstName}, want to build a simple routine together today?`;
+    }
+
+    if (schedule.nextBlock) {
+      return `${firstName}, next up: ${schedule.nextBlock.title}. You've got a ${schedule.streakDays}-day streak — one step at a time.`;
+    }
+
+    if (schedule.completionPercent >= 100) {
+      return `${firstName}, you cleared today's routine. That's ${schedule.streakDays} days of showing up.`;
+    }
+
+    return `${firstName}, ${schedule.completedCount}/${schedule.totalCount} done today. Pick one small win and finish strong.`;
   }
 }
 

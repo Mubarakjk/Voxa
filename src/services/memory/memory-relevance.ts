@@ -1,5 +1,7 @@
 import { MEMORY_MODE_AFFINITY } from '../../constants/memory-categories';
 import { CompanionModeId, Memory } from '../../types';
+import { inferMemoryTheme, themeOverlapScore } from './memory-theme-service';
+import { memoryAgingEngine } from '../personality/memory-aging-engine';
 
 export type MemoryRetrievalContext = {
   userMessage: string;
@@ -117,6 +119,8 @@ function modeAffinityScore(memory: Memory, mode: CompanionModeId): number {
 export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalContext): number {
   if (isExpired(memory)) return -1;
 
+  const pinnedBoost = memory.pinned === true || memory.tags.includes('pinned') ? 6 : 0;
+
   const queryText = [context.userMessage, ...(context.recentMessageTexts ?? [])].join(' ');
   const queryTokens = tokenize(queryText);
   const searchable = `${memory.title} ${memory.content} ${memory.tags.join(' ')}`;
@@ -128,15 +132,21 @@ export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalCon
   const recency = recencyScore(memory.updatedAt);
   const usage = usageScore(memory);
   const modeAffinity = modeAffinityScore(memory, context.mode);
+  const theme = inferMemoryTheme(memory);
+  const semanticThemeScore = themeOverlapScore(queryText, theme) * 2.5;
+  const longTermBoost = memoryAgingEngine.longTermRank(memory) * 2;
 
   return (
+    pinnedBoost +
     keywordScore * 4 +
+    semanticThemeScore +
     importanceScore * 1.5 +
     emotionalScore * 1.25 +
     confidenceScore * 0.75 +
     recency * 1 +
     usage * 1.25 +
-    modeAffinity * 1.5
+    modeAffinity * 1.5 +
+    longTermBoost
   );
 }
 

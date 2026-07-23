@@ -39,10 +39,12 @@ import {
   goalFromRow,
   memoryFromRow,
   memoryToInsert,
+  memoryToUpdate,
   messageFromRow,
   profileFromRow,
   profileToUpdate,
   reminderFromRow,
+  reminderToUpdate,
   trustedContactFromRow,
   voiceSessionFromRow,
 } from './mappers';
@@ -180,10 +182,17 @@ export class SupabaseMemoryRepository implements IMemoryRepository {
   }
 
   async updateMemory(id: string, input: UpdateMemoryInput) {
-    const timestamp = nowIso();
+    let tags = input.tags;
+    if (input.pinned !== undefined) {
+      const current = await this.getMemory(id);
+      const base = tags ?? current?.tags ?? [];
+      tags = input.pinned
+        ? [...base.filter((tag) => tag !== 'pinned'), 'pinned']
+        : base.filter((tag) => tag !== 'pinned');
+    }
     const { data, error } = await this.client
       .from('memories')
-      .update({ ...input, updated_at: timestamp })
+      .update(memoryToUpdate(input, tags))
       .eq('id', id)
       .select('*')
       .single();
@@ -335,7 +344,7 @@ export class SupabaseReminderRepository implements IReminderRepository {
   async updateReminder(id: string, input: UpdateReminderInput) {
     const { data, error } = await this.client
       .from('reminders')
-      .update({ ...input, updated_at: nowIso() })
+      .update(reminderToUpdate(input))
       .eq('id', id)
       .select('*')
       .single();
@@ -396,6 +405,7 @@ export class SupabaseConversationRepository implements IConversationRepository {
         title: input.title,
         status: input.status,
         last_message_at: input.lastMessageAt,
+        summary: input.summary,
         updated_at: nowIso(),
       })
       .eq('id', id)
@@ -483,6 +493,11 @@ export class SupabaseMessageRepository implements IMessageRepository {
 
   async deleteMessagesForConversation(conversationId: string) {
     const { error } = await this.client.from('messages').delete().eq('conversation_id', conversationId);
+    if (error) throw error;
+  }
+
+  async deleteMessage(id: string) {
+    const { error } = await this.client.from('messages').delete().eq('id', id);
     if (error) throw error;
   }
 }
@@ -579,6 +594,7 @@ export class SupabaseTrustedContactRepository implements ITrustedContactReposito
         relation: input.relation,
         status: input.status ?? 'Available',
         phone: input.phone,
+        is_emergency: input.isEmergency ?? false,
         created_at: timestamp,
         updated_at: timestamp,
       })

@@ -49,6 +49,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   label: { letterSpacing: 0.8 },
-  scroll: { maxHeight: 96 },
+  scroll: { maxHeight: 80 },
   row: { gap: 2, marginBottom: spacing.xs },
 });

@@ -10,9 +10,23 @@ export type MusicDebugStep =
   | 'saved_history'
   | 'failed';
 
+export interface FailedMusicAttempt {
+  at: string;
+  fileSizeBytes: number;
+  durationMs: number;
+  auddStatus: string;
+  auddCode: string;
+  message: string;
+}
+
 let currentStep: MusicDebugStep = 'idle';
 let lastError: string | null = null;
 let lastResponseStatus: string | null = null;
+let lastFileSizeBytes: number | null = null;
+let lastDurationMs: number | null = null;
+let lastAuddCode: string | null = null;
+let lastAuddResult: string | null = null;
+const failedAttempts: FailedMusicAttempt[] = [];
 
 export function setMusicDebugStep(step: MusicDebugStep, error?: string | null) {
   currentStep = step;
@@ -24,10 +38,29 @@ export function setMusicResponseStatus(status: string) {
   lastResponseStatus = status;
 }
 
+export function setMusicRecordingMeta(fileSizeBytes: number, durationMs: number) {
+  lastFileSizeBytes = fileSizeBytes;
+  lastDurationMs = durationMs;
+}
+
+export function setMusicAuddDetail(code: string, result: string) {
+  lastAuddCode = code;
+  lastAuddResult = result;
+}
+
+export function recordFailedMusicAttempt(attempt: Omit<FailedMusicAttempt, 'at'>) {
+  failedAttempts.unshift({ ...attempt, at: new Date().toISOString() });
+  if (failedAttempts.length > 8) failedAttempts.pop();
+}
+
 export function resetMusicDebug() {
   currentStep = 'idle';
   lastError = null;
   lastResponseStatus = null;
+  lastFileSizeBytes = null;
+  lastDurationMs = null;
+  lastAuddCode = null;
+  lastAuddResult = null;
 }
 
 export function getMusicDebugSnapshot() {
@@ -35,6 +68,11 @@ export function getMusicDebugSnapshot() {
     step: currentStep,
     lastError: lastError ?? 'None',
     lastResponseStatus: lastResponseStatus ?? '—',
+    fileSizeBytes: lastFileSizeBytes,
+    durationMs: lastDurationMs,
+    auddCode: lastAuddCode ?? '—',
+    auddResult: lastAuddResult ?? '—',
+    failedAttempts: [...failedAttempts],
   };
 }
 

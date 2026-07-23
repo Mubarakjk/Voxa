@@ -72,3 +72,8 @@ export function voiceLog(event: string, detail?: string) {
   const line = detail ? `${event} · ${detail}` : event;
   console.log(`[Voxa] ${line}`);
 }
+
+export function ttsLog(event: string, detail?: string) {
+  const line = detail ? `${event} · ${detail}` : event;
+  console.log(`[Voxa] ${line}`);
+}

@@ -3,7 +3,17 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { colors } from '../../constants/theme';
 
-export type CompanionOrbMood = 'calm' | 'happy' | 'excited' | 'sleepy' | 'focused' | 'celebrating';
+export type CompanionOrbMood =
+  | 'calm'
+  | 'happy'
+  | 'excited'
+  | 'sleepy'
+  | 'focused'
+  | 'celebrating'
+  | 'curious'
+  | 'concerned'
+  | 'relaxed'
+  | 'thinking';
 export type CompanionOrbState =
   | 'idle'
   | 'listening'
@@ -28,6 +38,10 @@ const MOOD_GLOW: Record<CompanionOrbMood, string> = {
   sleepy: '0.2',
   focused: '0.45',
   celebrating: '0.85',
+  curious: '0.5',
+  concerned: '0.4',
+  relaxed: '0.3',
+  thinking: '0.42',
 };
 
 function LiveCompanionOrbComponent({
@@ -45,6 +59,7 @@ function LiveCompanionOrbComponent({
   const heartbeat = useRef(new Animated.Value(1)).current;
   const leftEye = useRef(new Animated.Value(1)).current;
   const rightEye = useRef(new Animated.Value(1)).current;
+  const eyeDriftX = useRef(new Animated.Value(0)).current;
   const blinkLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   const isSleeping = state === 'sleeping' || (!active && new Date().getHours() >= 23);
@@ -145,6 +160,22 @@ function LiveCompanionOrbComponent({
   }, [isSleeping, leftEye, rightEye]);
 
   useEffect(() => {
+    if (isSleeping) {
+      eyeDriftX.setValue(0);
+      return;
+    }
+    const driftEyes = Animated.loop(
+      Animated.sequence([
+        Animated.timing(eyeDriftX, { toValue: 1.5, duration: 2800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(eyeDriftX, { toValue: -1, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(eyeDriftX, { toValue: 0, duration: 2400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    driftEyes.start();
+    return () => driftEyes.stop();
+  }, [isSleeping, eyeDriftX]);
+
+  useEffect(() => {
     if (!isSpeaking) {
       heartbeat.setValue(1);
       return;
@@ -216,12 +247,21 @@ function LiveCompanionOrbComponent({
             ],
           },
         ]}>
-        <View style={styles.face}>
+        <Animated.View style={[styles.face, { transform: [{ translateX: eyeDriftX }] }]}>
           <Animated.View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, transform: [{ scaleY: leftEye }] }]} />
           <Animated.View style={[styles.eye, { width: eyeSize, height: eyeSize, borderRadius: eyeSize / 2, transform: [{ scaleY: rightEye }] }]} />
-        </View>
+        </Animated.View>
         <View style={[styles.face, { marginTop: eyeGap }]}>
-          <View style={[styles.smile, isCelebrating && styles.smileWide, isSleeping && styles.smileSleep]} />
+          <View
+            style={[
+              styles.smile,
+              isCelebrating && styles.smileWide,
+              isSleeping && styles.smileSleep,
+              isThinking && styles.smileThink,
+              isListening && styles.smileListen,
+              mood === 'curious' && styles.smileCurious,
+            ]}
+          />
         </View>
         <View style={styles.coreHighlight} />
       </Animated.View>
@@ -256,6 +296,9 @@ const styles = StyleSheet.create({
   },
   smileWide: { width: 24, height: 10 },
   smileSleep: { width: 12, height: 4, opacity: 0.5 },
+  smileThink: { width: 14, height: 6, opacity: 0.6, transform: [{ rotate: '8deg' }] },
+  smileListen: { width: 20, height: 9, opacity: 0.85 },
+  smileCurious: { width: 16, height: 7, transform: [{ rotate: '-4deg' }] },
   coreHighlight: {
     position: 'absolute',
     top: '18%',

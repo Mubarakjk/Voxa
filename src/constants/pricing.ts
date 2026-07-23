@@ -1,12 +1,17 @@
+import {
+  calculateAnnualSavingsPercent,
+  formatFallbackPrice,
+  VOXA_PRICING,
+} from './voxa-pricing';
 import { BillingPeriod, PlanLimits, UNLIMITED } from '../types/subscription';
 
-/** Central pricing & plan configuration — single source of truth. */
+/** Central pricing & plan configuration — store metadata overrides display values. */
 export const PRICING_CONFIG = {
-  currency: 'GBP',
-  currencySymbol: '£',
-  trialDays: 7,
-  foundingMemberSlots: 1000,
-  foundingMemberEnabled: process.env.EXPO_PUBLIC_FOUNDING_MEMBER_ENABLED === 'true',
+  currency: VOXA_PRICING.currency,
+  currencySymbol: VOXA_PRICING.currencySymbol,
+  trialDays: VOXA_PRICING.trialDaysDisplayFallback,
+  entitlementId: VOXA_PRICING.entitlementId,
+  offeringId: VOXA_PRICING.offeringId,
   plans: {
     free: {
       id: 'free' as const,
@@ -16,45 +21,43 @@ export const PRICING_CONFIG = {
     pro: {
       id: 'pro' as const,
       label: 'Voxa Pro',
-      description: 'Unlimited conversations, voice, and premium intelligence.',
+      description: 'Deeper companion intelligence, Life OS, and generous fair use.',
     },
   },
   prices: {
-    monthly: 7.99,
-    annual: 59.99,
-    founding: 5.99,
+    monthly: VOXA_PRICING.monthlyFallbackGBP,
+    annual: VOXA_PRICING.annualFallbackGBP,
   },
+  productIds: VOXA_PRICING.productIds,
   billingPeriods: {
     monthly: {
       id: 'monthly' as BillingPeriod,
       label: 'Monthly',
-      price: 7.99,
+      price: VOXA_PRICING.monthlyFallbackGBP,
       periodLabel: '/month',
     },
     annual: {
       id: 'annual' as BillingPeriod,
       label: 'Annual',
-      price: 59.99,
+      price: VOXA_PRICING.annualFallbackGBP,
       periodLabel: '/year',
-      savingsLabel: 'Save 37%',
-    },
-    founding: {
-      id: 'founding' as BillingPeriod,
-      label: 'Founding Member',
-      price: 5.99,
-      periodLabel: '/month forever',
-      badge: 'Limited',
-      slots: 1000,
+      savingsLabel: `Save ${calculateAnnualSavingsPercent(
+        VOXA_PRICING.monthlyFallbackGBP,
+        VOXA_PRICING.annualFallbackGBP,
+      )}%`,
     },
   },
 } as const;
+
+/** Fair-use caps for Pro — not advertised as unlimited. */
+const PRO_FAIR_USE = 500;
 
 export const FREE_PLAN_LIMITS: PlanLimits = {
   aiMessagesDaily: 20,
   aiMessagesMonthly: 200,
   voiceMinutesDaily: 5,
   voiceMinutesMonthly: 30,
-  imageUploadsDaily: 3,
+  imageUploadsDaily: 2,
   imageUploadsMonthly: 30,
   voiceNotesDaily: 5,
   voiceNotesMonthly: 50,
@@ -66,58 +69,115 @@ export const FREE_PLAN_LIMITS: PlanLimits = {
   memoriesMax: 50,
   goalsMax: 5,
   remindersMax: 10,
+  routinesMax: 8,
   historyDays: 30,
 };
 
 export const PRO_PLAN_LIMITS: PlanLimits = {
-  aiMessagesDaily: UNLIMITED,
-  aiMessagesMonthly: UNLIMITED,
-  voiceMinutesDaily: UNLIMITED,
-  voiceMinutesMonthly: UNLIMITED,
-  imageUploadsDaily: UNLIMITED,
-  imageUploadsMonthly: UNLIMITED,
-  videoUploadsDaily: UNLIMITED,
-  videoUploadsMonthly: UNLIMITED,
-  voiceNotesDaily: UNLIMITED,
-  voiceNotesMonthly: UNLIMITED,
-  documentsDaily: UNLIMITED,
-  documentsMonthly: UNLIMITED,
-  storageBytesMonthly: UNLIMITED,
+  aiMessagesDaily: PRO_FAIR_USE,
+  aiMessagesMonthly: PRO_FAIR_USE * 10,
+  voiceMinutesDaily: PRO_FAIR_USE,
+  voiceMinutesMonthly: PRO_FAIR_USE * 10,
+  imageUploadsDaily: 50,
+  imageUploadsMonthly: PRO_FAIR_USE,
+  voiceNotesDaily: PRO_FAIR_USE,
+  voiceNotesMonthly: PRO_FAIR_USE * 10,
+  videoUploadsDaily: 50,
+  videoUploadsMonthly: PRO_FAIR_USE,
+  documentsDaily: 50,
+  documentsMonthly: PRO_FAIR_USE,
+  storageBytesMonthly: 5 * 1024 * 1024 * 1024,
   memoriesMax: UNLIMITED,
   goalsMax: UNLIMITED,
   remindersMax: UNLIMITED,
+  routinesMax: UNLIMITED,
   historyDays: UNLIMITED,
 };
 
-export const PRO_FEATURES = [
-  'Unlimited AI conversations',
-  'Unlimited voice conversations',
-  'Unlimited voice notes',
-  'Unlimited photos & videos',
-  'Unlimited documents',
-  'Unlimited memories & goals',
-  'Premium voices',
-  'Multiple personalities',
-  'Advanced memory',
-  'Relationship timeline',
-  'Priority AI responses',
-  'Early access features',
+export const PRO_VALUE_GROUPS = [
+  {
+    title: 'Deeper companion',
+    items: [
+      'Advanced memory retrieval',
+      'Pinned permanent memories',
+      'Memory connections',
+      'Richer relationship timeline',
+      'Weekly Companion Letter',
+      'Deeper personalisation',
+    ],
+  },
+  {
+    title: 'Build your life',
+    items: [
+      'Full Goal Planner',
+      'Future Self',
+      'Vision Board',
+      'Bucket List',
+      'Life Book',
+      'Decision Simulator',
+      'Specialist coaching',
+    ],
+  },
+  {
+    title: 'Understand yourself',
+    items: [
+      'Mood trends',
+      'Advanced insights',
+      'Weekly & monthly reviews',
+      'Coach score',
+      'Dream themes',
+      'Progress comparisons',
+    ],
+  },
+  {
+    title: 'Enjoy Voxa',
+    items: [
+      'Premium worlds',
+      'Premium cosmetics',
+      'Extra arcade & challenge experiences',
+      'Custom themes',
+      'Additional companion expressions',
+    ],
+  },
+] as const;
+
+export const PRO_TOP_BENEFITS = [
+  'Generous fair-use AI chat',
+  'Unlimited voice notes under fair use',
+  'Full Life OS & Future Self',
+  'Advanced memory & Weekly Letter',
+  'Premium worlds & cosmetics',
+] as const;
+
+export const FREE_VS_PRO_COMPARISON = [
+  { label: 'AI chat', free: '20/day', pro: 'Generous fair use' },
+  { label: 'Voice notes', free: '5/day', pro: 'Generous fair use' },
+  { label: 'Camera analysis', free: '2/day', pro: 'More daily' },
+  { label: 'Memories', free: '50 active', pro: 'Advanced & pinned' },
+  { label: 'Life OS tools', free: 'Preview', pro: 'Full access' },
+  { label: 'Weekly Letter', free: 'Preview', pro: 'Full letter' },
+  { label: 'Mood insights', free: 'Basic', pro: 'Advanced trends' },
+  { label: 'Arcade & challenges', free: 'Limited', pro: 'Full stats & rewards' },
 ] as const;
 
 export const FREE_FEATURES = [
-  'Basic chat',
-  'Limited AI messages',
-  'Basic memory & reminders',
-  'Daily briefing',
-  'One companion',
-  'Basic customisation',
-  'Limited media uploads',
+  'AI chat with daily allowance',
+  'Voice notes & rituals',
+  'Basic Journey & memories',
+  'One daily challenge',
+  'Basic Companion Studio',
+  'Morning & evening ritual',
+  'Privacy & account controls',
 ] as const;
 
+export { calculateAnnualSavingsPercent } from './voxa-pricing';
+
 export function formatPrice(amount: number): string {
-  return `${PRICING_CONFIG.currencySymbol}${amount.toFixed(2)}`;
+  return formatFallbackPrice(amount, PRICING_CONFIG.currencySymbol);
 }
 
-export function isFoundingMemberOfferEnabled(): boolean {
-  return PRICING_CONFIG.foundingMemberEnabled;
+export function formatPriceFromStore(priceString?: string, fallbackAmount?: number): string {
+  if (priceString) return priceString;
+  if (fallbackAmount != null) return formatPrice(fallbackAmount);
+  return formatPrice(PRICING_CONFIG.prices.monthly);
 }

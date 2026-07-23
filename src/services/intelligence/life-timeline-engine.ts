@@ -3,7 +3,8 @@ import {
   LifeTimelineEvent,
   LifeTimelineEventKind,
 } from '../../types/companion-intelligence';
-import { Conversation, Goal, Memory, Message, createId, nowIso } from '../../types';
+import { Conversation, Goal, Memory, Message, nowIso } from '../../types';
+import { stableTimelineId } from './life-timeline-service';
 
 export class LifeTimelineEngine {
   rebuild(input: {
@@ -115,7 +116,7 @@ export class LifeTimelineEngine {
     metadata?: Record<string, unknown>,
   ): LifeTimelineEvent {
     return {
-      id: createId('timeline'),
+      id: stableTimelineId(kind, title, occurredAt),
       userId,
       kind,
       title,

@@ -67,4 +67,9 @@ export class LocalMessageRepository implements IMessageRepository {
     const messages = await this.readAll();
     await this.writeAll(messages.filter((item) => item.conversationId !== conversationId));
   }
+
+  async deleteMessage(id: string): Promise<void> {
+    const messages = await this.readAll();
+    await this.writeAll(messages.filter((item) => item.id !== id));
+  }
 }

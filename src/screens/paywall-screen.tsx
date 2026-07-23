@@ -1,8 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { PrimaryButton } from '../components/ui/buttons';
 import { GlassCard } from '../components/ui/glass-card';
@@ -10,75 +18,100 @@ import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { VoiceOrb } from '../components/ui/voice-orb';
 import {
+  calculateAnnualSavingsPercent,
   formatPrice,
+  formatPriceFromStore,
   FREE_FEATURES,
-  isFoundingMemberOfferEnabled,
+  FREE_VS_PRO_COMPARISON,
   PRICING_CONFIG,
-  PRO_FEATURES,
+  PRO_TOP_BENEFITS,
 } from '../constants/pricing';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
+import { OfferingsSnapshot } from '../services/billing/billing-types';
+import { billingStateMachine } from '../services/billing/billing-state-machine';
+import { getBillingRuntime, getPurchasesUnavailableMessage } from '../services/billing/runtime-environment';
+import { BillingPeriod } from '../types/subscription';
 
 type PaywallScreenProps = {
   source?: string;
-  onStartTrial: () => void | Promise<void>;
+  onPurchase: (period: BillingPeriod) => void | Promise<void>;
   onContinueFree: () => void | Promise<void>;
   onRestorePurchases: () => void | Promise<void>;
   onClose?: () => void;
   isLoading?: boolean;
+  purchaseDisabled?: boolean;
+  setupMessage?: string | null;
+  offerings?: OfferingsSnapshot | null;
+  offeringsLoading?: boolean;
+  offline?: boolean;
+  errorMessage?: string | null;
+  selectedPeriod: BillingPeriod;
+  onSelectPeriod: (period: BillingPeriod) => void;
 };
 
-const TESTIMONIALS = [
-  { quote: 'Voxa feels like someone who actually remembers me.', author: 'Early member' },
-  { quote: 'The voice conversations changed my daily routine.', author: 'Pro user' },
-  { quote: 'Premium without feeling pushy — exactly right.', author: 'Founding member' },
-];
-
-const FAQ = [
-  {
-    q: 'What happens after the trial?',
-    a: 'You can continue on Free or upgrade to Pro. No charge during the trial.',
-  },
-  {
-    q: 'Can I cancel anytime?',
-    a: 'Yes. Manage your subscription in Settings when billing is connected.',
-  },
-  {
-    q: 'Is my data safe?',
-    a: 'Your memories and conversations stay private and encrypted in transit.',
-  },
-];
+const TERMS_URL = 'https://voxa.app/terms';
+const PRIVACY_URL = 'https://voxa.app/privacy';
 
 export function PaywallScreen({
-  onStartTrial,
+  onPurchase,
   onContinueFree,
   onRestorePurchases,
   onClose,
   isLoading,
+  offerings,
+  offeringsLoading,
+  offline,
+  errorMessage,
+  selectedPeriod,
+  onSelectPeriod,
+  purchaseDisabled,
+  setupMessage,
 }: PaywallScreenProps) {
-  const foundingEnabled = isFoundingMemberOfferEnabled();
-  const monthlyPrice = formatPrice(PRICING_CONFIG.prices.monthly);
-  const annualPrice = formatPrice(PRICING_CONFIG.prices.annual);
-  const foundingPrice = formatPrice(PRICING_CONFIG.prices.founding);
-
-  const comparisonRows = useMemo(
-    () => [
-      { label: 'AI conversations', free: 'Limited', pro: 'Unlimited' },
-      { label: 'Voice calls', free: 'Limited', pro: 'Unlimited' },
-      { label: 'Voice notes & media', free: 'Limited', pro: 'Unlimited' },
-      { label: 'Memories & goals', free: 'Basic', pro: 'Unlimited' },
-      { label: 'Premium voices', free: '—', pro: '✓' },
-      { label: 'Priority AI', free: '—', pro: '✓' },
-    ],
-    [],
+  const runtime = getBillingRuntime();
+  const monthly = offerings?.monthly;
+  const annual = offerings?.annual;
+  const monthlyDisplay = formatPriceFromStore(monthly?.priceString, monthly?.price ?? PRICING_CONFIG.prices.monthly);
+  const annualDisplay = formatPriceFromStore(annual?.priceString, annual?.price ?? PRICING_CONFIG.prices.annual);
+  const savingsPercent = calculateAnnualSavingsPercent(
+    monthly?.price ?? PRICING_CONFIG.prices.monthly,
+    annual?.price ?? PRICING_CONFIG.prices.annual,
   );
+  const trialDays =
+    selectedPeriod === 'annual' ? annual?.trialDays : monthly?.trialDays;
+  const trialEligible = Boolean(
+    offerings?.source === 'store' &&
+      offerings.trialEligible &&
+      trialDays &&
+      runtime.supportsNativePurchases &&
+      ((selectedPeriod === 'monthly' && monthly?.trialEligible) ||
+        (selectedPeriod === 'annual' && annual?.trialEligible)),
+  );
+
+  const selectedPackageValid =
+    selectedPeriod === 'monthly' ? offerings?.monthlyPackageValid : offerings?.annualPackageValid;
+
+  const purchaseDisabledProp = purchaseDisabled ?? (
+    !runtime.supportsNativePurchases ||
+    offeringsLoading ||
+    isLoading ||
+    selectedPackageValid === false
+  );
+
+  const purchaseLabel = useMemo(() => {
+    if (!runtime.supportsNativePurchases) return 'Development build required';
+    if (trialEligible && trialDays) {
+      return `Start ${trialDays}-day free trial`;
+    }
+    return selectedPeriod === 'annual' ? 'Subscribe yearly' : 'Subscribe monthly';
+  }, [runtime.supportsNativePurchases, trialEligible, trialDays, selectedPeriod]);
 
   return (
     <ScreenShell padded={false} glow="purple">
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {onClose ? (
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12} accessibilityLabel="Close paywall">
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
         ) : null}
@@ -93,45 +126,110 @@ export function PaywallScreen({
             </View>
             <VoiceOrb size={88} tint={colors.primary} active />
             <VoxaText variant="title" style={styles.heroTitle}>
-              Your companion, unlimited
+              Deeper companion. Built for your life.
             </VoxaText>
             <VoxaText variant="body" color="textSecondary" style={styles.heroCopy}>
-              Deeper conversations, unlimited voice, and premium intelligence — crafted for you.
+              Advanced memory, Life OS, mood insights, and generous fair-use AI — honestly priced at {monthlyDisplay}/month.
             </VoxaText>
           </View>
         </LinearGradient>
 
-        <GlassCard style={styles.pricingCard}>
-          <VoxaText variant="label" color="primarySoft">
-            {PRICING_CONFIG.trialDays}-day free trial
-          </VoxaText>
-          <View style={styles.priceRow}>
-            <VoxaText variant="title">{monthlyPrice}</VoxaText>
-            <VoxaText variant="body" color="textMuted">
-              /month after trial
+        {!runtime.supportsNativePurchases ? (
+          <GlassCard style={styles.noticeCard}>
+            <VoxaText variant="body" color="textSecondary">
+              {getPurchasesUnavailableMessage()}
             </VoxaText>
-          </View>
-          <VoxaText variant="caption" color="textSecondary">
-            or {annualPrice}/year · save 37%
-          </VoxaText>
+          </GlassCard>
+        ) : null}
 
-          {foundingEnabled ? (
-            <View style={styles.foundingCard}>
-              <View style={styles.foundingHeader}>
-                <VoxaText variant="subtitle">Founding Member</VoxaText>
-                <VoxaText variant="caption" color="primarySoft">
-                  Limited
+        {setupMessage ? (
+          <GlassCard style={styles.noticeCard}>
+            <Ionicons name="information-circle-outline" size={18} color={colors.primarySoft} />
+            <VoxaText variant="body" color="textSecondary">
+              {setupMessage}
+            </VoxaText>
+          </GlassCard>
+        ) : null}
+
+        {offerings?.source === 'fallback' ? (
+          <GlassCard style={styles.noticeCard}>
+            <VoxaText variant="caption" color="primarySoft">
+              Development fallback pricing
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary">
+              Store metadata is unavailable. Prices shown are local fallbacks only.
+            </VoxaText>
+          </GlassCard>
+        ) : null}
+
+        {errorMessage ? (
+          <GlassCard style={styles.errorCard}>
+            <VoxaText variant="body" color="danger">
+              {errorMessage}
+            </VoxaText>
+          </GlassCard>
+        ) : null}
+
+        <GlassCard style={styles.pricingCard}>
+          {offeringsLoading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <>
+              <View style={styles.periodRow}>
+                <Pressable
+                  style={[styles.periodChip, selectedPeriod === 'monthly' && styles.periodChipActive]}
+                  onPress={() => onSelectPeriod('monthly')}
+                >
+                  <VoxaText variant="caption">Monthly</VoxaText>
+                  <VoxaText variant="subtitle">{monthlyDisplay}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted">
+                    /month
+                  </VoxaText>
+                </Pressable>
+                <Pressable
+                  style={[styles.periodChip, selectedPeriod === 'annual' && styles.periodChipActive]}
+                  onPress={() => onSelectPeriod('annual')}
+                >
+                  <VoxaText variant="caption">Yearly</VoxaText>
+                  <VoxaText variant="subtitle">{annualDisplay}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted">
+                    /year
+                  </VoxaText>
+                  {savingsPercent > 0 ? (
+                    <VoxaText variant="caption" color="primarySoft">
+                      Save {savingsPercent}%
+                    </VoxaText>
+                  ) : null}
+                </Pressable>
+              </View>
+
+              {trialEligible && trialDays ? (
+                <VoxaText variant="caption" color="textSecondary">
+                  {trialDays}-day free trial, then {selectedPeriod === 'annual' ? annualDisplay : monthlyDisplay}
+                  {selectedPeriod === 'annual' ? '/year' : '/month'}. Cancel anytime in your App Store or Google Play settings.
+                </VoxaText>
+              ) : (
+                <VoxaText variant="caption" color="textSecondary">
+                  Recurring subscription. Cancel anytime in your App Store or Google Play settings before renewal.
+                </VoxaText>
+              )}
+            </>
+          )}
+        </GlassCard>
+
+        <View style={styles.section}>
+          <VoxaText variant="subtitle">Top Pro benefits</VoxaText>
+          <GlassCard style={styles.benefitsCard}>
+            {PRO_TOP_BENEFITS.map((feature) => (
+              <View key={feature} style={styles.benefitRow}>
+                <Ionicons name="checkmark-circle" size={16} color={colors.primarySoft} />
+                <VoxaText variant="body" color="textSecondary">
+                  {feature}
                 </VoxaText>
               </View>
-              <VoxaText variant="body" color="textSecondary">
-                {foundingPrice}/month forever · first {PRICING_CONFIG.foundingMemberSlots} members
-              </VoxaText>
-              <VoxaText variant="caption" color="textMuted">
-                Countdown placeholder — offer ends soon
-              </VoxaText>
-            </View>
-          ) : null}
-        </GlassCard>
+            ))}
+          </GlassCard>
+        </View>
 
         <View style={styles.section}>
           <VoxaText variant="subtitle">Free vs Pro</VoxaText>
@@ -147,7 +245,7 @@ export function PaywallScreen({
                 Pro
               </VoxaText>
             </View>
-            {comparisonRows.map((row) => (
+            {FREE_VS_PRO_COMPARISON.map((row) => (
               <View key={row.label} style={styles.tableRow}>
                 <VoxaText variant="caption" style={styles.tableFeature}>
                   {row.label}
@@ -157,20 +255,6 @@ export function PaywallScreen({
                 </VoxaText>
                 <VoxaText variant="caption" color="primarySoft">
                   {row.pro}
-                </VoxaText>
-              </View>
-            ))}
-          </GlassCard>
-        </View>
-
-        <View style={styles.section}>
-          <VoxaText variant="subtitle">Pro benefits</VoxaText>
-          <GlassCard style={styles.benefitsCard}>
-            {PRO_FEATURES.map((feature) => (
-              <View key={feature} style={styles.benefitRow}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.primarySoft} />
-                <VoxaText variant="body" color="textSecondary">
-                  {feature}
                 </VoxaText>
               </View>
             ))}
@@ -191,42 +275,35 @@ export function PaywallScreen({
           </GlassCard>
         </View>
 
-        <View style={styles.section}>
-          <VoxaText variant="subtitle">Loved by early members</VoxaText>
-          {TESTIMONIALS.map((item) => (
-            <GlassCard key={item.author} style={styles.testimonial}>
-              <VoxaText variant="body" color="textSecondary">
-                “{item.quote}”
+        <GlassCard style={styles.disclosureCard}>
+          <VoxaText variant="caption" color="textMuted">
+            Payment is charged to your App Store or Google Play account. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your device subscription settings.
+          </VoxaText>
+          <View style={styles.linkRow}>
+            <Pressable onPress={() => Linking.openURL(TERMS_URL)}>
+              <VoxaText variant="caption" color="primarySoft">
+                Terms
               </VoxaText>
-              <VoxaText variant="caption" color="textMuted">
-                — {item.author}
+            </Pressable>
+            <Pressable onPress={() => Linking.openURL(PRIVACY_URL)}>
+              <VoxaText variant="caption" color="primarySoft">
+                Privacy
               </VoxaText>
-            </GlassCard>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <VoxaText variant="subtitle">FAQ</VoxaText>
-          {FAQ.map((item) => (
-            <GlassCard key={item.q} style={styles.faqCard}>
-              <VoxaText variant="body">{item.q}</VoxaText>
-              <VoxaText variant="caption" color="textSecondary">
-                {item.a}
-              </VoxaText>
-            </GlassCard>
-          ))}
-        </View>
+            </Pressable>
+          </View>
+        </GlassCard>
 
         <View style={styles.actions}>
           <PrimaryButton
-            label={`Start ${PRICING_CONFIG.trialDays}-Day Trial`}
-            onPress={onStartTrial}
+            label={purchaseLabel}
+            onPress={() => onPurchase(selectedPeriod)}
             loading={isLoading}
+            disabled={purchaseDisabledProp}
           />
           <PrimaryButton label="Continue Free" variant="ghost" onPress={onContinueFree} disabled={isLoading} />
-          <Pressable onPress={onRestorePurchases} style={styles.restoreBtn}>
+          <Pressable onPress={onRestorePurchases} style={styles.restoreBtn} disabled={isLoading}>
             <VoxaText variant="caption" color="textMuted">
-              Restore Purchases
+              Restore purchases
             </VoxaText>
           </Pressable>
         </View>
@@ -268,18 +345,23 @@ const styles = StyleSheet.create({
   proBadgeText: { color: colors.background, fontWeight: '700' },
   heroTitle: { textAlign: 'center' },
   heroCopy: { textAlign: 'center', maxWidth: 320 },
-  pricingCard: { gap: spacing.sm, padding: spacing.lg },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  foundingCard: {
-    marginTop: spacing.md,
+  noticeCard: { padding: spacing.lg, gap: spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
+  errorCard: { padding: spacing.lg, borderColor: colors.danger, borderWidth: 1 },
+  pricingCard: { gap: spacing.md, padding: spacing.lg },
+  periodRow: { flexDirection: 'row', gap: spacing.sm },
+  periodChip: {
+    flex: 1,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    gap: spacing.xs,
+    gap: 4,
+    alignItems: 'center',
   },
-  foundingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  periodChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(139,124,246,0.12)',
+  },
   section: { gap: spacing.md },
   tableCard: { padding: 0, overflow: 'hidden' },
   tableHeader: {
@@ -299,8 +381,8 @@ const styles = StyleSheet.create({
   tableFeature: { flex: 1.4 },
   benefitsCard: { gap: spacing.sm, padding: spacing.lg },
   benefitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  testimonial: { gap: spacing.sm, padding: spacing.lg },
-  faqCard: { gap: spacing.xs, padding: spacing.lg },
+  disclosureCard: { gap: spacing.sm, padding: spacing.lg },
+  linkRow: { flexDirection: 'row', gap: spacing.lg },
   actions: { gap: spacing.sm, marginTop: spacing.md },
   restoreBtn: { alignItems: 'center', paddingVertical: spacing.md },
 });
@@ -310,51 +392,131 @@ type PaywallRouteProps = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
 export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
   const { profile, services, refreshProfile } = useVoxa();
   const [isLoading, setIsLoading] = useState(false);
+  const [offeringsLoading, setOfferingsLoading] = useState(true);
+  const [offerings, setOfferings] = useState<OfferingsSnapshot | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('monthly');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleStartTrial = async () => {
-    if (!profile) return;
-    setIsLoading(true);
+  const [billingUiState, setBillingUiState] = useState(billingStateMachine.getState());
+
+  useEffect(() => {
+    return billingStateMachine.subscribe(setBillingUiState);
+  }, []);
+
+  const loadOfferings = useCallback(async () => {
+    billingStateMachine.startLoadingOfferings();
+    setOfferingsLoading(true);
     try {
-      await services.subscription.startTrial(profile.id);
-      await refreshProfile();
-      navigation.goBack();
+      const next = await services.subscription.getOfferings();
+      setOfferings(next);
+      billingStateMachine.offeringsReady();
     } catch (err) {
-      Alert.alert('Trial unavailable', err instanceof Error ? err.message : 'Please try again.');
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to load pricing.');
+      billingStateMachine.offeringsFailed();
+    } finally {
+      setOfferingsLoading(false);
+    }
+  }, [services.subscription]);
+
+  useEffect(() => {
+    void loadOfferings();
+    if (profile) {
+      void services.subscriptionAnalytics.track('paywall_viewed', { source: route.params?.source });
+      void services.paywallImpressions.recordImpression(profile.id);
+    }
+  }, [loadOfferings, profile, route.params?.source, services.paywallImpressions, services.subscriptionAnalytics]);
+
+  const handlePurchase = async (period: BillingPeriod) => {
+    if (!profile || !billingStateMachine.startPurchase()) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      await services.subscriptionAnalytics.track('purchase_started', { source: route.params?.source, productId: period });
+      const outcome = await services.subscription.purchase(profile.id, period);
+      if (outcome.success) {
+        billingStateMachine.purchaseSucceeded();
+        await services.subscriptionAnalytics.track('purchase_completed', { productId: outcome.productId });
+        await refreshProfile();
+        navigation.goBack();
+        return;
+      }
+      if (outcome.cancelled) {
+        billingStateMachine.purchaseCancelled();
+        await services.subscriptionAnalytics.track('purchase_cancelled');
+        return;
+      }
+      if (outcome.pending) {
+        billingStateMachine.purchasePending();
+        Alert.alert('Purchase pending', outcome.errorMessage ?? 'Your purchase is pending store approval.');
+        return;
+      }
+      billingStateMachine.purchaseFailed();
+      await services.subscriptionAnalytics.track('purchase_failed');
+      setErrorMessage(outcome.errorMessage ?? 'Purchase failed. Please try again.');
+    } catch (err) {
+      billingStateMachine.purchaseFailed();
+      setErrorMessage(err instanceof Error ? err.message : 'Purchase failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleContinueFree = async () => {
-    if (profile) {
-      await services.subscription.continueFree(profile.id);
-      await refreshProfile();
-    }
     navigation.goBack();
   };
 
   const handleRestore = async () => {
-    if (!profile) return;
+    if (!profile || !billingStateMachine.startRestore()) return;
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      await services.billing.restorePurchases(profile.id);
+      await services.subscriptionAnalytics.track('restore_started');
+      await services.subscription.restorePurchases(profile.id);
       await refreshProfile();
-      Alert.alert('Restore complete', 'Your subscription status has been refreshed.');
+      const status = await services.subscription.getPlanStatus(profile.id);
+      await services.subscriptionAnalytics.track('restore_completed', {
+        productId: status.productId,
+      });
+      Alert.alert(
+        status.isPro ? 'Restore complete' : 'No subscription found',
+        status.isPro
+          ? 'Your Voxa Pro subscription is active on this account.'
+          : 'No active Voxa Pro subscription was found for this account.',
+      );
     } catch (err) {
-      Alert.alert('Restore failed', err instanceof Error ? err.message : 'Billing not connected yet.');
+      Alert.alert('Restore failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
+      billingStateMachine.restoreFinished();
       setIsLoading(false);
     }
   };
 
+  const selectedPackageValid =
+    selectedPeriod === 'monthly' ? offerings?.monthlyPackageValid : offerings?.annualPackageValid;
+
   return (
     <PaywallScreen
       source={route.params?.source}
-      onStartTrial={handleStartTrial}
+      onPurchase={handlePurchase}
       onContinueFree={handleContinueFree}
       onRestorePurchases={handleRestore}
       onClose={() => navigation.goBack()}
-      isLoading={isLoading}
+      isLoading={isLoading || billingUiState === 'purchasing' || billingUiState === 'restoring'}
+      purchaseDisabled={
+        !billingStateMachine.canPurchase() ||
+        offeringsLoading ||
+        isLoading ||
+        billingUiState === 'purchasing' ||
+        billingUiState === 'restoring' ||
+        selectedPackageValid === false
+      }
+      setupMessage={offerings?.setupMessage ?? null}
+      offerings={offerings}
+      offeringsLoading={offeringsLoading}
+      offline={offerings?.source === 'fallback'}
+      errorMessage={errorMessage}
+      selectedPeriod={selectedPeriod}
+      onSelectPeriod={setSelectedPeriod}
     />
   );
 }

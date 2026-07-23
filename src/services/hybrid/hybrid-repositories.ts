@@ -13,6 +13,7 @@ import { LocalVoiceSessionRepository } from '../local/local-voice-session-reposi
 import { createSupabaseRepositories } from '../supabase/supabase-repositories';
 import { mergeMessages } from './message-merge';
 import { recordChatSaveFailure, recordChatSaveSuccess } from '../../utils/chat-save-status';
+import { logFeature } from '../../utils/feature-logger';
 import { getCurrentUserId } from '../supabase/client';
 
 async function tryRemote<T>(label: string, primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
@@ -246,7 +247,10 @@ export function createHybridRepositories(
         try {
           const remoteMessages = await remote.messages.listMessages(conversationId);
           const merged = mergeMessages(localMessages, remoteMessages);
-          await Promise.all(merged.map((item) => local.messages.upsertMessage(item).catch(() => item)));
+          await Promise.all(merged.map((item) => local.messages.upsertMessage(item).catch((err) => {
+            logFeature('hybrid.messages.cache', 'failure', err instanceof Error ? err.message : 'cache failed');
+            return item;
+          })));
           return merged;
         } catch (error) {
           console.warn('[Voxa] Remote messages.list failed, using local cache.', error);
@@ -256,7 +260,9 @@ export function createHybridRepositories(
       createMessage: async (input) => {
         try {
           const created = await remote.messages.createMessage(input);
-          await local.messages.upsertMessage(created).catch(() => undefined);
+          await local.messages.upsertMessage(created).catch((err) => {
+            logFeature('hybrid.messages.mirror', 'failure', err instanceof Error ? err.message : 'mirror failed');
+          });
           recordChatSaveSuccess('Remote OK');
           return created;
         } catch (error) {
@@ -269,7 +275,9 @@ export function createHybridRepositories(
       updateMessage: async (id, input) => {
         try {
           const updated = await remote.messages.updateMessage(id, input);
-          await local.messages.upsertMessage(updated).catch(() => undefined);
+          await local.messages.upsertMessage(updated).catch((err) => {
+            logFeature('hybrid.messages.mirror', 'failure', err instanceof Error ? err.message : 'mirror failed');
+          });
           recordChatSaveSuccess('Update OK');
           return updated;
         } catch (error) {
@@ -286,6 +294,15 @@ export function createHybridRepositories(
             await local.messages.deleteMessagesForConversation(conversationId).catch(() => undefined);
           },
           () => local.messages.deleteMessagesForConversation(conversationId),
+        ),
+      deleteMessage: (id) =>
+        tryRemote(
+          'messages.deleteOne',
+          async () => {
+            await remote.messages.deleteMessage(id);
+            await local.messages.deleteMessage(id).catch(() => undefined);
+          },
+          () => local.messages.deleteMessage(id),
         ),
     },
     voiceSessions: {

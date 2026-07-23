@@ -111,7 +111,7 @@ export function MusicScreen({ navigation }: Props) {
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <BackButton onPress={() => navigation.goBack()} />
+          <BackButton compact onPress={() => navigation.goBack()} />
           <VoxaText variant="title">Music</VoxaText>
           <VoxaText variant="body" color="textSecondary">
             Identify songs, save favourites, and explore mood playlists.
@@ -132,7 +132,17 @@ export function MusicScreen({ navigation }: Props) {
           ) : null}
           {musicDebug.lastResponseStatus !== '—' ? (
             <VoxaText variant="caption" color="textMuted">
-              Response: {musicDebug.lastResponseStatus}
+              HTTP: {musicDebug.lastResponseStatus} · AudD: {musicDebug.auddCode} · {musicDebug.auddResult}
+            </VoxaText>
+          ) : null}
+          {musicDebug.fileSizeBytes != null ? (
+            <VoxaText variant="caption" color="textMuted">
+              File: {Math.round(musicDebug.fileSizeBytes / 1024)} KB · {Math.round((musicDebug.durationMs ?? 0) / 1000)}s
+            </VoxaText>
+          ) : null}
+          {musicDebug.failedAttempts.length > 0 ? (
+            <VoxaText variant="caption" color="textMuted">
+              Last fail: {musicDebug.failedAttempts[0].message}
             </VoxaText>
           ) : null}
         </GlassCard>
@@ -147,13 +157,24 @@ export function MusicScreen({ navigation }: Props) {
             <View style={styles.recording}>
               <ActivityIndicator color={colors.primarySoft} />
               <VoxaText variant="caption" color="textSecondary">
-                Listening for 10 seconds… hold near the music
+                Listening for 14 seconds… hold near the music
+              </VoxaText>
+              <VoxaText variant="caption" color="textMuted">
+                Tip: play louder or move closer to the speaker
               </VoxaText>
             </View>
           ) : (
             <PrimaryButton label="Identify song" onPress={recognize} />
           )}
-          {error ? (
+          {error && !isRecognizing ? (
+            <View style={styles.errorBlock}>
+              <VoxaText variant="caption" color="danger">
+                {error}
+              </VoxaText>
+              <PrimaryButton label="Try again" variant="ghost" onPress={recognize} />
+            </View>
+          ) : null}
+          {error && isRecognizing ? (
             <VoxaText variant="caption" color="danger">
               {error}
             </VoxaText>
@@ -307,6 +328,7 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   provider: { marginTop: -spacing.sm },
   recording: { alignItems: 'center', gap: spacing.sm },
+  errorBlock: { alignItems: 'center', gap: spacing.sm, width: '100%' },
   result: { alignItems: 'center', gap: spacing.sm },
   artwork: { width: 120, height: 120, borderRadius: radius.md },
   artworkPlaceholder: {

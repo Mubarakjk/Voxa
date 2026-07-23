@@ -61,6 +61,7 @@ export type CreateRoutineBlockInput = {
 export type UpdateRoutineBlockInput = Partial<
   Pick<
     RoutineBlock,
+    | 'kind'
     | 'title'
     | 'time'
     | 'repeatDays'

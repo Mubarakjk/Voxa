@@ -6,9 +6,10 @@ import { VoxaText } from '../ui/voxa-text';
 type Props = {
   suggestions: string[];
   onSelect: (text: string) => void;
+  onDismiss?: () => void;
 };
 
-export function SuggestedReplies({ suggestions, onSelect }: Props) {
+export function SuggestedReplies({ suggestions, onSelect, onDismiss }: Props) {
   if (suggestions.length === 0) return null;
 
   return (
@@ -20,6 +21,13 @@ export function SuggestedReplies({ suggestions, onSelect }: Props) {
           </VoxaText>
         </Pressable>
       ))}
+      {onDismiss ? (
+        <Pressable style={styles.dismiss} onPress={onDismiss} accessibilityLabel="Dismiss suggestions">
+          <VoxaText variant="caption" color="textMuted">
+            Dismiss
+          </VoxaText>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -30,8 +38,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
-    borderColor: 'rgba(139, 124, 246, 0.24)',
+    borderColor: `${colors.primarySoft}33`,
+    maxWidth: 220,
+  },
+  dismiss: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
   },
 });

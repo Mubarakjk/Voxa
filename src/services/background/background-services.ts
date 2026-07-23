@@ -3,6 +3,7 @@ import { VoxaRepositories } from '../contracts';
 import { buildDailyBriefing } from '../../utils/daily-briefing';
 import { notificationService } from '../notifications/notification-service';
 import { createProactiveCompanionCoordinator, ProactiveCompanionCoordinator } from '../proactive/proactive-companion-registry';
+import { getProactiveCheckInOrchestrator, ProactiveCheckInOrchestrator } from '../proactive-check-ins/proactive-check-in-orchestrator';
 
 export class DailyBriefingService {
   constructor(private readonly repositories: VoxaRepositories) {}
@@ -103,9 +104,10 @@ export class BackgroundServices {
   readonly memoryIndexing: MemoryIndexingService;
   readonly goalProgress: GoalProgressService;
   readonly proactive: ProactiveCompanionCoordinator;
+  readonly proactiveCheckIns: ProactiveCheckInOrchestrator;
   readonly notifications = notificationService;
 
-  constructor(repositories: VoxaRepositories) {
+  constructor(repositories: VoxaRepositories, storage: import('../contracts').IStorageService) {
     this.dailyBriefing = new DailyBriefingService(repositories);
     this.morningMessage = new MorningMessageService(this.dailyBriefing);
     this.eveningReflection = new EveningReflectionService();
@@ -113,6 +115,7 @@ export class BackgroundServices {
     this.memoryIndexing = new MemoryIndexingService(repositories);
     this.goalProgress = new GoalProgressService(repositories);
     this.proactive = createProactiveCompanionCoordinator();
+    this.proactiveCheckIns = getProactiveCheckInOrchestrator(storage, repositories);
   }
 
   async runStartupTasks(userId: string, profile: UserProfile) {
@@ -124,9 +127,10 @@ export class BackgroundServices {
       });
     }
     await this.reminderScheduler.syncReminderNotifications(userId);
+    await this.proactiveCheckIns.sync(userId, profile);
   }
 }
 
-export function createBackgroundServices(repositories: VoxaRepositories) {
-  return new BackgroundServices(repositories);
+export function createBackgroundServices(repositories: VoxaRepositories, storage: import('../contracts').IStorageService) {
+  return new BackgroundServices(repositories, storage);
 }

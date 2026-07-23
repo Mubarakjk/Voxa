@@ -4,6 +4,12 @@ export type EnergyLevel = 'calm' | 'balanced' | 'upbeat' | 'high';
 export type RelationshipStyle = 'friend' | 'mentor' | 'partner' | 'coach' | 'sibling';
 export type ConversationFrequency = 'low' | 'normal' | 'high';
 
+export type TraitLevel = 'low' | 'medium' | 'high';
+export type CoachingStyle = 'gentle' | 'balanced' | 'direct';
+export type ConversationLength = 'brief' | 'balanced' | 'detailed';
+export type EmojiUsage = 'none' | 'light' | 'normal';
+export type MemoryDepth = 'light' | 'normal' | 'deep';
+
 export type CompanionStudioExtendedPrefs = {
   laughStyle: LaughStyle;
   greetingStyle: GreetingStyle;
@@ -14,6 +20,16 @@ export type CompanionStudioExtendedPrefs = {
   nickname: string;
   favouriteTopics: string[];
   sleepSchedule: { wake: string; sleep: string };
+  humour: TraitLevel;
+  empathy: TraitLevel;
+  directness: TraitLevel;
+  honesty: TraitLevel;
+  curiosity: TraitLevel;
+  coachingStyle: CoachingStyle;
+  conversationLength: ConversationLength;
+  emojiUsage: EmojiUsage;
+  memoryDepth: MemoryDepth;
+  encouragement: TraitLevel;
 };
 
 export const LAUGH_STYLES: Array<{ id: LaughStyle; label: string; description: string }> = [
@@ -64,6 +80,16 @@ export function createDefaultStudioExtendedPrefs(): CompanionStudioExtendedPrefs
     nickname: '',
     favouriteTopics: [],
     sleepSchedule: { wake: '07:00', sleep: '23:00' },
+    humour: 'medium',
+    empathy: 'high',
+    directness: 'medium',
+    honesty: 'high',
+    curiosity: 'high',
+    coachingStyle: 'balanced',
+    conversationLength: 'balanced',
+    emojiUsage: 'light',
+    memoryDepth: 'normal',
+    encouragement: 'high',
   };
 }
 
@@ -72,6 +98,9 @@ export function buildStudioExtendedPromptBlock(prefs: CompanionStudioExtendedPre
     `Relationship style: ${prefs.relationshipStyle}.`,
     `Energy: ${prefs.energyLevel}. Greeting style: ${prefs.greetingStyle}. Laugh style: ${prefs.laughStyle}.`,
     `Conversation frequency preference: ${prefs.conversationFrequency}.`,
+    `Humour: ${prefs.humour}. Empathy: ${prefs.empathy}. Directness: ${prefs.directness}. Honesty: ${prefs.honesty}.`,
+    `Curiosity: ${prefs.curiosity}. Coaching: ${prefs.coachingStyle}. Length: ${prefs.conversationLength}.`,
+    `Emoji usage: ${prefs.emojiUsage}. Memory depth: ${prefs.memoryDepth}. Encouragement: ${prefs.encouragement}.`,
   ];
   if (prefs.nickname) lines.push(`Call the user "${prefs.nickname}" sometimes.`);
   if (prefs.favouriteTopics.length) lines.push(`Favourite topics: ${prefs.favouriteTopics.join(', ')}.`);

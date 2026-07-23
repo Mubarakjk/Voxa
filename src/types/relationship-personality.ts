@@ -19,7 +19,7 @@ export type InsideJoke = {
   id: EntityId;
   label: string;
   context: string;
-  kind: 'funny_moment' | 'repeated_joke' | 'nickname' | 'memorable_chat';
+  kind: 'funny_moment' | 'repeated_joke' | 'nickname' | 'memorable_chat' | 'catchphrase' | 'meme';
   userApproved: boolean;
   timesReferenced: number;
   lastReferencedAt?: ISODateString;
@@ -33,6 +33,14 @@ export type ConversationStyleProfile = {
   casualTone: number;
   professionalTone: number;
   motivationalTone: number;
+  /** 0 = quick back-and-forth, 1 = thoughtful pacing */
+  pacingPreference: number;
+  /** 0 = direct questions, 1 = open reflective questions */
+  questioningStyle: number;
+  /** Learned from user emoji usage */
+  emojiAffinity: number;
+  /** Learned from user humour signals */
+  humourAffinity: number;
   updatedAt: ISODateString;
 };
 
@@ -107,6 +115,10 @@ export function createDefaultConversationStyle(now: ISODateString): Conversation
     casualTone: 0.65,
     professionalTone: 0.35,
     motivationalTone: 0.5,
+    pacingPreference: 0.5,
+    questioningStyle: 0.5,
+    emojiAffinity: 0.3,
+    humourAffinity: 0.5,
     updatedAt: now,
   };
 }

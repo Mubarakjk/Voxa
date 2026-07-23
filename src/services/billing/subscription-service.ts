@@ -1,14 +1,16 @@
-import { PRICING_CONFIG } from '../../constants/pricing';
 import { IUserProfileRepository } from '../contracts';
 import {
   createDefaultSubscription,
   PlanStatus,
-  SubscriptionPlan,
   UserSubscription,
 } from '../../types/subscription';
 import { UserProfile, nowIso } from '../../types';
 import { IBillingService, ISubscriptionRepository } from './billing-contracts';
 import { UsageTrackingService } from './usage-tracking-service';
+import { SubscriptionEntitlementService } from './subscription-entitlement-service';
+import { EntitlementSnapshot } from './billing-types';
+import { migrateLegacyLocalSubscription } from './legacy-subscription-migration';
+import { IStorageService } from '../contracts';
 
 export class FeatureLimitError extends Error {
   constructor(
@@ -59,67 +61,33 @@ export function applyTrialExpiry(subscription: UserSubscription): UserSubscripti
   };
 }
 
-export class StubBillingService implements IBillingService {
-  constructor(private readonly subscriptionRepo: ISubscriptionRepository) {}
+function planStatusFromEntitlement(
+  entitlement: EntitlementSnapshot,
+  subscription: UserSubscription,
+): PlanStatus {
+  const isTrialActive = Boolean(entitlement.isTrialActive && entitlement.trialEnd);
+  const trialDaysLeft = isTrialActive && entitlement.trialEnd
+    ? Math.max(0, Math.ceil((new Date(entitlement.trialEnd).getTime() - Date.now()) / 86400000))
+    : 0;
 
-  async startTrial(userId: string): Promise<UserSubscription> {
-    const current = await this.subscriptionRepo.getSubscription(userId);
-    if (current.trialUsed && !current.trialActive) {
-      return current;
-    }
+  const isPro = entitlement.isPro;
+  const effectivePlan = isPro ? 'pro' : 'free';
 
-    const start = nowIso();
-    const end = new Date();
-    end.setDate(end.getDate() + PRICING_CONFIG.trialDays);
-
-    const next: UserSubscription = {
-      ...current,
-      subscriptionPlan: 'pro',
-      trialStart: start,
-      trialEnd: end.toISOString(),
-      trialActive: true,
-      trialUsed: true,
-      billingStatus: 'trialing',
-    };
-    return this.subscriptionRepo.saveSubscription(userId, next);
-  }
-
-  async activatePro(
-    userId: string,
-    options?: { period?: import('../../types/subscription').BillingPeriod; isFoundingMember?: boolean },
-  ): Promise<UserSubscription> {
-    const current = await this.subscriptionRepo.getSubscription(userId);
-    const next: UserSubscription = {
-      ...current,
-      subscriptionPlan: 'pro',
-      trialActive: false,
-      billingStatus: 'active',
-      isFoundingMember: options?.isFoundingMember ?? current.isFoundingMember,
-      productId: options?.period ? `voxa_pro_${options.period}` : 'voxa_pro_monthly',
-    };
-    return this.subscriptionRepo.saveSubscription(userId, next);
-  }
-
-  async downgradeToFree(userId: string): Promise<UserSubscription> {
-    const next: UserSubscription = {
-      ...createDefaultSubscription(),
-      trialUsed: true,
-    };
-    return this.subscriptionRepo.saveSubscription(userId, next);
-  }
-
-  async restorePurchases(userId: string): Promise<UserSubscription> {
-    return this.subscriptionRepo.getSubscription(userId);
-  }
-
-  async syncSubscription(profile: UserProfile): Promise<UserSubscription> {
-    const subscription = profile.subscription ?? createDefaultSubscription();
-    const synced = applyTrialExpiry(subscription);
-    if (synced !== subscription) {
-      return this.subscriptionRepo.saveSubscription(profile.id, synced);
-    }
-    return synced;
-  }
+  return {
+    effectivePlan,
+    isPro,
+    isTrialActive: isTrialActive && trialDaysLeft > 0,
+    trialDaysLeft,
+    trialEnd: entitlement.trialEnd ?? subscription.trialEnd,
+    subscriptionPlan: isPro ? 'pro' : subscription.subscriptionPlan,
+    isFoundingMember: Boolean(subscription.isFoundingMember),
+    billingPeriod: entitlement.billingPeriod,
+    renewalDate: entitlement.expiresAt,
+    billingIssue: entitlement.billingIssue,
+    gracePeriod: entitlement.gracePeriod,
+    entitlementSource: entitlement.source,
+    productId: entitlement.productId,
+  };
 }
 
 export class SubscriptionService {
@@ -127,10 +95,27 @@ export class SubscriptionService {
     private readonly subscriptionRepo: ISubscriptionRepository,
     private readonly billing: IBillingService,
     private readonly usageTracking: UsageTrackingService,
+    private readonly entitlementService: SubscriptionEntitlementService,
+    private readonly storage: IStorageService,
   ) {}
 
   async syncProfile(profile: UserProfile): Promise<PlanStatus> {
-    await this.billing.syncSubscription(profile);
+    const { subscription, migrated } = await migrateLegacyLocalSubscription(
+      this.storage,
+      profile.id,
+      profile.subscription ?? createDefaultSubscription(),
+    );
+
+    if (migrated) {
+      await this.subscriptionRepo.saveSubscription(profile.id, subscription);
+    }
+
+    if (this.billing.configureForUser) {
+      await this.billing.configureForUser(profile.id);
+    } else {
+      await this.billing.syncSubscription({ ...profile, subscription });
+    }
+
     return this.getPlanStatus(profile.id);
   }
 
@@ -139,26 +124,25 @@ export class SubscriptionService {
   }
 
   async buildPlanStatus(userId: string, subscriptionInput?: UserSubscription): Promise<PlanStatus> {
+    const entitlement = await this.entitlementService.getCachedEntitlement(userId);
     const subscription = applyTrialExpiry(
       subscriptionInput ?? (await this.subscriptionRepo.getSubscription(userId)),
     );
 
-    const isTrialActive = Boolean(subscription.trialActive && subscription.trialEnd);
-    const trialDaysLeft = isTrialActive
-      ? Math.max(0, Math.ceil((new Date(subscription.trialEnd!).getTime() - Date.now()) / 86400000))
-      : 0;
+    if (entitlement.cachedAt !== new Date(0).toISOString()) {
+      return planStatusFromEntitlement(entitlement, subscription);
+    }
 
-    const effectivePlan: SubscriptionPlan =
-      subscription.subscriptionPlan === 'pro' || isTrialActive ? 'pro' : 'free';
-
+    // Never grant Pro from profiles.subscription mirror alone.
     return {
-      effectivePlan,
-      isPro: effectivePlan === 'pro',
-      isTrialActive: isTrialActive && trialDaysLeft > 0,
-      trialDaysLeft,
-      trialEnd: subscription.trialEnd,
-      subscriptionPlan: subscription.subscriptionPlan,
+      effectivePlan: 'free',
+      isPro: false,
+      isTrialActive: false,
+      trialDaysLeft: 0,
+      subscriptionPlan: 'free',
       isFoundingMember: Boolean(subscription.isFoundingMember),
+      entitlementSource: 'none',
+      productId: subscription.productId,
     };
   }
 
@@ -172,6 +156,24 @@ export class SubscriptionService {
 
   async restorePurchases(userId: string) {
     return this.billing.restorePurchases(userId);
+  }
+
+  async purchase(userId: string, period: import('../../types/subscription').BillingPeriod) {
+    return this.billing.purchase(userId, period);
+  }
+
+  async getOfferings() {
+    return this.billing.getOfferings();
+  }
+
+  async getBillingStatus() {
+    return this.billing.getStatus();
+  }
+
+  async signOutBilling(userId: string) {
+    if (this.billing.signOut) {
+      await this.billing.signOut(userId);
+    }
   }
 
   async getUsage(userId: string) {

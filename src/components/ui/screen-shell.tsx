@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    opacity: 0.28,
+    opacity: 0.22,
   },
   scroll: { flexGrow: 1 },
   content: { flex: 1 },

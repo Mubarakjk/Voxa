@@ -11,8 +11,14 @@ import {
   YearlyRecapPlaceholder,
 } from '../../types/relationship-personality';
 import { nowIso } from '../../types';
+import { KnowledgeGraph } from '../../types/phase3-intelligence';
+
+export type KnowledgeGraphProvider = {
+  build(userId: string): Promise<KnowledgeGraph>;
+};
 
 export class FuturePersonalityArchitecture implements IPersonalityFutureServices {
+  constructor(private readonly graphProvider?: KnowledgeGraphProvider) {}
   voiceEvolution = {
     async getState(_userId: string): Promise<VoicePersonalityEvolutionState> {
       return { warmth: 0.7, pace: 0.5, expressiveness: 0.55, lastUpdated: nowIso() };
@@ -43,10 +49,14 @@ export class FuturePersonalityArchitecture implements IPersonalityFutureServices
   };
 
   memoryVisualization = {
-    async graph(_userId: string) {
-      return { nodes: [], edges: [] };
-    },
+    graph: (userId: string) => this.buildKnowledgeGraph(userId),
   };
+
+  private async buildKnowledgeGraph(userId: string): Promise<{ nodes: KnowledgeGraph['nodes']; edges: KnowledgeGraph['edges'] }> {
+    if (!this.graphProvider) return { nodes: [], edges: [] };
+    const full = await this.graphProvider.build(userId);
+    return { nodes: full.nodes, edges: full.edges };
+  }
 
   yearlyRecap = {
     async prepare(_userId: string, year: number): Promise<YearlyRecapPlaceholder> {

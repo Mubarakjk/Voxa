@@ -7,7 +7,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { VoiceCallHistory } from '../components/voice/voice-call-history';
 import { VoiceTranscriptPanel } from '../components/voice/voice-transcript-panel';
-import { IconButton } from '../components/ui/buttons';
+import { IconButton, PrimaryButton } from '../components/ui/buttons';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import {
@@ -47,7 +47,18 @@ export function VoxaCentreScreen({ navigation }: Props) {
   const [speakerOn, setSpeakerOn] = useState(true);
   const [history, setHistory] = useState<VoiceSession[]>([]);
   const [isStarting, setIsStarting] = useState(false);
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [isTestingSpeaker, setIsTestingSpeaker] = useState(false);
+  const [isResettingAudio, setIsResettingAudio] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
+
+  const showResetVoice =
+    voice.isActive ||
+    voice.connectionState === 'connecting' ||
+    voice.connectionState === 'thinking' ||
+    voice.connectionState === 'speaking' ||
+    voice.connectionState === 'listening' ||
+    Boolean(voice.error);
 
   const voxaName = getVoxaDisplayName(profile);
   const voxaTint = getVoxaAvatarTint(profile);
@@ -80,40 +91,13 @@ export function VoxaCentreScreen({ navigation }: Props) {
 
   const startVoice = useCallback(async () => {
     if (!profile || voice.isActive) return;
-    setIsStarting(true);
-    setSafeMode(false);
-    try {
-      await voice.startCall(profile.companion.lastUsedMode ?? 'friend');
-    } catch (err) {
-      if (err instanceof FeatureLimitError) {
-        Alert.alert('Voice limit reached', err.message, [
-          { text: 'Continue Free', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => stackNav.navigate('Paywall', { source: 'voice-limit' }) },
-        ]);
-      } else {
-        Alert.alert('Voice call failed', err instanceof Error ? err.message : 'Please try again.');
-      }
-    } finally {
-      setIsStarting(false);
-    }
-  }, [profile, voice, stackNav]);
+    stackNav.navigate('VoiceConversation', { autoStart: true });
+  }, [profile, stackNav, voice.isActive]);
 
   const startSafe = useCallback(async () => {
     if (!profile || voice.isActive) return;
-    setIsStarting(true);
-    setSafeMode(true);
-    try {
-      await voice.startSafeCall();
-    } catch (err) {
-      if (err instanceof FeatureLimitError) {
-        Alert.alert('Voice limit reached', err.message);
-      } else {
-        Alert.alert('Safe Call failed', err instanceof Error ? err.message : 'Please try again.');
-      }
-    } finally {
-      setIsStarting(false);
-    }
-  }, [profile, voice]);
+    stackNav.navigate('VoiceConversation', { autoStart: true, safe: true });
+  }, [profile, stackNav, voice.isActive]);
 
   useEffect(() => {
     const action = route.params?.action;
@@ -184,6 +168,12 @@ export function VoxaCentreScreen({ navigation }: Props) {
           />
         ) : null}
 
+        {voice.error ? (
+          <VoxaText variant="caption" color="danger" style={styles.errorText}>
+            {voice.error}
+          </VoxaText>
+        ) : null}
+
         <View style={styles.centre}>
           <FadeIn delay={80}>
             <HeroOrb
@@ -226,9 +216,70 @@ export function VoxaCentreScreen({ navigation }: Props) {
           ) : null}
 
           {voice.isActive ? (
-            <VoiceTranscriptPanel entries={voice.transcript} voxaName={voxaName} />
+            <View style={styles.transcriptWrap}>
+              <VoiceTranscriptPanel entries={voice.transcript} voxaName={voxaName} />
+            </View>
           ) : (
-            <VoiceCallHistory sessions={history} />
+            <>
+              <View style={styles.testRow}>
+                <PrimaryButton
+                  label={isTestingMic ? 'Testing…' : 'Test microphone'}
+                  variant="ghost"
+                  onPress={async () => {
+                    setIsTestingMic(true);
+                    try {
+                      await voice.testMicrophone();
+                      Alert.alert('Microphone OK', 'Voxa captured audio successfully.');
+                    } catch (err) {
+                      Alert.alert('Mic test failed', err instanceof Error ? err.message : 'Try again.');
+                    } finally {
+                      setIsTestingMic(false);
+                    }
+                  }}
+                  disabled={isTestingMic || isStarting || voice.isActive}
+                  loading={isTestingMic}
+                />
+                <PrimaryButton
+                  label={isTestingSpeaker ? 'Testing…' : 'Test speaker'}
+                  variant="ghost"
+                  onPress={async () => {
+                    setIsTestingSpeaker(true);
+                    try {
+                      await voice.testSpeaker();
+                    } catch (err) {
+                      Alert.alert('Speaker test failed', err instanceof Error ? err.message : 'Try again.');
+                    } finally {
+                      setIsTestingSpeaker(false);
+                    }
+                  }}
+                  disabled={isTestingSpeaker || isStarting || voice.isActive}
+                  loading={isTestingSpeaker}
+                />
+              </View>
+              <PrimaryButton
+                label={isResettingAudio ? 'Resetting…' : 'Reset audio'}
+                variant="ghost"
+                onPress={async () => {
+                  setIsResettingAudio(true);
+                  try {
+                    await voice.resetAudio();
+                    Alert.alert('Audio reset', 'Microphone and speaker are ready.');
+                  } finally {
+                    setIsResettingAudio(false);
+                  }
+                }}
+                disabled={isResettingAudio}
+                loading={isResettingAudio}
+              />
+              {showResetVoice ? (
+                <PrimaryButton
+                  label="Reset voice"
+                  variant="ghost"
+                  onPress={() => void voice.forceResetVoice()}
+                />
+              ) : null}
+              <VoiceCallHistory sessions={history} />
+            </>
           )}
         </View>
 
@@ -236,7 +287,16 @@ export function VoxaCentreScreen({ navigation }: Props) {
           <ActionPill icon="chatbubbles-outline" label="Talk" onPress={() => navigation.navigate('Talk')} />
           <ActionPill icon="shield-checkmark-outline" label="Safe" onPress={() => void startSafe()} />
           <ActionPill icon="musical-notes-outline" label="Music" onPress={() => stackNav.navigate('Music')} />
-          <ActionPill icon="camera-outline" label="Camera" onPress={() => navigation.navigate('Talk')} />
+          <ActionPill
+            icon="camera-outline"
+            label="Photo"
+            onPress={() =>
+              navigation.navigate('Talk', {
+                starterPrompt: 'I want to share a photo for you to analyse.',
+                mode: 'assistant',
+              })
+            }
+          />
         </View>
 
         <View style={styles.controls}>
@@ -274,6 +334,14 @@ export function VoxaCentreScreen({ navigation }: Props) {
           )}
         </View>
 
+        {showResetVoice ? (
+          <Pressable style={styles.resetLink} onPress={() => void voice.forceResetVoice()}>
+            <VoxaText variant="caption" color="danger">
+              Reset voice
+            </VoxaText>
+          </Pressable>
+        ) : null}
+
         <Pressable style={styles.studioLink} onPress={() => stackNav.navigate('CompanionStudio')}>
           <Ionicons name="color-palette-outline" size={14} color={colors.textMuted} />
           <VoxaText variant="caption" color="textMuted">
@@ -304,7 +372,10 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.textMuted },
   statusDotActive: { backgroundColor: colors.safe },
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingBottom: spacing.md },
+  transcriptWrap: { width: '100%', maxHeight: 120, marginTop: spacing.xs },
+  testRow: { width: '100%', gap: spacing.xs },
+  errorText: { textAlign: 'center', paddingHorizontal: spacing.md },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -324,4 +395,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingTop: spacing.sm,
   },
+  resetLink: { alignItems: 'center', paddingBottom: spacing.sm },
 });

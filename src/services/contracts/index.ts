@@ -55,6 +55,7 @@ export interface IMessageRepository {
   upsertMessage(message: Message): Promise<Message>;
   updateMessage(id: string, input: import('../../types').UpdateMessageInput): Promise<Message>;
   deleteMessagesForConversation(conversationId: string): Promise<void>;
+  deleteMessage(id: string): Promise<void>;
 }
 
 export interface IReminderRepository {
@@ -201,6 +202,11 @@ export type VoxaServices = {
   purchaseManager: import('../billing/billing-contracts').IPurchaseManager;
   subscription: import('../billing/subscription-service').SubscriptionService;
   featureGate: import('../billing/feature-gate-service').FeatureGateService;
+  entitlementService: import('../billing/subscription-entitlement-service').SubscriptionEntitlementService;
+  subscriptionAnalytics: import('../billing/subscription-analytics-service').SubscriptionAnalyticsService;
+  paywallImpressions: import('../billing/paywall-impression-service').PaywallImpressionService;
+  modelRouting: import('../billing/model-routing-service').ModelRoutingService;
+  synchroniser: import('../billing/revenuecat-subscription-synchroniser').RevenueCatSubscriptionSynchroniser;
 };
 
 export type { IStorageService } from './storage-service';

@@ -43,6 +43,26 @@ export class InsideJokesEngine {
       });
     }
 
+    const catchphrase = detectCatchphrase(input.userMessage);
+    if (catchphrase) {
+      this.addJoke(next, {
+        label: catchphrase,
+        context: `Often says "${catchphrase}"`,
+        kind: 'catchphrase',
+        userApproved: true,
+      });
+    }
+
+    if (/\b(meme|that meme|viral)\b/i.test(lower)) {
+      const snippet = input.userMessage.slice(0, 60).trim();
+      this.addJoke(next, {
+        label: 'Shared meme',
+        context: snippet,
+        kind: 'meme',
+        userApproved: true,
+      });
+    }
+
     if (input.userMessage.length > 80 && /remember when|that conversation/.test(lower)) {
       this.addJoke(next, {
         label: 'Memorable chat',
@@ -100,6 +120,18 @@ function findRepeatedPhrase(message: string, existing: InsideJoke[]) {
   if (phrase.length < 8) return null;
   const count = existing.filter((j) => j.context.includes(phrase)).length;
   return count >= 1 ? phrase : null;
+}
+
+const CATCHPHRASES = ['lock in', 'let\'s go', 'no cap', 'bet', 'on it', 'say less'];
+
+function detectCatchphrase(message: string): string | null {
+  const lower = message.toLowerCase();
+  for (const phrase of CATCHPHRASES) {
+    if (lower.includes(phrase)) return phrase;
+  }
+  const quoted = message.match(/"([^"]{3,24})"/);
+  if (quoted?.[1] && message.length < 120) return quoted[1];
+  return null;
 }
 
 export const insideJokesEngine = new InsideJokesEngine();

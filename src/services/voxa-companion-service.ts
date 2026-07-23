@@ -37,6 +37,69 @@ import { FeatureLimitError, SubscriptionService } from './billing/subscription-s
 import { UsageTrackingService } from './billing/usage-tracking-service';
 import { GateResult } from '../types/subscription';
 import { buildWowExperience, WowExperienceData } from './wow/wow-experience-service';
+import { buildPhase2Dashboard } from './intelligence/phase2-dashboard-service';
+import { buildPhase3Dashboard } from './intelligence/phase3-dashboard-service';
+import { getWeeklyGrowthService } from './intelligence/weekly-growth-service';
+import { getMoodIntelligenceService } from './intelligence/mood-intelligence-service';
+import { getCompanionJournalService } from './journal/companion-journal-service';
+import { getRitualService } from './ritual/ritual-service';
+import { Phase2DashboardData } from '../types/phase2-intelligence';
+import { Phase3DashboardData, AdaptiveModeLabel } from '../types/phase3-intelligence';
+import { Phase4DashboardData, ChatExperiencePayload, SmartChatAction } from '../types/phase4-intelligence';
+import { Phase5DashboardData } from '../types/phase5-life-os';
+import { Phase6DashboardData } from '../types/phase6-premium';
+import { Phase7DashboardData } from '../types/phase7-signature';
+import { Phase8DashboardData } from '../types/phase8-retention';
+import { Phase9DashboardData } from '../types/phase9-intelligence';
+import { Phase10DashboardData } from '../types/phase10-play';
+import { Phase11DashboardData } from '../types/phase11-living-companion';
+import { Phase12DashboardData } from '../types/phase12-experiences';
+import { buildPhase4Dashboard } from './intelligence/phase4-dashboard-service';
+import { buildPhase5Dashboard } from './life-os/phase5-dashboard-service';
+import { getPhase5LifeOSService } from './life-os/phase5-life-os-service';
+import { buildPhase6Dashboard } from './phase6/phase6-dashboard-service';
+import { buildPhase7Dashboard } from './phase7/phase7-dashboard-service';
+import { buildPhase8Dashboard } from './phase8/phase8-dashboard-service';
+import { buildPhase9Dashboard } from './phase9/phase9-dashboard-service';
+import { buildPhase10Dashboard, emptyGrowth } from './phase10/phase10-dashboard-service';
+import { getXpService } from './phase10/xp-service';
+import { buildPhase11Dashboard, buildPhase11PromptForChat } from './phase11/phase11-dashboard-service';
+import { getFollowUpEngineService } from './phase11/follow-up-engine-service';
+import { getProactiveCheckInOrchestrator } from './proactive-check-ins/proactive-check-in-orchestrator';
+import { buildPhase11PromptExtension, styleHintsFromPrefs } from './phase11/phase11-prompt-service';
+import { buildPhase12Dashboard } from './phase12/phase12-dashboard-service';
+import { buildPhase9PromptExtension } from './phase9/phase9-prompt-service';
+import { planResponse, polishResponse, scoreResponseQuality } from './phase9/response-planner-service';
+import { getConversationStyleMemoryService } from './phase9/conversation-style-memory-service';
+import { buildSmartSuggestions } from './phase9/smart-suggestions-v2-service';
+import { buildPhase8PromptExtension } from './phase8/phase8-prompt-service';
+import { buildFocusedContextBlock } from './phase8/companion-context-filter';
+import { getFutureConversationsService } from './phase8/future-conversations-service';
+import { getPreferenceMemoryService } from './phase8/preference-memory-service';
+import { getWorkspaceSessionsService } from './phase8/workspace-sessions-service';
+import { getSharedChallengesService } from './phase8/shared-challenges-service';
+import { buildLifeCalendar } from './phase8/life-calendar-service';
+import { buildPhase7PromptExtension } from './phase7/personality-v4-service';
+import { stagePromptBlock } from './phase7/relationship-evolution-service';
+import { getDailyReflectionService } from './reflection/daily-reflection-service';
+import {
+  getRelationshipGrowthService,
+  resolveFriendshipLevel,
+} from './relationship/relationship-growth-service';
+import { FRIENDSHIP_LEVEL_LABELS } from '../types/relationship-growth';
+import { buildWeatherPromptBlock } from './weather/weather-ai-tool-service';
+import { getWeatherService } from './weather/weather-service';
+import { getDaysSinceLastVisit } from './companion/companion-presence-service';
+import { STORAGE_KEYS } from '../constants/storage-keys';
+import { buildStudioExtendedPromptBlock, CompanionStudioExtendedPrefs, createDefaultStudioExtendedPrefs } from '../constants/companion-studio-extended';
+import { parseRichResponse } from './phase6/rich-response-parser';
+import { getLifeOSService } from './life-os/life-os-service';
+import { smartChatActionsService } from './intelligence/smart-chat-actions-service';
+import { getConversationCanvasService } from './intelligence/conversation-canvas-service';
+import { personalityV3Service } from './intelligence/personality-v3-service';
+import { modeInferenceEngine } from './intelligence/mode-inference-engine';
+import { getDelightMomentsService } from './intelligence/delight-moments-service';
+import { buildPhase4PromptExtension } from './intelligence/conversation-quality-service';
 import { getRoutineCoachService } from './routine/routine-coach-service';
 import { routineProactiveService } from './proactive/routine-proactive-service';
 import { TodayRoutineSummary } from '../types/routine';
@@ -66,6 +129,10 @@ export type SendChatMessageResult = {
   aiMeta?: GenerateReplyResult;
   executedAction?: import('../types').AssistantActionId;
   sideEffect?: import('./actions/chat-action-executor').ChatSideEffect;
+  adaptiveModeLabel?: AdaptiveModeLabel;
+  chatExperience?: ChatExperiencePayload;
+  richReply?: import('../types/phase6-premium').RichReplyPayload;
+  phase9Suggestions?: import('../types/phase9-intelligence').SmartSuggestion[];
 };
 
 export type HomeDashboardData = {
@@ -85,6 +152,17 @@ export type HomeDashboardData = {
   wowExperience: WowExperienceData;
   routineSummary: TodayRoutineSummary;
   routineMessage: string | null;
+  phase2: Phase2DashboardData;
+  phase3: Phase3DashboardData;
+  phase4: Phase4DashboardData;
+  phase5: Phase5DashboardData;
+  phase6: Phase6DashboardData;
+  phase7: Phase7DashboardData;
+  phase8: Phase8DashboardData;
+  phase9: Phase9DashboardData;
+  phase10: Phase10DashboardData;
+  phase11: Phase11DashboardData;
+  phase12: Phase12DashboardData;
 };
 
 export type CreateReminderResult = {
@@ -275,6 +353,283 @@ export class VoxaCompanionService {
     const routineMessages = routineProactiveService.generateMessages(profile, routineSummary);
     const routineMessage = routineMessages[0]?.message ?? null;
 
+    const moodHistory = this.storage
+      ? await getMoodIntelligenceService(this.storage).getUnifiedMoodHistory(userId)
+      : [];
+    const journalEntry = this.storage
+      ? await getCompanionJournalService(this.storage, this.repositories).getTodayEntry()
+      : null;
+    const ritualStreaks = this.storage
+      ? await getRitualService(this.storage).getStreaks()
+      : { morning: 0, evening: 0, combined: 0, reflection: 0, coach: 0 };
+
+    const phase2 = buildPhase2Dashboard({
+      profile,
+      bundle,
+      homeIntelligence,
+      wowExperience,
+      goals: activeGoals,
+      memories,
+      reminders,
+      routine: routineSummary,
+      moodHistory,
+      journalEntry,
+      ritualStreaks,
+      routineNudge: routineMessage,
+      ritualCoachLine: homeIntelligence.progressUpdate,
+      timelineEvents: bundle.lifeTimeline,
+    });
+
+    const weeklyGrowth = this.storage
+      ? await getWeeklyGrowthService(this.storage, this.repositories).buildGrowthReport(userId)
+      : null;
+
+    const phase5Service = this.storage
+      ? getPhase5LifeOSService(this.storage, this.repositories)
+      : null;
+    const linkedLabels = phase5Service
+      ? [
+          ...(await phase5Service.listBucketItems(userId)).slice(0, 4).map((b) => b.title),
+          ...(await phase5Service.listVisionItems(userId)).slice(0, 4).map((v) => v.title),
+        ]
+      : [];
+
+    const phase3 = buildPhase3Dashboard({
+      bundle,
+      memories,
+      goals: activeGoals,
+      moodHistory,
+      routine: routineSummary,
+      weeklyGrowth,
+      linkedLabels,
+    });
+
+    const lifeOS = this.storage ? await getLifeOSService(this.storage).loadAll(userId) : {
+      bucketList: [],
+      visionBoard: [],
+      futureSelf: [],
+      lifeBook: [],
+      challenges: [],
+    };
+
+    const delightShownIds = this.storage
+      ? await getDelightMomentsService(this.storage).loadShownIds()
+      : [];
+
+    let bucketCompleted = false;
+    let dreamAchieved = false;
+    if (phase5Service) {
+      const buckets = await phase5Service.listBucketItems(userId);
+      bucketCompleted = buckets.some((b) => b.status === 'completed');
+      const dreams = await phase5Service.listDreams(userId);
+      dreamAchieved = dreams.some((d) => d.summary?.toLowerCase().includes('achieved'));
+    }
+
+    const phase4 = await buildPhase4Dashboard({
+      profile,
+      bundle,
+      memories,
+      goals: activeGoals,
+      routine: routineSummary,
+      lifeOS,
+      journal: journalEntry,
+      recentConversations: conversations,
+      moodLabel: moodHistory[0]?.label ?? null,
+      streakDays: routineSummary.streakDays,
+      delightShownIds,
+      bucketCompleted,
+      dreamAchieved,
+    });
+
+    const phase5 = phase5Service
+      ? await buildPhase5Dashboard({
+          userId,
+          profile,
+          goals: activeGoals,
+          memories,
+          routine: routineSummary,
+          service: phase5Service,
+        })
+      : {
+          goalPlans: 0,
+          futureSelfReady: false,
+          visionCount: 0,
+          bucketCount: 0,
+          dreamCount: 0,
+          openDecisions: 0,
+          coachScore: null,
+          memoryConnectionCount: 0,
+          latestLifeBookChapter: null,
+          storyboardReady: false,
+        };
+
+    const phase6 = this.storage
+      ? await buildPhase6Dashboard({
+          userId,
+          profile,
+          bundle,
+          memories,
+          goals: activeGoals,
+          routine: routineSummary,
+          ritualStreaks,
+          coachInsight: phase2.dailyCoach.message,
+          relationshipMoment: wowExperience.relationshipMoment?.message ?? wowExperience.friendRecallLine ?? null,
+          storage: this.storage,
+        })
+      : {
+          proactiveFollowUp: null,
+          relationshipProfile: {
+            userId,
+            daysTogether: 0,
+            stage: 'Getting acquainted',
+            sharedMemories: 0,
+            milestones: [],
+            favouriteTopics: [],
+            routinesCompleted: 0,
+            goalsAchieved: 0,
+            ritualsCompleted: 0,
+            communicationStyle: 'Warm',
+            insideJokes: [],
+            learnedSummary: 'Start chatting to build your relationship.',
+            framing: 'friend' as const,
+            updatedAt: new Date().toISOString(),
+          },
+          todayFocus: 'One meaningful step today.',
+          coachInsight: '',
+          relationshipMoment: null,
+          sportsStatus: { configured: false, providerName: 'None', cacheHit: false },
+          featuredActivities: [],
+          presenceGreeting: 'Hello',
+          presenceEnergy: 'medium' as const,
+          isNightMode: false,
+        };
+
+    const daysAway = await getDaysSinceLastVisit();
+    const phase7 = buildPhase7Dashboard({
+      bundle,
+      memories,
+      goals: activeGoals,
+      routine: routineSummary,
+      streakDays: routineSummary.streakDays,
+      daysAway,
+      relationshipScore: Math.min(100, bundle.relationship.sharedMemoryCount * 2 + Math.floor(bundle.relationship.conversationCount / 10)),
+      recentConversationPreview: recentMessages[recentMessages.length - 1]?.content ?? null,
+      celebrating: !!phase4.delightMoment,
+    });
+
+    const phase8 = await buildPhase8Dashboard({
+      userId,
+      bundle,
+      memories,
+      goals: activeGoals,
+      reminders,
+      routine: routineSummary,
+      streakDays: routineSummary.streakDays,
+      daysAway,
+      todayFocus: phase6.todayFocus,
+      coachQuote: phase2.dailyCoach.message,
+      moodHistory: moodHistory.map((m) => ({ label: m.label, date: m.date })),
+      celebrating: !!phase4.delightMoment || phase7.livingCompanion.mood === 'celebrating',
+      relationshipStage: phase7.relationshipStage,
+      storage: this.storage,
+    });
+
+    const phase9 = await buildPhase9Dashboard({
+      userId,
+      profile,
+      bundle,
+      memories,
+      goals: activeGoals,
+      reminders,
+      routine: routineSummary,
+      calendar: phase8.calendar,
+      todayFocus: phase8.todayFocus,
+      moodHistory: moodHistory.map((m) => ({ label: m.label, date: m.date })),
+      streakDays: routineSummary.streakDays,
+      daysAway,
+      recentUserMessage: recentMessages.filter((m) => m.role === 'user').pop()?.content ?? null,
+      storage: this.storage,
+    });
+
+    const phase10 = this.storage
+      ? await buildPhase10Dashboard({
+          userId,
+          goals: activeGoals,
+          routine: routineSummary,
+          streakDays: routineSummary.streakDays,
+          messageCount: bundle.relationship.conversationCount,
+          memoryCount: memories.length,
+          moodLabel: moodHistory[0]?.label ?? null,
+          storage: this.storage,
+        })
+      : ({
+          adventure: {
+            headline: 'Your adventure awaits',
+            primaryAction: 'challenge',
+            primaryLabel: 'View today\'s challenge',
+            challenge: null,
+            featuredGame: null,
+            deckCard: null,
+            missionProgress: null,
+            missionPercent: 0,
+            surprise: null,
+            spinAvailable: false,
+          },
+          dailyChallenge: null,
+          weeklyMission: null,
+          xp: {
+            userId,
+            totalXp: 0,
+            level: 1,
+            xpToNextLevel: 100,
+            lifetimeXp: 0,
+            updatedAt: nowIso(),
+          },
+          achievements: [],
+          newlyUnlocked: [],
+          spin: { date: new Date().toISOString().slice(0, 10), spun: false },
+          seasonal: null,
+          enjoyment: {
+            favouriteGames: [],
+            favouriteActivities: [],
+            favouriteTopics: [],
+            humourPreference: 'medium',
+            updatedAt: nowIso(),
+          },
+          featuredGames: [],
+          rewards: [],
+          growth: emptyGrowth,
+          pendingLevelUp: null,
+        } satisfies Phase10DashboardData);
+
+    const phase11 = await buildPhase11Dashboard({
+      userId,
+      profile,
+      bundle,
+      memories,
+      goals: activeGoals,
+      routine: routineSummary,
+      streakDays: routineSummary.streakDays,
+      daysAway,
+      todayFocus: phase8.todayFocus ?? phase9.dailyPlan.headline ?? homeIntelligence.dailyFocus,
+      moodLabel: moodHistory[0]?.label ?? null,
+      celebrating: !!phase4.delightMoment || phase7.livingCompanion.mood === 'celebrating',
+      storage: this.storage,
+    });
+
+    const phase12 = await buildPhase12Dashboard({
+      userId,
+      profile,
+      bundle,
+      memories,
+      goals: activeGoals,
+      routine: routineSummary,
+      todayFocus: phase8.todayFocus ?? phase9.dailyPlan.headline ?? homeIntelligence.dailyFocus,
+      messageCount: recentMessages.length,
+      ritualStreak: ritualStreaks.combined,
+      storage: this.storage,
+    });
+
     return {
       profile,
       memories,
@@ -294,6 +649,17 @@ export class VoxaCompanionService {
       wowExperience,
       routineSummary,
       routineMessage,
+      phase2,
+      phase3,
+      phase4,
+      phase5,
+      phase6,
+      phase7,
+      phase8,
+      phase9,
+      phase10,
+      phase11,
+      phase12,
     };
   }
 
@@ -302,6 +668,139 @@ export class VoxaCompanionService {
     return messages
       .filter((item) => item.role !== 'system')
       .map((item) => toChatMessageView(item));
+  }
+
+  async getChatExperience(userId: string, conversationId?: string): Promise<ChatExperiencePayload> {
+    const dashboard = await this.getHomeDashboard(userId);
+    const canvas = conversationId && this.storage
+      ? await getConversationCanvasService(this.storage).getCanvas(conversationId)
+      : null;
+
+    return {
+      contextCards: dashboard.phase4.contextCards,
+      smartActions: [],
+      canvas,
+      livingCompanion: dashboard.phase4.livingCompanion,
+      delightMoment: dashboard.phase4.delightMoment,
+      personalityMode: dashboard.phase4.personalityMode,
+    };
+  }
+
+  async executeSmartChatAction(input: {
+    userId: string;
+    conversationId: string;
+    action: SmartChatAction;
+    mode: CompanionModeId;
+    sourceText?: string;
+    messageId?: string;
+  }): Promise<{ message: string; success: boolean }> {
+    const profile = await this.repositories.userProfile.getProfile();
+    if (!profile || !this.storage) {
+      return { success: false, message: 'Unable to complete that action right now.' };
+    }
+
+    const text = input.action.payload?.text ?? input.sourceText ?? '';
+    const lifeOS = getLifeOSService(this.storage);
+    const journal = getCompanionJournalService(this.storage, this.repositories);
+
+    switch (input.action.id) {
+      case 'remember_this': {
+        if (!text.trim()) return { success: false, message: 'Nothing to remember yet.' };
+        await this.repositories.memories.createMemory({
+          userId: input.userId,
+          category: 'moments',
+          title: text.slice(0, 48),
+          content: text,
+          source: 'conversation',
+          relatedMode: input.mode,
+          importance: 4,
+          confidence: 0.8,
+        });
+        void getRelationshipGrowthService(this.storage!, this.repositories)
+          .recordMemoryShared(input.userId)
+          .catch(() => undefined);
+        return { success: true, message: "I'll remember that." };
+      }
+      case 'create_goal': {
+        const title = text.slice(0, 80) || 'New goal';
+        const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+        const { goal } = await phase5.createGoalWithPlan({
+          userId: input.userId,
+          title,
+          description: text,
+        });
+        return { success: true, message: `Created goal "${goal.title}" with a starter plan. Open Journey to view it.` };
+      }
+      case 'save_to_journal': {
+        if (!text.trim()) return { success: false, message: 'Nothing to save yet.' };
+        const today = new Date().toISOString().slice(0, 10);
+        const entries = await journal.listEntries();
+        const entry = {
+          id: `journal-manual-${Date.now()}`,
+          date: today,
+          body: text,
+          isPrivate: false,
+          savedAt: new Date().toISOString(),
+        };
+        await this.storage.setItem(STORAGE_KEYS.companionJournal, [entry, ...entries].slice(0, 30));
+        return { success: true, message: 'Saved to your journal.' };
+      }
+      case 'add_to_bucket_list': {
+        const title = text.slice(0, 80) || 'Something to do someday';
+        const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+        await phase5.addBucketItem(input.userId, { title, description: text });
+        return { success: true, message: `Added "${title}" to your bucket list.` };
+      }
+      case 'save_to_vision_board': {
+        const title = text.slice(0, 80) || 'A dream';
+        const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+        await phase5.addVisionItem(input.userId, { title, description: text });
+        return { success: true, message: `Added "${title}" to your vision board.` };
+      }
+      case 'create_challenge': {
+        const title = text.slice(0, 60) || 'New challenge';
+        await lifeOS.addChallenge(input.userId, title, text);
+        return { success: true, message: `Challenge started: ${title}` };
+      }
+      case 'schedule_reminder':
+        return { success: true, message: 'When should I remind you? Say something like "remind me tomorrow at 9am".' };
+      case 'break_into_tasks':
+      case 'open_canvas':
+        return { success: true, message: 'Workspace updated — keep talking and I will map it out.' };
+      case 'explain_differently':
+        return { success: true, message: 'Say "explain that differently" and I will rephrase.' };
+      case 'challenge_thinking':
+        return { success: true, message: 'Open Debate Mode from Journey → Life OS to stress-test your idea.' };
+      case 'continue_tomorrow':
+        return { success: true, message: 'Noted — we can pick this up tomorrow.' };
+      case 'favourite_reply': {
+        const favourites = (await this.storage.getItem<Record<string, string[]>>(STORAGE_KEYS.favouriteReplies)) ?? {};
+        const list = favourites[input.userId] ?? [];
+        if (text && !list.includes(text)) {
+          favourites[input.userId] = [text, ...list].slice(0, 20);
+          await this.storage.setItem(STORAGE_KEYS.favouriteReplies, favourites);
+        }
+        return { success: true, message: 'Saved as a favourite reply.' };
+      }
+      case 'pin_memory':
+        return { success: true, message: 'Open Journey → Memories to pin something meaningful.' };
+      case 'open_debate':
+        return { success: true, message: 'Open Journey → Life OS → Debate Mode to challenge this idea.' };
+      case 'simulate_decision': {
+        const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+        const q = text.slice(0, 200) || 'This decision';
+        await phase5.createDecision(input.userId, q);
+        return { success: true, message: 'Saved a decision simulation — open Life OS → Decision Simulator to review.' };
+      }
+      case 'log_dream': {
+        const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+        if (!text.trim()) return { success: false, message: 'Describe the dream first.' };
+        await phase5.addDream(input.userId, { body: text, isPrivate: true });
+        return { success: true, message: 'Dream saved to your private journal.' };
+      }
+      default:
+        return { success: false, message: "I couldn't do that yet." };
+    }
   }
 
   async switchCompanionMode(userId: string, mode: CompanionModeId) {
@@ -409,6 +908,13 @@ export class VoxaCompanionService {
       await this.billing.subscription.refreshUsageCounts(session.userId, this.repositories);
     }
 
+    if (session && this.storage && durationSeconds > 0) {
+      const minutes = Math.max(1, Math.ceil(durationSeconds / 60));
+      void getRelationshipGrowthService(this.storage, this.repositories)
+        .recordVoiceMinutes(session.userId, minutes)
+        .catch(() => undefined);
+    }
+
     return ended;
   }
 
@@ -477,6 +983,20 @@ export class VoxaCompanionService {
       attachments,
     });
 
+    if (this.storage) {
+      void getProactiveCheckInOrchestrator(this.storage, this.repositories)
+        .recordActivity(input.userId)
+        .catch(() => undefined);
+    }
+
+    if (this.storage) {
+      void getMoodIntelligenceService(this.storage).detectAndRecord({
+        userId: input.userId,
+        text: effectiveUserText,
+        source: 'conversation',
+      });
+    }
+
     if (attachments?.length) {
       const processor = createAttachmentProcessor(this.ai);
       const uploaded = await processor.uploadAll({
@@ -500,6 +1020,23 @@ export class VoxaCompanionService {
         lastMessageAt: voxaMessage.createdAt,
       });
       return { userMessage, voxaMessage };
+    }
+
+    if (!hasAttachments && this.storage) {
+      const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
+      const talkResult = await phase5.handleTalkCommand(input.userId, effectiveUserText);
+      if (talkResult.handled) {
+        const voxaMessage = await this.repositories.messages.createMessage({
+          conversationId: input.conversationId,
+          role: 'voxa',
+          content: talkResult.reply,
+          mode: input.mode,
+        });
+        await this.repositories.conversations.updateConversation(input.conversationId, {
+          lastMessageAt: voxaMessage.createdAt,
+        });
+        return { userMessage, voxaMessage };
+      }
     }
 
     const [activeGoalsForParse, remindersForParse] = await Promise.all([
@@ -567,24 +1104,9 @@ export class VoxaCompanionService {
     }
 
     const history = await this.repositories.messages.listMessages(input.conversationId);
-    const recentMessageTexts = history
-      .filter((item) => item.role !== 'system')
-      .slice(-6)
-      .map((item) => item.content);
-
-    const memories = profile.preferences.memoryEnabled
-      ? await this.memoryEngine.retrieveForPrompt(input.userId, {
-          userMessage: effectiveUserText,
-          mode: input.mode,
-          recentMessageTexts,
-        })
+    const moodHistory = this.storage
+      ? await getMoodIntelligenceService(this.storage).getUnifiedMoodHistory(input.userId)
       : [];
-
-    const [activeGoals, allReminders] = await Promise.all([
-      this.repositories.goals.listActiveGoals(input.userId),
-      this.repositories.reminders.listReminders(input.userId),
-    ]);
-    const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const unifiedContext = await this.companionIntelligence.buildContext({
       userId: input.userId,
@@ -592,11 +1114,142 @@ export class VoxaCompanionService {
       mode: input.mode,
       conversationId: input.conversationId,
       userMessage: effectiveUserText,
+      moodHistory,
     });
-    const companionContextExtension = this.companionIntelligence.getPromptExtension(unifiedContext);
+    const effectiveMode = unifiedContext.mode;
+
+    const studioPrefs = this.storage
+      ? (await this.storage.getItem<CompanionStudioExtendedPrefs>(STORAGE_KEYS.companionStudioPrefs)) ?? createDefaultStudioExtendedPrefs()
+      : createDefaultStudioExtendedPrefs();
+    const goalsCompleted = unifiedContext.relationship.goalsAchievedTogether;
+    const daysTogether = Math.max(
+      1,
+      Math.floor((Date.now() - new Date(unifiedContext.relationship.relationshipStartedAt).getTime()) / 86400000),
+    );
+    let relStage = resolveFriendshipLevel({
+      daysTogether,
+      conversationCount: unifiedContext.relationship.conversationCount,
+      sharedMemories: unifiedContext.relationship.sharedMemoryCount,
+      goalsCompleted,
+    });
+    let friendshipLine = FRIENDSHIP_LEVEL_LABELS[relStage];
+    if (this.storage) {
+      const growthSnapshot = await getRelationshipGrowthService(this.storage, this.repositories).getSnapshot(
+        input.userId,
+      );
+      relStage = growthSnapshot.level;
+      friendshipLine = `${growthSnapshot.levelLabel} — ${growthSnapshot.familiarityLine}`;
+    }
+    const phase7Block = buildPhase7PromptExtension(
+      `${stagePromptBlock(relStage)}\n## Friendship\n${friendshipLine}`,
+      buildStudioExtendedPromptBlock(studioPrefs),
+    );
+
+    let phase8Block = buildPhase8PromptExtension();
+
+    const memories = profile.preferences.memoryEnabled
+      ? await this.memoryEngine.retrieveForPrompt(input.userId, {
+          userMessage: effectiveUserText,
+          mode: effectiveMode,
+          recentMessageTexts: history
+            .filter((item) => item.role !== 'system')
+            .slice(-6)
+            .map((item) => item.content),
+        })
+      : [];
+
+    const [activeGoals, allReminders] = await Promise.all([
+      this.repositories.goals.listActiveGoals(input.userId),
+      this.repositories.reminders.listReminders(input.userId),
+    ]);
+
+    if (this.storage) {
+      const [futureConv, prefs, challenge] = await Promise.all([
+        getFutureConversationsService(this.storage).getDueToday(input.userId),
+        getPreferenceMemoryService(this.storage).list(input.userId),
+        getSharedChallengesService(this.storage).getActive(input.userId),
+      ]);
+      const calendar = buildLifeCalendar({ reminders: allReminders, memories, goals: activeGoals });
+      const focusedBlock = buildFocusedContextBlock({
+        context: unifiedContext,
+        userMessage: effectiveUserText,
+        calendarLine: calendar.todayLine ?? calendar.tomorrowLine,
+        futureLine: futureConv?.resumeLine ?? null,
+        preferenceBlock: getPreferenceMemoryService(this.storage).formatForPrompt(prefs),
+        challengeTitle: challenge?.title ?? null,
+        relationshipStage: relStage,
+        todayFocus: calendar.todayLine ?? activeGoals[0]?.title ?? null,
+      });
+      if (focusedBlock) phase8Block = buildPhase8PromptExtension(focusedBlock);
+    }
+
+    const recentVoxaTexts = history.filter((m) => m.role === 'voxa').slice(-3).map((m) => m.content);
+    const stylePrefs = this.storage
+      ? await getConversationStyleMemoryService(this.storage).get(input.userId)
+      : undefined;
+    const responsePlan = planResponse({
+      userMessage: effectiveUserText,
+      memories,
+      goals: activeGoals,
+      stylePrefs,
+      recentVoxaReplies: recentVoxaTexts,
+      moodTrend: moodHistory[0]?.label ?? null,
+    });
+
+    if (this.storage) {
+      void getConversationStyleMemoryService(this.storage).updateFromMessage(input.userId, effectiveUserText);
+    }
+
+    const phase9Block = buildPhase9PromptExtension(responsePlan.promptBlock);
+
+    let phase11Block = '';
+    if (this.storage) {
+      const [routineSummary, bundle] = await Promise.all([
+        getRoutineCoachService(this.storage, this.repositories).getTodaySchedule(input.userId),
+        this.companionIntelligence.getBundle(input.userId, profile.displayName),
+      ]);
+      const phase11Dash = await buildPhase11Dashboard({
+        userId: input.userId,
+        profile,
+        bundle,
+        memories,
+        goals: activeGoals,
+        routine: routineSummary,
+        streakDays: routineSummary.streakDays,
+        daysAway: 0,
+        todayFocus: activeGoals[0]?.title ?? 'Today',
+        moodLabel: moodHistory[0]?.label ?? null,
+        celebrating: /passed|got it|finally|nailed|i did it/i.test(effectiveUserText),
+        storage: this.storage,
+      });
+      phase11Block = buildPhase11PromptExtension(
+        buildPhase11PromptForChat({
+          dashboard: phase11Dash,
+          stage: relStage,
+          styleHints: styleHintsFromPrefs(stylePrefs),
+        }),
+      );
+    }
+
+    const moodBlock = this.storage
+      ? await getMoodIntelligenceService(this.storage).buildAdaptationBlock(input.userId, effectiveUserText)
+      : '';
+
+    const reflectionBlock = this.storage
+      ? getDailyReflectionService(this.storage).formatForPrompt(
+          await getDailyReflectionService(this.storage).list(input.userId, 7),
+        )
+      : '';
+
+    const weatherBlock = this.storage
+      ? await buildWeatherPromptBlock(getWeatherService(this.storage), effectiveUserText)
+      : '';
+
+    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}`;
+    const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const aiInput = {
-      mode: input.mode,
+      mode: effectiveMode,
       userMessage: effectiveUserText,
       conversationHistory: history,
       userProfile: profile,
@@ -619,11 +1272,17 @@ export class VoxaCompanionService {
       }
     }
 
+    let replyContent = aiResult.content;
+    const quality = scoreResponseQuality(replyContent, responsePlan, recentVoxaTexts);
+    if (!quality.passed) {
+      replyContent = polishResponse(replyContent, quality.issues);
+    }
+
     const voxaMessage = await this.repositories.messages.createMessage({
       conversationId: input.conversationId,
       role: 'voxa',
-      content: aiResult.content,
-      mode: input.mode,
+      content: replyContent,
+      mode: effectiveMode,
     });
 
     await this.repositories.conversations.updateConversation(input.conversationId, {
@@ -631,14 +1290,14 @@ export class VoxaCompanionService {
     });
 
     await this.repositories.userProfile.updateProfile({
-      companion: { ...profile.companion, lastUsedMode: input.mode },
+      companion: { ...profile.companion, lastUsedMode: effectiveMode },
     });
 
     await this.memoryEngine.processAfterReply({
       userId: input.userId,
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
-      mode: input.mode,
+      mode: effectiveMode,
       userProfile: profile,
       mediaSource: hasAttachments ? mediaSource : undefined,
     }).catch((err) => console.warn('[Voxa] Background memory extraction failed.', err));
@@ -648,13 +1307,34 @@ export class VoxaCompanionService {
       userProfile: profile,
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
-      mode: input.mode,
+      mode: effectiveMode,
     }).catch((err) => console.warn('[Voxa] Background personality update failed.', err));
+
+    if (this.storage) {
+      void getFutureConversationsService(this.storage)
+        .schedule({ userId: input.userId, conversationId: input.conversationId, userMessage: effectiveUserText })
+        .catch(() => undefined);
+      void getWorkspaceSessionsService(this.storage)
+        .upsertFromExchange({
+          userId: input.userId,
+          conversationId: input.conversationId,
+          userMessage: effectiveUserText,
+          voxaReply: voxaMessage.content,
+        })
+        .catch(() => undefined);
+      void getPreferenceMemoryService(this.storage)
+        .ingestFromMessage(input.userId, effectiveUserText)
+        .catch(() => undefined);
+      const dueFuture = await getFutureConversationsService(this.storage).getDueToday(input.userId);
+      if (dueFuture && dueFuture.conversationId === input.conversationId) {
+        await getFutureConversationsService(this.storage).resolve(input.userId, dueFuture.id);
+      }
+    }
 
     await this.maybeSummarizeConversation({
       conversationId: input.conversationId,
       profile,
-      mode: input.mode,
+      mode: effectiveMode,
       messages: [...history, userMessage, voxaMessage],
       activeGoals,
       upcomingReminders,
@@ -673,7 +1353,64 @@ export class VoxaCompanionService {
       await this.billing.subscription.refreshUsageCounts(input.userId, this.repositories);
     }
 
-    return { userMessage, voxaMessage, aiMeta: aiResult };
+    const bundle = await this.companionIntelligence.getBundle(input.userId, profile.displayName);
+    const signals = modeInferenceEngine.inferSignals(effectiveUserText, bundle);
+    const personalityMode = personalityV3Service.inferModeFromMessage(effectiveUserText, signals, bundle);
+    const canvas = this.storage
+      ? await getConversationCanvasService(this.storage).updateFromExchange({
+          conversationId: input.conversationId,
+          userMessage: effectiveUserText,
+          voxaReply: voxaMessage.content,
+        })
+      : null;
+    const smartActions = smartChatActionsService.suggest({
+      userMessage: effectiveUserText,
+      voxaReply: voxaMessage.content,
+      mode: effectiveMode,
+      isLargeTopic: Boolean(canvas),
+      emotional: signals.needsSupport,
+      goalMentioned: /goal/i.test(effectiveUserText),
+    });
+    const chatExperience = await this.getChatExperience(input.userId, input.conversationId);
+    chatExperience.smartActions = smartActions;
+    chatExperience.canvas = canvas;
+    chatExperience.personalityMode = personalityMode;
+    if (chatExperience.delightMoment && this.storage) {
+      await getDelightMomentsService(this.storage).markShown(chatExperience.delightMoment);
+    }
+
+    if (this.storage && effectiveUserText.trim().length >= 12) {
+      void getFollowUpEngineService(this.storage)
+        .detectFromMessage(input.userId, effectiveUserText)
+        .catch(() => undefined);
+    }
+
+    const phase9Suggestions = buildSmartSuggestions({
+      userMessage: effectiveUserText,
+      voxaReply: voxaMessage.content,
+      goalMentioned: /goal/i.test(effectiveUserText),
+      emotional: signals.needsSupport,
+      isLargeTopic: Boolean(canvas),
+    });
+
+    if (this.storage && effectiveUserText.trim().length >= 4) {
+      void getXpService(this.storage).award(input.userId, 5, 'chat').catch(() => undefined);
+    }
+
+    const richReply = parseRichResponse(
+      voxaMessage.content,
+      memories.slice(0, 8).map((m) => m.title),
+    );
+
+    return {
+      userMessage,
+      voxaMessage,
+      aiMeta: aiResult,
+      adaptiveModeLabel: unifiedContext.adaptiveModeLabel,
+      chatExperience,
+      richReply,
+      phase9Suggestions,
+    };
   }
 
   async retryMessageAttachmentUpload(input: {
@@ -908,6 +1645,62 @@ export class VoxaCompanionService {
       reminder,
       confirmationMessage: buildVoxaCheckInConfirmation(reminder),
     };
+  }
+
+  async afterVoiceTurn(input: {
+    userId: string;
+    userMessage: string;
+    voxaReply: string;
+    mode: CompanionModeId;
+  }): Promise<void> {
+    if (!input.userId) return;
+    const profile = await this.repositories.userProfile.getProfile();
+    if (!profile) return;
+    await this.companionIntelligence.afterConversation({
+      userId: input.userId,
+      userProfile: profile,
+      userMessage: input.userMessage,
+      voxaReply: input.voxaReply,
+      mode: input.mode,
+    });
+  }
+
+  async buildVoiceIntelligenceExtension(input: {
+    userId: string;
+    conversationId: string;
+    userMessage: string;
+    mode: CompanionModeId;
+  }): Promise<string> {
+    const profile = await this.repositories.userProfile.getProfile();
+    if (!profile) return '';
+
+    if (this.storage) {
+      void getMoodIntelligenceService(this.storage).detectAndRecord({
+        userId: input.userId,
+        text: input.userMessage,
+        source: 'voice',
+      });
+    }
+
+    const moodHistory = this.storage
+      ? await getMoodIntelligenceService(this.storage).getUnifiedMoodHistory(input.userId)
+      : [];
+
+    const unifiedContext = await this.companionIntelligence.buildContext({
+      userId: input.userId,
+      userProfile: profile,
+      mode: input.mode,
+      conversationId: input.conversationId,
+      userMessage: input.userMessage,
+      moodHistory,
+    });
+
+    const moodBlock = this.storage
+      ? await getMoodIntelligenceService(this.storage).buildAdaptationBlock(input.userId, input.userMessage)
+      : '';
+
+    const { buildHumanStyleExtension } = await import('./personality/human-response-style');
+    return `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildHumanStyleExtension(true)}${moodBlock ? `\n\n${moodBlock}` : ''}`;
   }
 
   async refreshUsageCounts(userId: string) {

@@ -21,6 +21,7 @@ import {
 } from '../voice/voice-identity-resolver';
 import { weeklyReflectionEngine } from '../personality/weekly-reflection-engine';
 import { memoryAgingEngine } from '../personality/memory-aging-engine';
+import { memoryConfidenceService } from '../memory/memory-confidence-service';
 
 export type BuildContextInput = {
   userProfile: UserProfile;
@@ -140,7 +141,7 @@ export class ContextEngine {
     const memoryLines =
       context.topMemories.length > 0
         ? context.topMemories
-            .map((m) => `- ${m.title}: ${m.content.slice(0, 120)} (${memoryAgingEngine.describeForPrompt(m)})`)
+            .map((m) => `- ${m.title}: ${m.content.slice(0, 120)} (${memoryAgingEngine.describeForPrompt(m)}, ${memoryConfidenceService.describeForPrompt(m)})`)
             .join('\n')
         : '';
 
@@ -184,6 +185,9 @@ export class ContextEngine {
       '## Recent conversation threads',
       recentConvos,
       varietyBlock ? `\n## Conversation variety\n${varietyBlock}` : '',
+      context.adaptivePlan
+        ? `\n## Adaptive response plan\nMode: ${context.adaptiveModeLabel ?? context.adaptivePlan.modeLabel}\nTone: ${context.adaptivePlan.tone}\nLength: ${context.adaptivePlan.lengthHint}`
+        : '',
     ]
       .filter(Boolean)
       .join('\n');

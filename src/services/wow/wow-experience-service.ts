@@ -33,6 +33,7 @@ export type WowExperienceData = {
   heroMessage: string;
   proactiveMessage: string | null;
   relationshipScore: number;
+  conversationCount: number;
   friendRecallLine: string | null;
   friendProfile: FriendRelationshipProfile;
 };
@@ -152,6 +153,7 @@ export function buildWowExperience(input: BuildWowExperienceInput): WowExperienc
     heroMessage,
     proactiveMessage: proactive?.message ?? null,
     relationshipScore: friendProfile.relationshipScore,
+    conversationCount: input.bundle.relationship.conversationCount,
     friendRecallLine: friendProfile.naturalRecallLines[0] ?? null,
     friendProfile,
   };

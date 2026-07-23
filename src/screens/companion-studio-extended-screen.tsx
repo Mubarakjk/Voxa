@@ -139,6 +139,54 @@ export function CompanionStudioExtendedScreen() {
           </GlassCard>
         </FadeInView>
 
+        <FadeInView delay={200}>
+          <GlassCard style={styles.section}>
+            <VoxaText variant="subtitle">Personality traits</VoxaText>
+            <VoxaText variant="caption" color="textMuted">Humour</VoxaText>
+            {chip(
+              [{ id: 'low', label: 'Low' }, { id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }],
+              'humour',
+              prefs.humour,
+            )}
+            <VoxaText variant="caption" color="textMuted">Empathy</VoxaText>
+            {chip(
+              [{ id: 'low', label: 'Low' }, { id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }],
+              'empathy',
+              prefs.empathy,
+            )}
+            <VoxaText variant="caption" color="textMuted">Directness</VoxaText>
+            {chip(
+              [{ id: 'low', label: 'Low' }, { id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }],
+              'directness',
+              prefs.directness,
+            )}
+            <VoxaText variant="caption" color="textMuted">Coaching style</VoxaText>
+            {chip(
+              [{ id: 'gentle', label: 'Gentle' }, { id: 'balanced', label: 'Balanced' }, { id: 'direct', label: 'Direct' }],
+              'coachingStyle',
+              prefs.coachingStyle,
+            )}
+            <VoxaText variant="caption" color="textMuted">Conversation length</VoxaText>
+            {chip(
+              [{ id: 'brief', label: 'Brief' }, { id: 'balanced', label: 'Balanced' }, { id: 'detailed', label: 'Detailed' }],
+              'conversationLength',
+              prefs.conversationLength,
+            )}
+            <VoxaText variant="caption" color="textMuted">Emoji usage</VoxaText>
+            {chip(
+              [{ id: 'none', label: 'None' }, { id: 'light', label: 'Light' }, { id: 'normal', label: 'Normal' }],
+              'emojiUsage',
+              prefs.emojiUsage,
+            )}
+            <VoxaText variant="caption" color="textMuted">Memory depth</VoxaText>
+            {chip(
+              [{ id: 'light', label: 'Light' }, { id: 'normal', label: 'Normal' }, { id: 'deep', label: 'Deep' }],
+              'memoryDepth',
+              prefs.memoryDepth,
+            )}
+          </GlassCard>
+        </FadeInView>
+
         <PrimaryButton label={saved ? 'Saved ✓' : 'Save preferences'} onPress={save} />
       </ScrollView>
     </ScreenShell>
