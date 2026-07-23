@@ -11,6 +11,8 @@ import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { HomeHeroSection } from '../components/phase6/home-hero-section';
 import { HomeMorningBriefCard } from '../components/home/home-morning-brief-card';
+import { HomeWeatherCard } from '../components/home/home-weather-card';
+import { NutritionHomeSummary } from '../components/nutrition/nutrition-home-summary';
 import { DelightBanner } from '../components/phase7/delight-banner';
 import { TodaysAdventureCard } from '../components/phase10/todays-adventure-card';
 import { colors, layout, spacing } from '../constants/theme';
@@ -28,12 +30,15 @@ import { getDailySurpriseService } from '../services/phase10/daily-surprise-serv
 import { getCelebrationService, buildLevelUpMessage } from '../services/phase10/celebration-service';
 import { getFollowUpEngineService } from '../services/phase11/follow-up-engine-service';
 import { getLivingWowService } from '../services/phase11/living-wow-service';
+import { getWeatherService } from '../services/weather/weather-service';
+import { trackEvent } from '../services/analytics/analytics-service';
 import { getVoxaAvatarTint, getVoxaDisplayName } from '../utils/companion-display';
 import { hapticCelebrate } from '../utils/haptics';
 import { getRitualService } from '../services/ritual/ritual-service';
 import { getDailyReflectionService } from '../services/reflection/daily-reflection-service';
 import { navigateToRoutine } from '../utils/home-navigation';
 import { RitualHomeState } from '../types/ritual';
+import { WeatherBundle } from '../types/weather';
 import { recordTiming } from '../utils/performance-metrics';
 
 type Props = CompositeScreenProps<
@@ -55,15 +60,23 @@ export function HomeScreen({ navigation }: Props) {
   const [dismissedDelight, setDismissedDelight] = useState(false);
   const [dismissedMilestone, setDismissedMilestone] = useState(false);
   const [reflectionPending, setReflectionPending] = useState(false);
+  const [weatherBundle, setWeatherBundle] = useState<WeatherBundle | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       if (!profile) return;
       setLoadError(null);
+      trackEvent('home_opened');
       void load().catch((err) => {
         setLoadError(err instanceof Error ? err.message : 'Failed to load home.');
       }).finally(() => recordTiming('home.warm', Date.now()));
       void (async () => {
+        if (isFeatureVisible('weather')) {
+          const result = await getWeatherService(services.storage).fetchForecast();
+          setWeatherBundle(result.ok ? result.data : null);
+        } else {
+          setWeatherBundle(null);
+        }
         const daysAway = await getDaysSinceLastVisit();
         if (isFeatureVisible('dailyCheckIn')) {
           setRitualState(await getRitualService(services.storage).getHomeState());
@@ -236,6 +249,13 @@ export function HomeScreen({ navigation }: Props) {
           />
         ) : null}
 
+        {weatherBundle ? (
+          <HomeWeatherCard
+            bundle={weatherBundle}
+            onPress={() => navigation.navigate('WeatherLocationSetup')}
+          />
+        ) : null}
+
         <HomeMorningBriefCard
           dailyBriefing={dashboard.dailyBriefing}
           phase11={phase11}
@@ -250,20 +270,32 @@ export function HomeScreen({ navigation }: Props) {
           onRoutine={() => navigateToRoutine(navigation)}
         />
 
+        {isFeatureVisible('calorieTracking') ? (
+          <NutritionHomeSummary onPress={() => navigation.navigate('NutritionDashboard')} />
+        ) : null}
+
         <TodaysAdventureCard
           data={phase10}
           onPrimary={() => {
             const a = phase10.adventure;
+            if (isFeatureVisible('socialGames')) {
+              navigation.navigate('GamesHub');
+              return;
+            }
             if (a.primaryAction === 'challenge') navigation.navigate('DailyChallenge');
             else if (a.primaryAction === 'mission') navigation.navigate('WeeklyMission');
             else if (a.primaryAction === 'spin') navigation.navigate('DailySpin');
             else if (a.featuredGame) {
-              navigation.navigate('ArcadeGameSession', { gameId: a.featuredGame.id });
+              navigation.navigate('GamesHub');
             } else navigation.navigate('DailyChallenge');
           }}
           onChallengeDetails={() => navigation.navigate('DailyChallenge')}
           onMission={() => navigation.navigate('WeeklyMission')}
           onSecondary={() => {
+            if (isFeatureVisible('socialGames')) {
+              navigation.navigate('GamesHub');
+              return;
+            }
             const s = phase10.adventure.surprise;
             if (s) {
               void getDailySurpriseService(services.storage).markShown(profile.id).then(refreshPhase10);
@@ -275,11 +307,13 @@ export function HomeScreen({ navigation }: Props) {
             else navigation.navigate('ConversationDecks');
           }}
           secondaryLabel={
-            phase10.adventure.surprise
-              ? 'Open surprise'
-              : phase10.adventure.deckCard
-                ? 'Conversation card'
-                : undefined
+            isFeatureVisible('socialGames')
+              ? 'Open Games'
+              : phase10.adventure.surprise
+                ? 'Open surprise'
+                : phase10.adventure.deckCard
+                  ? 'Conversation card'
+                  : undefined
           }
         />
       </ScrollView>

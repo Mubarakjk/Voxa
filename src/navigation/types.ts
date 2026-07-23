@@ -49,6 +49,10 @@ export type RootStackParamList = {
   SharedChallenges: undefined;
   FocusMode: undefined;
   CompanionArcade: undefined;
+  GamesHub: undefined;
+  ImpostorGame: undefined;
+  MafiaGame: undefined;
+  PartyGame: { gameId: import('../types/social-games').PartyGameId };
   AchievementCentre: undefined;
   ConversationDecks: undefined;
   DailySpin: undefined;
@@ -71,6 +75,13 @@ export type RootStackParamList = {
   GiftsCollection: undefined;
   DailyNews: undefined;
   WeatherLocationSetup: undefined;
+  PrivacyPolicy: undefined;
+  TermsOfService: undefined;
+  NutritionOnboarding: undefined;
+  NutritionDashboard: undefined;
+  NutritionAddMeal: { dateKey?: string } | undefined;
+  NutritionHistory: undefined;
+  NutritionSettings: undefined;
 };
 
 export type MainTabParamList = {

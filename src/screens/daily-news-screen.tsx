@@ -33,7 +33,7 @@ export function DailyNewsScreen(_props: Props) {
   if (loading) {
     return (
       <ScreenShell>
-        <LoadingState label="Loading daily updates..." />
+        <LoadingState label="Loading your digest..." />
       </ScreenShell>
     );
   }
@@ -41,7 +41,7 @@ export function DailyNewsScreen(_props: Props) {
   if (!digest) {
     return (
       <ScreenShell>
-        <VoxaText variant="body" color="textSecondary">No update today yet.</VoxaText>
+        <VoxaText variant="body" color="textSecondary">No personal digest yet for today.</VoxaText>
       </ScreenShell>
     );
   }
@@ -49,13 +49,21 @@ export function DailyNewsScreen(_props: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader eyebrow={digest.date} title="Daily updates" subtitle={digest.headline} />
+        <ScreenHeader
+          eyebrow={digest.date}
+          title="Your Digest"
+          subtitle="Personal companion notes from your goals and routines — not external world headlines."
+        />
         <GlassCard style={styles.card}>
+          <VoxaText variant="subtitle">{digest.headline}</VoxaText>
           <VoxaText variant="body" color="textSecondary">{digest.companionTake}</VoxaText>
         </GlassCard>
         {digest.items.map((item) => (
           <GlassCard key={item.id} style={styles.card}>
-            <VoxaText variant="caption" color="primarySoft">{item.category}{item.source ? ` · ${item.source}` : ''}</VoxaText>
+            <VoxaText variant="caption" color="primarySoft">
+              {item.category}
+              {item.source ? ` · ${item.source}` : ' · Voxa'}
+            </VoxaText>
             <VoxaText variant="subtitle">{item.title}</VoxaText>
             <VoxaText variant="body" color="textSecondary">{item.summary}</VoxaText>
           </GlassCard>

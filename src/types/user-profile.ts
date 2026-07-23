@@ -35,6 +35,11 @@ export type UserPreferences = {
   theme?: 'dark' | 'system';
   morningGreetingEnabled?: boolean;
   eveningReflectionEnabled?: boolean;
+  /**
+   * When true (default), Voxa speaks new chat replies aloud.
+   * Does not enable microphone recording.
+   */
+  voxaSpeaksReplies?: boolean;
   /** Fine-grained companion behaviour controls. */
   companionControls?: import('./relationship-personality').CompanionControlPreferences;
 };
@@ -88,6 +93,7 @@ export function createDefaultPreferences(): UserPreferences {
     theme: 'dark',
     morningGreetingEnabled: true,
     eveningReflectionEnabled: true,
+    voxaSpeaksReplies: true,
     companionControls: createDefaultCompanionControls(),
   };
 }

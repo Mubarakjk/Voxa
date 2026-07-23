@@ -23,6 +23,7 @@ type ChatMessageBubbleProps = {
   voxaTint: string;
   voxaName?: string;
   bookmarked?: boolean;
+  isSpeaking?: boolean;
   onRetryUpload?: (attachmentId: string) => void;
   onRemember?: (message: ChatMessageView) => void;
   onBookmark?: (message: ChatMessageView) => void;
@@ -40,6 +41,7 @@ function ChatMessageBubbleComponent({
   voxaTint,
   voxaName = 'Voxa',
   bookmarked,
+  isSpeaking,
   onRetryUpload,
   onRemember,
   onBookmark,
@@ -140,8 +142,17 @@ function ChatMessageBubbleComponent({
               {message.status === 'failed' ? ' · Failed — tap to retry' : message.status === 'pending' ? ' · Sending…' : ''}
             </VoxaText>
             {!isUser && isFeatureVisible('playAloud') && message.text ? (
-              <Pressable onPress={() => onPlayAloud?.(message)} hitSlop={8}>
-                <Ionicons name="volume-medium-outline" size={14} color={colors.primarySoft} />
+              <Pressable
+                onPress={() => onPlayAloud?.(message)}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={isSpeaking ? 'Stop speaking' : `Play ${voxaName} aloud`}
+                style={styles.speakBtn}>
+                <Ionicons
+                  name={isSpeaking ? 'stop-circle' : 'volume-medium'}
+                  size={18}
+                  color={isSpeaking ? colors.primary : colors.primarySoft}
+                />
               </Pressable>
             ) : null}
           </View>
@@ -302,6 +313,12 @@ const styles = StyleSheet.create({
   failed: { borderWidth: 1, borderColor: colors.danger },
   messageText: { lineHeight: 23 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
+  speakBtn: {
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   time: { fontSize: 11 },
   image: { width: 220, height: 160, borderRadius: radius.md, backgroundColor: colors.surface },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },

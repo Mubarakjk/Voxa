@@ -11,6 +11,8 @@ import {
   createDefaultCompanionControls,
 } from '../types/relationship-personality';
 import { PlanStatus } from '../types/subscription';
+import { NUTRITION_MODE_LABELS, NutritionMode } from '../types/nutrition';
+import { isFeatureVisible } from '../config/feature-status';
 
 const CHECKIN_STYLES: CheckInStyle[] = ['off', 'gentle', 'proactive'];
 
@@ -84,10 +86,38 @@ export function buildSettingsSections(
   profile: UserProfile,
   planStatus?: PlanStatus,
   weatherLocationLabel = 'Not set',
+  nutritionMode: NutritionMode = 'off',
 ) {
   const c = controls(profile);
   const planLabel = formatPlanLabel(planStatus);
   const renewalLabel = formatRenewalLabel(planStatus);
+
+  const personalisationItems: SettingsItem[] = [
+    {
+      id: 'weather-location',
+      label: 'Weather location',
+      value: weatherLocationLabel,
+    },
+    {
+      id: 'news-digest',
+      label: 'Your Digest',
+      value: 'Personal notes',
+    },
+  ];
+
+  if (isFeatureVisible('calorieTracking')) {
+    personalisationItems.push({
+      id: 'calorie-tracking',
+      label: 'Calories & nutrition',
+      value: NUTRITION_MODE_LABELS[nutritionMode],
+    });
+  }
+
+  personalisationItems.push({
+    id: 'theme',
+    label: 'Appearance',
+    value: THEME_LABELS[profile.preferences.theme ?? 'dark'],
+  });
 
   return [
     {
@@ -150,6 +180,11 @@ export function buildSettingsSections(
           value: 'Companion Studio',
         },
         {
+          id: 'voxa-speaks',
+          label: 'Voxa speaks replies',
+          value: profile.preferences.voxaSpeaksReplies === false ? 'Off' : 'On',
+        },
+        {
           id: 'memory',
           label: 'Memory',
           value: profile.preferences.memoryEnabled ? 'On' : 'Off',
@@ -208,23 +243,7 @@ export function buildSettingsSections(
     },
     {
       title: 'Personalisation',
-      items: [
-        {
-          id: 'weather-location',
-          label: 'Weather location',
-          value: weatherLocationLabel,
-        },
-        {
-          id: 'news-digest',
-          label: 'Daily digest',
-          value: 'Your updates',
-        },
-        {
-          id: 'theme',
-          label: 'Appearance',
-          value: THEME_LABELS[profile.preferences.theme ?? 'dark'],
-        },
-      ],
+      items: personalisationItems,
     },
     {
       title: 'Notifications & check-ins',
@@ -256,6 +275,22 @@ export function buildSettingsSections(
           displayOnly: true,
         },
         {
+          id: 'voice-notes-status',
+          label: 'Voice notes',
+          value: 'Coming in a future update',
+          displayOnly: true,
+        },
+        {
+          id: 'privacy-policy',
+          label: 'Privacy Policy',
+          value: 'View',
+        },
+        {
+          id: 'terms',
+          label: 'Terms of Service',
+          value: 'View',
+        },
+        {
           id: 'export-data',
           label: 'Export data',
           value: 'JSON',
@@ -263,7 +298,13 @@ export function buildSettingsSections(
         {
           id: 'delete-account',
           label: 'Delete account',
-          value: hasSupabaseConfig() ? 'Cloud' : 'Local',
+          value: hasSupabaseConfig() ? 'Request deletion' : 'Reset local',
+        },
+        {
+          id: 'app-version',
+          label: 'App version',
+          value: '1.0.0',
+          displayOnly: true,
         },
       ],
     },

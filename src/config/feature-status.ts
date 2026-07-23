@@ -1,5 +1,6 @@
 /**
- * Central feature visibility for beta launch.
+ * Central feature visibility for production release.
+ * stable / beta = visible
  * hidden = not shown unless EXPO_PUBLIC_EXPERIMENTAL_FEATURES=true
  * coming_soon = roadmap only, never clickable
  */
@@ -27,12 +28,15 @@ export type FeatureKey =
   | 'calendarAssistant'
   | 'emailAssistant'
   | 'weather'
-  | 'newsDigest';
+  | 'newsDigest'
+  | 'calorieTracking'
+  | 'socialGames';
 
 export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   chat: 'stable',
   cameraPhoto: 'stable',
-  voiceNote: 'stable',
+  /** Hidden for this release until physical-device recorder QA passes. */
+  voiceNote: 'hidden',
   memories: 'stable',
   pinnedMemories: 'stable',
   goals: 'stable',
@@ -49,8 +53,10 @@ export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   documents: 'coming_soon',
   calendarAssistant: 'coming_soon',
   emailAssistant: 'coming_soon',
-  weather: 'beta',
+  weather: 'stable',
   newsDigest: 'stable',
+  calorieTracking: 'stable',
+  socialGames: 'stable',
 };
 
 export function isExperimentalFeaturesEnabled(): boolean {

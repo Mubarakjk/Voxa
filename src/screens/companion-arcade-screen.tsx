@@ -32,13 +32,33 @@ export function CompanionArcadeScreen() {
   return (
     <ScreenShell padded={false}>
       <View style={styles.headerWrap}>
-        <ScreenHeader title="Companion Arcade" subtitle="Play together — everything saves locally." />
+        <ScreenHeader
+          title="Companion Arcade"
+          subtitle="Chat games with Voxa — lighter side modes. For party games, open Games Hub."
+          right={
+            <Pressable onPress={() => navigation.navigate('GamesHub')}>
+              <VoxaText variant="caption" color="primarySoft">
+                Games Hub →
+              </VoxaText>
+            </Pressable>
+          }
+        />
       </View>
       <FlatList
         data={ARCADE_GAMES}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         onLayout={() => void loadStats()}
+        ListHeaderComponent={
+          <Pressable onPress={() => navigation.navigate('GamesHub')} style={styles.hubLink}>
+            <GlassCard style={styles.hubCard}>
+              <VoxaText variant="subtitle">Social Games Hub</VoxaText>
+              <VoxaText variant="caption" color="textMuted">
+                Impostor, Night Circle, Would You Rather, and more — local pass-and-play.
+              </VoxaText>
+            </GlassCard>
+          </Pressable>
+        }
         renderItem={({ item, index }) => {
           const s = stats[item.id];
           return (
@@ -73,4 +93,6 @@ const styles = StyleSheet.create({
   list: { padding: layout.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
   card: { gap: spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  hubLink: { marginBottom: spacing.sm },
+  hubCard: { gap: spacing.xs },
 });

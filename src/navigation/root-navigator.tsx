@@ -40,6 +40,10 @@ import { MonthlyReplayScreen } from '../screens/monthly-replay-screen';
 import { SharedChallengesScreen } from '../screens/shared-challenges-screen';
 import { FocusModeScreen } from '../screens/focus-mode-screen';
 import { CompanionArcadeScreen } from '../screens/companion-arcade-screen';
+import { GamesHubScreen } from '../screens/games-hub-screen';
+import { ImpostorGameScreen } from '../screens/impostor-game-screen';
+import { MafiaGameScreen } from '../screens/mafia-game-screen';
+import { PartyGameScreen } from '../screens/party-game-screen';
 import { AchievementCentreScreen } from '../screens/achievement-centre-screen';
 import { ConversationDecksScreen } from '../screens/conversation-decks-screen';
 import { DailySpinScreen } from '../screens/daily-spin-screen';
@@ -62,6 +66,13 @@ import { RelationshipTimelineScreen } from '../screens/relationship-timeline-scr
 import { CompanionChallengesScreen } from '../screens/companion-challenges-screen';
 import { GiftsCollectionScreen } from '../screens/gifts-collection-screen';
 import { DailyNewsScreen } from '../screens/daily-news-screen';
+import { PrivacyPolicyScreen } from '../screens/privacy-policy-screen';
+import { TermsOfServiceScreen } from '../screens/terms-of-service-screen';
+import { NutritionOnboardingScreen } from '../screens/nutrition-onboarding-screen';
+import { NutritionDashboardScreen } from '../screens/nutrition-dashboard-screen';
+import { NutritionAddMealScreen } from '../screens/nutrition-add-meal-screen';
+import { NutritionHistoryScreen } from '../screens/nutrition-history-screen';
+import { NutritionSettingsScreen } from '../screens/nutrition-settings-screen';
 import { MainTabNavigator } from './main-tabs';
 import { RootStackParamList } from './types';
 
@@ -182,6 +193,10 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
       <Stack.Screen name="SharedChallenges" component={SharedChallengesScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="FocusMode" component={FocusModeScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="CompanionArcade" component={CompanionArcadeScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="GamesHub" component={GamesHubScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="ImpostorGame" component={ImpostorGameScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="MafiaGame" component={MafiaGameScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="PartyGame" component={PartyGameScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="AchievementCentre" component={AchievementCentreScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="ConversationDecks" component={ConversationDecksScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="DailySpin" component={DailySpinScreen} options={{ animation: 'slide_from_right' }} />
@@ -208,6 +223,13 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
       <Stack.Screen name="GiftsCollection" component={GiftsCollectionScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="DailyNews" component={DailyNewsScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="WeatherLocationSetup" component={WeatherLocationSetupScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NutritionOnboarding" component={NutritionOnboardingScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NutritionDashboard" component={NutritionDashboardScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NutritionAddMeal" component={NutritionAddMealScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NutritionHistory" component={NutritionHistoryScreen} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="NutritionSettings" component={NutritionSettingsScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen
         name="Paywall"
         component={PaywallScreenRoute}

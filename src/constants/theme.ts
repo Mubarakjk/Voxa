@@ -1,9 +1,12 @@
+/** Semantic colour tokens — prefer these over ad-hoc hex in screens. */
 export const colors = {
   background: '#06060C',
   backgroundDeep: '#030308',
   surface: 'rgba(255, 255, 255, 0.07)',
   surfaceStrong: 'rgba(255, 255, 255, 0.11)',
+  surfaceQuiet: 'rgba(255, 255, 255, 0.04)',
   glassBorder: 'rgba(255, 255, 255, 0.14)',
+  borderSubtle: 'rgba(255, 255, 255, 0.08)',
   primary: '#8B7CF6',
   primarySoft: '#A594F9',
   blue: '#6366F1',
@@ -11,6 +14,7 @@ export const colors = {
   blueGlow: 'rgba(99, 102, 241, 0.35)',
   safe: '#34D399',
   safeGlow: 'rgba(52, 211, 153, 0.2)',
+  warning: '#FBBF24',
   text: '#FAFAFF',
   textSecondary: '#C8C8DC',
   textMuted: '#9494AC',
@@ -19,22 +23,29 @@ export const colors = {
   tabBar: 'rgba(10, 10, 18, 0.98)',
   tabBarBorder: 'rgba(255, 255, 255, 0.08)',
   danger: '#F87171',
+  overlay: 'rgba(3, 3, 8, 0.72)',
 };
 
+/** Spacing scale: 4 · 8 · 12 · 16 · 20 · 24 · 32 */
 export const spacing = {
   xs: 4,
   sm: 8,
+  md12: 12,
   md: 16,
   lg: 20,
   xl: 24,
   xxl: 32,
-  section: 28,
+  section: 24,
 };
 
 export const layout = {
   screenPadding: 20,
   cardGap: 12,
   tabBarHeight: 84,
+  minTapTarget: 44,
+  iconSm: 18,
+  iconMd: 22,
+  iconLg: 28,
 };
 
 export const radius = {
@@ -43,6 +54,29 @@ export const radius = {
   lg: 20,
   xl: 28,
   full: 999,
+};
+
+export const shadows = {
+  none: {
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  soft: {
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+};
+
+export const motion = {
+  fast: 160,
+  normal: 240,
+  slow: 360,
 };
 
 export const typography = {
@@ -57,5 +91,20 @@ export const typography = {
     letterSpacing: 1.2,
     textTransform: 'uppercase' as const,
     lineHeight: 14,
+  },
+};
+
+export const surfaces = {
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+  },
+  cardQuiet: {
+    backgroundColor: colors.surfaceQuiet,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
   },
 };

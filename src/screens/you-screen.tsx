@@ -29,7 +29,11 @@ import { createDefaultCompanionControls } from '../types/relationship-personalit
 import { openPlatformSubscriptionManagement } from '../services/billing/revenuecat-purchase-manager';
 import { PlanStatus } from '../types/subscription';
 import { getVoxaDisplayName } from '../utils/companion-display';
+import { requestAccountDeletion } from '../services/privacy/account-deletion-service';
 import { getWeatherService } from '../services/weather/weather-service';
+import { getNutritionService } from '../services/nutrition/nutrition-service';
+import { NutritionMode } from '../types/nutrition';
+import Constants from 'expo-constants';
 
 export function YouScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -39,12 +43,17 @@ export function YouScreen() {
   const [showDebug, setShowDebug] = useState(false);
   const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
   const [weatherLocationLabel, setWeatherLocationLabel] = useState('Not set');
+  const [nutritionMode, setNutritionMode] = useState<NutritionMode>('off');
 
   const loadPlanStatus = useCallback(async () => {
     if (!profile) return;
     setPlanStatus(await services.subscription.getPlanStatus(profile.id));
     const pref = await getWeatherService(services.storage).getPreference();
     setWeatherLocationLabel(getWeatherService(services.storage).formatLocationLabel(pref));
+    if (isFeatureVisible('calorieTracking')) {
+      const nutritionPrefs = await getNutritionService(services.storage).getPreferences(profile.id);
+      setNutritionMode(nutritionPrefs.mode);
+    }
   }, [profile, services.storage, services.subscription]);
 
   const loadDebugInfo = useCallback(async () => {
@@ -84,8 +93,27 @@ export function YouScreen() {
     if (displayOnly) return;
     if (itemId === 'companion-customise') return navigation.navigate('CompanionStudio');
     if (itemId === 'voice') return navigation.navigate('CompanionStudioVoice');
+    if (itemId === 'voxa-speaks' && profile) {
+      const next = profile.preferences.voxaSpeaksReplies === false;
+      await services.repositories.userProfile.updateProfile({
+        preferences: { ...profile.preferences, voxaSpeaksReplies: next },
+      });
+      await refreshProfile();
+      return;
+    }
     if (itemId === 'weather-location') return navigation.navigate('WeatherLocationSetup');
     if (itemId === 'news-digest') return navigation.navigate('DailyNews');
+    if (itemId === 'calorie-tracking') {
+      if (!isFeatureVisible('calorieTracking')) return;
+      if (!profile) return;
+      const prefs = await getNutritionService(services.storage).getPreferences(profile.id);
+      if (!prefs.onboardingCompleted && prefs.mode === 'off') {
+        return navigation.navigate('NutritionOnboarding');
+      }
+      return navigation.navigate('NutritionSettings');
+    }
+    if (itemId === 'privacy-policy') return navigation.navigate('PrivacyPolicy');
+    if (itemId === 'terms') return navigation.navigate('TermsOfService');
     if (itemId === 'theme' && profile) {
       await services.repositories.userProfile.updateProfile({
         preferences: { ...profile.preferences, ...cycleTheme(profile) },
@@ -134,22 +162,37 @@ export function YouScreen() {
     }
     if (itemId === 'export-data') return exportData();
     if (itemId === 'delete-account') {
-      Alert.alert('Delete account', hasSupabaseConfig() ? 'This will sign you out.' : 'This resets local data.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: async () => {
-            if (hasSupabaseConfig()) {
-              await notificationService.cancelAll();
-              await signOut();
-              await signOutCleanup();
-            } else {
-              await resetLocalData();
-            }
+      Alert.alert(
+        'Delete account',
+        hasSupabaseConfig()
+          ? 'This permanently deletes your Voxa account and associated cloud data (profile, chats, memories, goals, reminders) where configured, then signs you out and clears local data on this device. This cannot be undone.'
+          : 'This permanently resets all Voxa data stored on this device. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              const result = await requestAccountDeletion({
+                resetLocalData,
+                signOut,
+                signOutCleanup,
+                cancelNotifications: () => notificationService.cancelAll(),
+              });
+              if (!result.ok) {
+                Alert.alert('Deletion unavailable', result.message);
+                return;
+              }
+              Alert.alert(
+                'Deleted',
+                result.mode === 'cloud'
+                  ? 'Your account deletion request completed and local data was cleared.'
+                  : 'Local Voxa data on this device was reset.',
+              );
+            },
           },
-        },
-      ]);
+        ],
+      );
       return;
     }
     if (itemId === 'sign-out') {
@@ -225,7 +268,7 @@ export function YouScreen() {
     );
   }
 
-  const sections = buildSettingsSections(profile, planStatus ?? undefined, weatherLocationLabel);
+  const sections = buildSettingsSections(profile, planStatus ?? undefined, weatherLocationLabel, nutritionMode);
   const subscription = sections.find((s) => s.title === 'Subscription');
   const companion = sections.find((s) => s.title === 'Companion');
   const personalisation = sections.find((s) => s.title === 'Personalisation');
@@ -347,68 +390,29 @@ export function YouScreen() {
 
         <Pressable style={styles.debugToggle} onPress={() => setShowDebug((v) => !v)}>
           <VoxaText variant="caption" color="textMuted">
-            {showDebug ? 'Hide debug' : 'Show debug'}
+            {showDebug ? 'Hide diagnostics' : 'Diagnostics'}
           </VoxaText>
           <Ionicons name={showDebug ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
         </Pressable>
 
-        {showDebug ? (
+        {showDebug && __DEV__ ? (
           <GlassCard style={styles.group}>
             <SettingRow
               label="System health"
               value="QA"
               onPress={() => navigation.navigate('HealthCheck')}
             />
-            {__DEV__ ? (
-              <SettingRow
-                label="Billing QA"
-                value="RevenueCat"
-                onPress={() => navigation.navigate('BillingQA')}
-              />
-            ) : null}
+            <SettingRow
+              label="Billing QA"
+              value="RevenueCat"
+              onPress={() => navigation.navigate('BillingQA')}
+            />
             {[
               { label: 'Experimental features', value: debugInfo?.experimentalFeatures ?? '—' },
               { label: 'Supabase', value: debugInfo?.supabaseConnected ? 'Connected' : 'Off' },
               { label: 'OpenAI', value: debugInfo?.openAIConnected ? 'Connected' : 'Off' },
-              { label: 'Chat provider', value: debugInfo?.chatProvider ?? '—' },
-              { label: 'Last chat latency', value: debugInfo?.lastChatLatency ?? '—' },
-              { label: 'Last chat save', value: debugInfo?.lastChatSaveStatus ?? '—' },
-              { label: 'Camera permission', value: debugInfo?.cameraPermission ?? '—' },
-              { label: 'Last photo analysis', value: debugInfo?.lastPhotoAnalysisStatus ?? '—' },
-              { label: 'Routine sync', value: debugInfo?.routineSyncStatus ?? '—' },
-              { label: 'Memory extraction', value: debugInfo?.memoryExtractionStatus ?? '—' },
-              { label: 'Voice note duration', value: debugInfo?.voiceNoteDuration ?? '—' },
-              { label: 'Voice note URI', value: debugInfo?.voiceNoteUri ?? '—' },
-              { label: 'Voice note size', value: debugInfo?.voiceNoteFileSize ?? '—' },
-              { label: 'Transcription', value: debugInfo?.voiceNoteTranscription ?? '—' },
-              { label: 'Voice upload', value: debugInfo?.voiceNoteUpload ?? '—' },
-              { label: 'Audio error', value: debugInfo?.voiceNoteAudioError ?? 'None' },
-              { label: 'AudD', value: debugInfo?.audDConfigured ? 'Configured' : 'Not configured' },
-              { label: 'Storage bucket', value: debugInfo?.storageBucketStatus ?? '—' },
-              { label: 'ID mode', value: debugInfo?.idMode ?? 'UUID' },
-              { label: 'Last chat save', value: debugInfo?.lastChatSaveStatus ?? '—' },
-              { label: 'Last voice error', value: debugInfo?.lastVoiceError ?? 'None' },
-              { label: 'Recorder active', value: debugInfo?.recorderActive ?? 'No' },
-              { label: 'Voice call state', value: debugInfo?.voiceCallState ?? 'idle' },
-              { label: 'Orb state', value: debugInfo?.orbState ?? 'idle' },
-              { label: 'Orb mood', value: debugInfo?.orbMood ?? 'calm' },
-              { label: 'STT provider', value: debugInfo?.sttProvider ?? '—' },
-              { label: 'TTS provider', value: debugInfo?.ttsProvider ?? '—' },
-              { label: 'Last OpenAI request', value: debugInfo?.lastOpenAiRequest ?? '—' },
-              { label: 'AI latency', value: debugInfo?.openAiLatency ?? '—' },
-              { label: 'Last AudD request', value: debugInfo?.lastAudDRequest ?? '—' },
-              { label: 'AudD status', value: debugInfo?.lastAudDStatus ?? '—' },
-              { label: 'Relationship score', value: debugInfo?.relationshipScore ?? '—' },
-              { label: 'Response time', value: debugInfo?.aiResponseTime ?? '—' },
-              { label: 'Subscription plan', value: debugInfo?.plan ?? '—' },
               { label: 'AI provider', value: debugInfo?.aiProvider ?? getAIProviderInfo().label },
-              { label: 'Usage', value: debugInfo?.usageSummary ?? '—' },
-              { label: 'Voice', value: debugInfo?.selectedVoice ?? '—' },
-              { label: 'Accent', value: debugInfo?.selectedAccent ?? '—' },
-              { label: 'Music provider', value: debugInfo?.musicProvider ?? '—' },
-              { label: 'Music step', value: debugInfo?.musicLastStep ?? '—' },
-              { label: 'Music error', value: debugInfo?.musicLastError ?? '—' },
-              { label: 'Music response', value: debugInfo?.musicLastResponse ?? '—' },
+              { label: 'Subscription plan', value: debugInfo?.plan ?? '—' },
             ].map((row, index, arr) => (
               <View key={row.label} style={[styles.debugRow, index < arr.length - 1 && styles.rowBorder]}>
                 <VoxaText variant="body">{row.label}</VoxaText>
@@ -427,7 +431,7 @@ export function YouScreen() {
         ) : null}
 
         <VoxaText variant="caption" color="textMuted" style={styles.version}>
-          Voxa · {getDataSourceMode()} mode
+          Voxa · {Constants.expoConfig?.version ?? '1.0.0'} · {getDataSourceMode()}
         </VoxaText>
       </ScrollView>
     </ScreenShell>

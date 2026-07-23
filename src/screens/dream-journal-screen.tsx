@@ -79,7 +79,7 @@ export function DreamJournalScreen() {
       ) : null}
 
       {filtered.length === 0 ? (
-        <EmptyState icon="moon-outline" title="No dreams logged" message="Type or send a voice note describing a dream." />
+        <EmptyState icon="moon-outline" title="No dreams logged" message="Type a note describing a dream." />
       ) : (
         filtered.slice(0, 20).map((dream) => (
           <GlassCard key={dream.id} style={styles.card}>

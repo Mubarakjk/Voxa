@@ -93,7 +93,7 @@ export function JourneyPlaySection({ data, onArcade, onAchievements, onDecks, on
         <View style={styles.links}>
           <Link label="Daily challenge" onPress={onChallenge} />
           <Link label="Weekly mission" onPress={onMission} />
-          <Link label="Companion Arcade" onPress={onArcade} />
+          <Link label="Games Hub" onPress={onArcade} />
           <Link label="Achievement Centre" onPress={onAchievements} />
           <Link label="Conversation Decks" onPress={onDecks} />
         </View>
