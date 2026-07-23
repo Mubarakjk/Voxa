@@ -56,11 +56,18 @@ import {
 import { getCompanionJournalService } from '../services/journal/companion-journal-service';
 import { getRoutineCoachService } from '../services/routine/routine-coach-service';
 import { voiceNotePlayerService } from '../services/audio/voice-note-player-service';
-import { speakSimple } from '../services/voice/simple-speech-service';
+import {
+  isCompanionSpeaking,
+  shouldAutoSpeakReplies,
+  speakCompanionReply,
+  stopCompanionSpeech,
+} from '../services/voice/companion-speech-service';
 import { recordChatLatency } from '../utils/chat-debug-state';
 import { logFeature } from '../utils/feature-logger';
 import { recordTiming } from '../utils/performance-metrics';
+import { openVoiceConversation } from '../utils/voice-navigation';
 import { isFeatureVisible } from '../config/feature-status';
+import { trackEvent } from '../services/analytics/analytics-service';
 import {
   buildAudioMemoryRef,
   isMemoryPinned,
@@ -69,7 +76,6 @@ import {
 } from '../utils/memory-pinned';
 import { ChatMessageView, CompanionModeId, PendingAttachmentInput, createUuid, toChatMessageView } from '../types';
 import { getVoxaAvatarTint, getVoxaDisplayName } from '../utils/companion-display';
-import { openVoiceConversation } from '../utils/voice-navigation';
 import { LiveCompanionOrb } from '../components/live-companion/live-companion-orb';
 import { ChatDateSeparator, formatChatDateLabel } from '../components/phase7/chat-date-separator';
 import { ChatContextChips } from '../components/phase7/chat-context-chips';
@@ -133,6 +139,8 @@ export function ChatScreen() {
   const [activeMode, setActiveMode] = useState<CompanionModeId>('friend');
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string | null>(null);
@@ -296,8 +304,46 @@ export function ChatScreen() {
       if (!isTypingRef.current) {
         void loadChat();
       }
+      return () => {
+        void stopCompanionSpeech();
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+      };
     }, [loadChat]),
   );
+
+  const playCompanionText = useCallback(
+    async (text: string, messageId?: string) => {
+      if (!profile || !isFeatureVisible('playAloud')) return;
+      const cleaned = text.trim();
+      if (!cleaned) return;
+      setIsSpeaking(true);
+      setSpeakingMessageId(messageId ?? null);
+      try {
+        await speakCompanionReply(cleaned, profile, { messageId });
+      } catch {
+        Alert.alert('Playback failed', 'Could not play this message aloud.');
+      } finally {
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+      }
+    },
+    [profile],
+  );
+
+  const toggleAutoSpeak = useCallback(async () => {
+    if (!profile) return;
+    const next = profile.preferences.voxaSpeaksReplies === false;
+    await services.repositories.userProfile.updateProfile({
+      preferences: { ...profile.preferences, voxaSpeaksReplies: next },
+    });
+    await refreshProfile();
+    if (!next) {
+      await stopCompanionSpeech();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  }, [profile, refreshProfile, services.repositories.userProfile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -392,6 +438,9 @@ export function ChatScreen() {
     setStreamingText(null);
     setThinkingStage(0);
     setError(null);
+    void stopCompanionSpeech();
+    setIsSpeaking(false);
+    setSpeakingMessageId(null);
 
     const optimisticId = createUuid();
     const optimisticMessage: ChatMessageView = {
@@ -476,7 +525,15 @@ export function ChatScreen() {
       recordChatLatency(Date.now() - started, getAIProviderInfo().label);
       recordTiming('chat.send', Date.now() - started);
       logFeature('chat.send', 'success', undefined, Date.now() - started);
+      trackEvent('message_sent');
       const reply = result.voxaMessage.content;
+      if (
+        reply &&
+        isFeatureVisible('playAloud') &&
+        shouldAutoSpeakReplies(profile)
+      ) {
+        void playCompanionText(reply, result.voxaMessage.id);
+      }
       if (result.phase9Suggestions?.length) {
         setSuggestions(capSuggestions(result.phase9Suggestions.map((s) => s.prompt)));
         setSuggestionsDismissed(false);
@@ -599,16 +656,18 @@ export function ChatScreen() {
   const handlePlayAloud = useCallback(
     async (message: ChatMessageView) => {
       if (!profile) return;
+      if (isCompanionSpeaking() && speakingMessageId === message.id) {
+        await stopCompanionSpeech();
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+        return;
+      }
       const audio = message.attachments?.find((item) => item.type === 'audio');
       const text = audio?.transcription?.trim() || message.text?.trim();
       if (!text) return;
-      try {
-        await speakSimple(text, profile);
-      } catch {
-        Alert.alert('Playback failed', 'Could not play this message aloud.');
-      }
+      await playCompanionText(text, message.id);
     },
-    [profile],
+    [profile, playCompanionText, speakingMessageId],
   );
 
   const handleCopyTranscript = useCallback(async (message: ChatMessageView) => {
@@ -776,6 +835,7 @@ export function ChatScreen() {
           voxaTint={voxaTint}
           voxaName={profile ? getVoxaDisplayName(profile) : 'Voxa'}
           bookmarked={bookmarks.some((b) => b.messageId === item.id)}
+          isSpeaking={speakingMessageId === item.id}
           onRetryUpload={(attachmentId) => void retryAttachmentUpload(item.id, attachmentId)}
           onRemember={(message) => void rememberMessage(message)}
           onBookmark={(message) => void handleBookmark(message)}
@@ -809,6 +869,7 @@ export function ChatScreen() {
       handleCopyTranscript,
       richReplies,
       messages,
+      speakingMessageId,
     ],
   );
 
@@ -891,7 +952,8 @@ export function ChatScreen() {
   }
 
   const voxaName = getVoxaDisplayName(profile);
-  const headerOrbState = isTyping ? 'thinking' : orbState;
+  const headerOrbState = isTyping ? 'thinking' : isSpeaking ? 'speaking' : orbState;
+  const autoSpeakOn = profile?.preferences.voxaSpeaksReplies !== false;
 
   return (
     <ScreenShell padded={false} glow="blue">
@@ -906,9 +968,36 @@ export function ChatScreen() {
           <View style={styles.headerCopy}>
             <VoxaText variant="subtitle">{voxaName}</VoxaText>
             <VoxaText variant="caption" color="textMuted">
-              {adaptiveDisplay}
+              {isSpeaking ? 'Speaking…' : adaptiveDisplay}
             </VoxaText>
           </View>
+          {isFeatureVisible('playAloud') ? (
+            <Pressable
+              style={styles.headerAction}
+              onPress={() => {
+                if (isSpeaking) {
+                  void stopCompanionSpeech();
+                  setIsSpeaking(false);
+                  setSpeakingMessageId(null);
+                  return;
+                }
+                void toggleAutoSpeak();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isSpeaking
+                  ? 'Stop speaking'
+                  : autoSpeakOn
+                    ? 'Voxa speaks replies on. Tap to turn off.'
+                    : 'Voxa speaks replies off. Tap to turn on.'
+              }>
+              <Ionicons
+                name={isSpeaking ? 'stop-circle' : autoSpeakOn ? 'volume-high' : 'volume-mute'}
+                size={20}
+                color={autoSpeakOn || isSpeaking ? colors.primarySoft : colors.textMuted}
+              />
+            </Pressable>
+          ) : null}
           <Pressable style={styles.headerAction} onPress={() => setMemoryPanelOpen(true)} accessibilityLabel="Memory and context">
             <Ionicons name="layers-outline" size={18} color={colors.primarySoft} />
           </Pressable>

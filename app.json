@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.voxa.companion",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Voxa uses your microphone when you choose to record a voice note.",
+        "NSMicrophoneUsageDescription": "Voxa uses your microphone when you choose to record audio in supported features.",
         "NSCameraUsageDescription": "Voxa uses the camera to capture photos and videos in chat.",
         "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat.",
         "NSLocationWhenInUseUsageDescription": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually."
@@ -63,19 +63,18 @@
       [
         "expo-av",
         {
-          "microphonePermission": "Voxa uses the microphone for voice notes and voice calls."
+          "microphonePermission": "Voxa uses the microphone when you choose to record audio in supported features."
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "Voxa uses the microphone for voice notes."
+          "microphonePermission": "Voxa uses the microphone when you choose to record audio in supported features."
         }
       ],
       "expo-secure-store",
       "expo-dev-client",
       "expo-font",
-      "expo-audio",
       "expo-asset",
       [
         "expo-location",

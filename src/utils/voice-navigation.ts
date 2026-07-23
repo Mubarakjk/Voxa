@@ -15,7 +15,7 @@ export type VoiceNavigationResult =
 export const VOICE_UNAVAILABLE_COPY = {
   voice: {
     message: 'Live voice calls are not available in this build yet.',
-    hint: 'You can still record voice notes from the mic button in chat — I will listen and reply in text.',
+    hint: 'Text chat still works — voice notes are being prepared for a future update.',
   },
   safe: {
     message: 'Safe Call is not available in this build yet.',

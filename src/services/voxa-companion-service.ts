@@ -89,6 +89,7 @@ import {
 import { FRIENDSHIP_LEVEL_LABELS } from '../types/relationship-growth';
 import { buildWeatherPromptBlock } from './weather/weather-ai-tool-service';
 import { getWeatherService } from './weather/weather-service';
+import { getNutritionService } from './nutrition/nutrition-service';
 import { getDaysSinceLastVisit } from './companion/companion-presence-service';
 import { STORAGE_KEYS } from '../constants/storage-keys';
 import { buildStudioExtendedPromptBlock, CompanionStudioExtendedPrefs, createDefaultStudioExtendedPrefs } from '../constants/companion-studio-extended';
@@ -1245,7 +1246,17 @@ export class VoxaCompanionService {
       ? await buildWeatherPromptBlock(getWeatherService(this.storage), effectiveUserText)
       : '';
 
-    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}`;
+    let nutritionBlock = '';
+    if (this.storage) {
+      const nutrition = getNutritionService(this.storage);
+      const prefs = await nutrition.getPreferences(input.userId);
+      if (prefs.mode !== 'off') {
+        const todaySummary = await nutrition.getTodaySummary(input.userId);
+        nutritionBlock = nutrition.buildNutritionPromptBlock(prefs, todaySummary);
+      }
+    }
+
+    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}`;
     const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const aiInput = {

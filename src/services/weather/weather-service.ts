@@ -183,14 +183,17 @@ export class WeatherService {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Weather unavailable';
       if (cached) {
+        // Prefer serving real cached data rather than inventing weather.
         return {
-          ok: false,
-          reason: 'offline',
-          message: 'Using your last saved forecast — live weather is temporarily unavailable.',
-          cached: { ...cached.bundle, fromCache: true },
+          ok: true,
+          data: { ...cached.bundle, fromCache: true },
         };
       }
-      return { ok: false, reason: 'provider_error', message };
+      return {
+        ok: false,
+        reason: message.toLowerCase().includes('network') ? 'offline' : 'provider_error',
+        message,
+      };
     }
   }
 

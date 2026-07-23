@@ -103,6 +103,12 @@ export const STORAGE_KEYS = {
   relationshipGrowth: '@voxa/relationship_growth',
   weatherLocationPreference: '@voxa/weather_location_preference',
   weatherCache: '@voxa/weather_cache',
+  socialGameSessions: '@voxa/social_game_sessions',
+  impostorSession: '@voxa/impostor_session',
+  mafiaSession: '@voxa/mafia_session',
+  nutritionPreferences: '@voxa/nutrition_preferences',
+  nutritionDailyLogs: '@voxa/nutrition_daily_logs',
+  nutritionOfflineQueue: '@voxa/nutrition_offline_queue',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

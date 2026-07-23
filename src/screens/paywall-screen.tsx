@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,6 +32,7 @@ import { OfferingsSnapshot } from '../services/billing/billing-types';
 import { billingStateMachine } from '../services/billing/billing-state-machine';
 import { getBillingRuntime, getPurchasesUnavailableMessage } from '../services/billing/runtime-environment';
 import { BillingPeriod } from '../types/subscription';
+import { trackEvent } from '../services/analytics/analytics-service';
 
 type PaywallScreenProps = {
   source?: string;
@@ -40,6 +40,8 @@ type PaywallScreenProps = {
   onContinueFree: () => void | Promise<void>;
   onRestorePurchases: () => void | Promise<void>;
   onClose?: () => void;
+  onOpenTerms?: () => void;
+  onOpenPrivacy?: () => void;
   isLoading?: boolean;
   purchaseDisabled?: boolean;
   setupMessage?: string | null;
@@ -51,14 +53,13 @@ type PaywallScreenProps = {
   onSelectPeriod: (period: BillingPeriod) => void;
 };
 
-const TERMS_URL = 'https://voxa.app/terms';
-const PRIVACY_URL = 'https://voxa.app/privacy';
-
 export function PaywallScreen({
   onPurchase,
   onContinueFree,
   onRestorePurchases,
   onClose,
+  onOpenTerms,
+  onOpenPrivacy,
   isLoading,
   offerings,
   offeringsLoading,
@@ -280,12 +281,12 @@ export function PaywallScreen({
             Payment is charged to your App Store or Google Play account. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your device subscription settings.
           </VoxaText>
           <View style={styles.linkRow}>
-            <Pressable onPress={() => Linking.openURL(TERMS_URL)}>
+            <Pressable onPress={onOpenTerms}>
               <VoxaText variant="caption" color="primarySoft">
                 Terms
               </VoxaText>
             </Pressable>
-            <Pressable onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Pressable onPress={onOpenPrivacy}>
               <VoxaText variant="caption" color="primarySoft">
                 Privacy
               </VoxaText>
@@ -420,6 +421,7 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
 
   useEffect(() => {
     void loadOfferings();
+    trackEvent('subscription_screen_opened', { source: route.params?.source ?? 'unknown' });
     if (profile) {
       void services.subscriptionAnalytics.track('paywall_viewed', { source: route.params?.source });
       void services.paywallImpressions.recordImpression(profile.id);
@@ -501,6 +503,8 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
       onContinueFree={handleContinueFree}
       onRestorePurchases={handleRestore}
       onClose={() => navigation.goBack()}
+      onOpenTerms={() => navigation.navigate('TermsOfService')}
+      onOpenPrivacy={() => navigation.navigate('PrivacyPolicy')}
       isLoading={isLoading || billingUiState === 'purchasing' || billingUiState === 'restoring'}
       purchaseDisabled={
         !billingStateMachine.canPurchase() ||

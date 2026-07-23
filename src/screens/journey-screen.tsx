@@ -221,7 +221,7 @@ export function JourneyScreen({ navigation }: Props) {
         {dashboard.phase10 ? (
           <JourneyPlaySection
             data={dashboard.phase10}
-            onArcade={() => stackNav.navigate('CompanionArcade')}
+            onArcade={() => stackNav.navigate('GamesHub')}
             onAchievements={() => stackNav.navigate('AchievementCentre')}
             onDecks={() => stackNav.navigate('ConversationDecks')}
             onChallenge={() => stackNav.navigate('DailyChallenge')}
