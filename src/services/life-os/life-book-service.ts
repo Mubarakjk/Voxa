@@ -72,9 +72,13 @@ export function generateLifeBookChapter(input: {
     bucketProgress: monthBucket.map((b) => b.title),
     visionProgress: monthVision.map((v) => `${v.title} (${v.progress}%)`).slice(0, 4),
     favouriteMemory: favourite?.title,
-    voxaNoticed: hasContent
-      ? 'You showed up consistently — even small moments count.'
-      : undefined,
+    voxaNoticed: (() => {
+      if (!hasContent) return undefined;
+      if (wins.length > 0) return `You closed ${wins.length} goal${wins.length === 1 ? '' : 's'} this month — ${wins[0].title}.`;
+      if (monthMemories.length >= 3) return `You saved ${monthMemories.length} moments this month.`;
+      if (monthBucket.length > 0) return `You checked something off the bucket list: ${monthBucket[0].title}.`;
+      return undefined;
+    })(),
     nextFocus: monthGoals.find((g) => g.status === 'active')?.title,
     isPrivate: false,
     generatedAt: nowIso(),

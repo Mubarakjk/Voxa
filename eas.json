@@ -1,11 +1,21 @@
 {
   "cli": {
-    "version": ">= 13.2.0"
+    "version": ">= 13.2.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_EXPERIMENTAL_FEATURES": "false",
+        "EXPO_PUBLIC_REALTIME_VOICE_ENABLED": "false",
+        "EXPO_PUBLIC_SCHEDULED_CALLS_ENABLED": "false",
+        "EXPO_PUBLIC_VOICE_NOTES_ENABLED": "false",
+        "EXPO_PUBLIC_MICROPHONE_CHAT_ENABLED": "false",
+        "EXPO_PUBLIC_REVENUECAT_TEST_STORE": "false"
+      },
       "ios": {
         "simulator": true
       },
@@ -14,11 +24,50 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "store",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_EXPERIMENTAL_FEATURES": "false",
+        "EXPO_PUBLIC_REALTIME_VOICE_ENABLED": "false",
+        "EXPO_PUBLIC_SCHEDULED_CALLS_ENABLED": "false",
+        "EXPO_PUBLIC_VOICE_NOTES_ENABLED": "false",
+        "EXPO_PUBLIC_MICROPHONE_CHAT_ENABLED": "false",
+        "EXPO_PUBLIC_REVENUECAT_TEST_STORE": "false"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "autoIncrement": true
     },
-    "production": {}
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_EXPERIMENTAL_FEATURES": "false",
+        "EXPO_PUBLIC_REALTIME_VOICE_ENABLED": "false",
+        "EXPO_PUBLIC_SCHEDULED_CALLS_ENABLED": "false",
+        "EXPO_PUBLIC_VOICE_NOTES_ENABLED": "false",
+        "EXPO_PUBLIC_MICROPHONE_CHAT_ENABLED": "false",
+        "EXPO_PUBLIC_REVENUECAT_TEST_STORE": "false"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "autoIncrement": true
+    }
   },
   "submit": {
-    "production": {}
+    "preview": {
+      "ios": {
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      }
+    },
+    "production": {
+      "ios": {
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      }
+    }
   }
 }

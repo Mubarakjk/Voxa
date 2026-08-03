@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
     gap: 2,
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(139, 124, 246, 0.12)' },
+  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(45, 212, 191, 0.12)' },
   chipFuture: { opacity: 0.5 },
   regionLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
 });

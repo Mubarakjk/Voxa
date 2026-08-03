@@ -34,8 +34,11 @@ import {
   getRitualService,
 } from '../services/ritual/ritual-service';
 import { EveningRitualContent, MorningRitualContent } from '../types/ritual';
+import { getMoodIntelligenceService } from '../services/intelligence/mood-intelligence-service';
+import { DAILY_MOOD_CHIPS, DailyMoodChipId, memoryMoodToIntelligence } from '../utils/daily-mood';
 import { getVoxaAvatarTint } from '../utils/companion-display';
-import { hapticCelebrate } from '../utils/haptics';
+import { hapticCelebrate, hapticSelection } from '../utils/haptics';
+import { SpringPressable } from '../components/premium/premium-ui';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyCheckIn'>;
 type Phase = 'overview' | 'questions' | 'goodnight';
@@ -48,6 +51,8 @@ export function DailyCheckInScreen() {
   const questions = getCheckInQuestions(period);
   const [phase, setPhase] = useState<Phase>('overview');
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [moodChip, setMoodChip] = useState<DailyMoodChipId | null>(null);
+  const [customMood, setCustomMood] = useState('');
   const [saving, setSaving] = useState(false);
   const [content, setContent] = useState<MorningRitualContent | EveningRitualContent | null>(null);
   const [streaks, setStreaks] = useState(content && 'streaks' in content ? content.streaks : null);
@@ -122,10 +127,17 @@ export function DailyCheckInScreen() {
         return;
       }
 
+      const selectedMoodLabel =
+        moodChip === 'custom'
+          ? customMood.trim() || answers.mood
+          : moodChip
+            ? DAILY_MOOD_CHIPS.find((c) => c.id === moodChip)?.label
+            : answers.mood;
+
       const entry = await checkInService.saveCheckIn({
         period,
         answers: {
-          mood: answers.mood,
+          mood: selectedMoodLabel ?? answers.mood,
           focus: answers.priority ?? answers.focus,
           helpWith: answers.helpWith,
           lookingForward: answers.lookingForward,
@@ -148,6 +160,16 @@ export function DailyCheckInScreen() {
       invalidateDashboardCache();
 
       if (!skipped) {
+        if (entry.mood) {
+          void getMoodIntelligenceService(services.storage).recordDetection({
+            userId: profile.id,
+            mood: memoryMoodToIntelligence(entry.mood),
+            confidence: 0.92,
+            source: 'check_in',
+            label: selectedMoodLabel ?? entry.mood,
+            snippet: selectedMoodLabel ?? entry.mood,
+          });
+        }
         const journal = getCompanionJournalService(services.storage, services.repositories);
         const journalBody = [
           period === 'morning' ? 'Morning ritual' : 'Evening reflection',
@@ -278,19 +300,58 @@ export function DailyCheckInScreen() {
               </>
             ) : (
               <>
-                {questions.map((question) => (
-                  <View key={question.id} style={styles.field}>
-                    <VoxaText variant="subtitle">{question.label}</VoxaText>
+                <View style={styles.field}>
+                  <VoxaText variant="subtitle">How are you feeling today?</VoxaText>
+                  <View style={styles.moodChips}>
+                    {DAILY_MOOD_CHIPS.map((chip) => {
+                      const active = moodChip === chip.id;
+                      return (
+                        <SpringPressable
+                          key={chip.id}
+                          onPress={() => {
+                            void hapticSelection();
+                            setMoodChip(chip.id);
+                            if (chip.id !== 'custom' && chip.mood) {
+                              setAnswers((current) => ({ ...current, mood: chip.label }));
+                            }
+                          }}
+                          style={active ? [styles.moodChip, styles.moodChipActive] : styles.moodChip}>
+                          <VoxaText variant="caption" color={active ? 'primarySoft' : 'textMuted'}>
+                            {chip.label}
+                          </VoxaText>
+                        </SpringPressable>
+                      );
+                    })}
+                  </View>
+                  {moodChip === 'custom' ? (
                     <TextInput
-                      value={answers[question.id] ?? ''}
-                      onChangeText={(text) => setAnswers((current) => ({ ...current, [question.id]: text }))}
-                      placeholder={question.placeholder}
+                      value={customMood}
+                      onChangeText={(text) => {
+                        setCustomMood(text);
+                        setAnswers((current) => ({ ...current, mood: text }));
+                      }}
+                      placeholder="In your own words…"
                       placeholderTextColor={colors.textMuted}
                       style={styles.input}
-                      multiline
+                      accessibilityLabel="Custom mood"
                     />
-                  </View>
-                ))}
+                  ) : null}
+                </View>
+                {questions
+                  .filter((question) => question.id !== 'mood')
+                  .map((question) => (
+                    <View key={question.id} style={styles.field}>
+                      <VoxaText variant="subtitle">{question.label}</VoxaText>
+                      <TextInput
+                        value={answers[question.id] ?? ''}
+                        onChangeText={(text) => setAnswers((current) => ({ ...current, [question.id]: text }))}
+                        placeholder={question.placeholder}
+                        placeholderTextColor={colors.textMuted}
+                        style={styles.input}
+                        multiline
+                      />
+                    </View>
+                  ))}
                 <PrimaryButton
                   label={period === 'morning' ? 'Start my day' : 'Save reflection'}
                   onPress={() => void finish(false)}
@@ -336,7 +397,18 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     textAlignVertical: 'top',
   },
-  secondary: { alignItems: 'center', paddingVertical: spacing.sm },
+  secondary: { alignItems: 'center', paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center' },
+  moodChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  moodChip: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    backgroundColor: colors.surfaceStrong,
+  },
+  moodChipActive: { borderColor: colors.primarySoft },
   goodnightFooter: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: spacing.xxl,

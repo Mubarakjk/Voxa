@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   },
   modeChipOn: {
     borderColor: colors.primarySoft,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   input: {
     borderWidth: 1,

@@ -36,11 +36,15 @@ import { FeatureGateService } from './billing/feature-gate-service';
 import { FeatureLimitError, SubscriptionService } from './billing/subscription-service';
 import { UsageTrackingService } from './billing/usage-tracking-service';
 import { GateResult } from '../types/subscription';
+import { asArray } from '../utils/as-array';
 import { buildWowExperience, WowExperienceData } from './wow/wow-experience-service';
 import { buildPhase2Dashboard } from './intelligence/phase2-dashboard-service';
 import { buildPhase3Dashboard } from './intelligence/phase3-dashboard-service';
 import { getWeeklyGrowthService } from './intelligence/weekly-growth-service';
 import { getMoodIntelligenceService } from './intelligence/mood-intelligence-service';
+import { buildChallengeMePromptExtension } from './chat/challenge-me-prompt';
+import { getDailyCheckInService } from './check-in/daily-check-in-service';
+import { buildTodayCheckInPromptBlock } from '../utils/daily-mood';
 import { getCompanionJournalService } from './journal/companion-journal-service';
 import { getRitualService } from './ritual/ritual-service';
 import { Phase2DashboardData } from '../types/phase2-intelligence';
@@ -264,10 +268,17 @@ export class VoxaCompanionService {
   }
 
   async getHomeDashboard(userId: string): Promise<HomeDashboardData> {
+    return this.buildHomeDashboard(userId);
+  }
+
+  private async buildHomeDashboard(userId: string): Promise<HomeDashboardData> {
+    let stage = 'profile';
+    try {
     const profile = await this.repositories.userProfile.getProfile();
     if (!profile) throw new Error('User profile not found');
 
-    const [memories, reminders, conversations, activeGoals, voiceSessions] = await Promise.all([
+    stage = 'repos';
+    const settled = await Promise.allSettled([
       this.repositories.memories.listMemories(userId),
       this.repositories.reminders.listReminders(userId),
       this.repositories.conversations.listConversations(userId),
@@ -275,10 +286,27 @@ export class VoxaCompanionService {
       this.repositories.voiceSessions.listSessions(userId),
     ]);
 
+    const memories = asArray<Memory>(settled[0].status === 'fulfilled' ? settled[0].value : []);
+    const reminders = asArray<Reminder>(settled[1].status === 'fulfilled' ? settled[1].value : []);
+    const conversations = asArray<Conversation>(settled[2].status === 'fulfilled' ? settled[2].value : []);
+    const activeGoals = asArray<Goal>(settled[3].status === 'fulfilled' ? settled[3].value : []);
+    const voiceSessions = asArray<VoiceSession>(settled[4].status === 'fulfilled' ? settled[4].value : []);
+
+    if (__DEV__) {
+      settled.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn(`[HomeDashboard] repo fetch ${index} failed:`, result.reason);
+        }
+      });
+    }
+
+    stage = 'homeIntelligence';
     const upcomingReminders = getUpcomingReminders(reminders, 5);
     const homeIntelligence = await this.companionIntelligence.generateHomeIntelligence(userId, profile);
-    const bundle = await this.companionIntelligence.getBundle(userId, profile.displayName);
+    stage = 'bundle';
+    const bundle = await this.companionIntelligence.getBundle(userId, profile.displayName ?? 'friend');
 
+    stage = 'dailyBriefing';
     const dailyBriefing = buildDailyBriefing({
       profile,
       memories,
@@ -290,9 +318,12 @@ export class VoxaCompanionService {
     dailyBriefing.suggestedAction = homeIntelligence.suggestedConversation;
     const upcomingReminder = upcomingReminders[0];
     const recentConversation = conversations[0] ?? null;
-    const recentMessages = recentConversation
-      ? await this.repositories.messages.listMessages(recentConversation.id)
-      : [];
+    stage = 'recentMessages';
+    const recentMessages = asArray<Message>(
+      recentConversation
+        ? await this.repositories.messages.listMessages(recentConversation.id)
+        : [],
+    );
     const latestMemory = memories[0];
     const voiceConversation = conversations.find((item) => item.channel === 'voice');
 
@@ -327,6 +358,7 @@ export class VoxaCompanionService {
       },
     ];
 
+    stage = 'wow';
     const wowExperience = buildWowExperience({
       profile,
       bundle,
@@ -340,6 +372,7 @@ export class VoxaCompanionService {
       voiceSessions,
     });
 
+    stage = 'routine';
     const routineSummary = this.storage
       ? await getRoutineCoachService(this.storage, this.repositories).getTodaySchedule(userId)
       : {
@@ -364,6 +397,7 @@ export class VoxaCompanionService {
       ? await getRitualService(this.storage).getStreaks()
       : { morning: 0, evening: 0, combined: 0, reflection: 0, coach: 0 };
 
+    stage = 'phase2';
     const phase2 = buildPhase2Dashboard({
       profile,
       bundle,
@@ -395,6 +429,7 @@ export class VoxaCompanionService {
         ]
       : [];
 
+    stage = 'phase3';
     const phase3 = buildPhase3Dashboard({
       bundle,
       memories,
@@ -426,6 +461,7 @@ export class VoxaCompanionService {
       dreamAchieved = dreams.some((d) => d.summary?.toLowerCase().includes('achieved'));
     }
 
+    stage = 'phase4';
     const phase4 = await buildPhase4Dashboard({
       profile,
       bundle,
@@ -442,6 +478,7 @@ export class VoxaCompanionService {
       dreamAchieved,
     });
 
+    stage = 'phase5';
     const phase5 = phase5Service
       ? await buildPhase5Dashboard({
           userId,
@@ -464,6 +501,7 @@ export class VoxaCompanionService {
           storyboardReady: false,
         };
 
+    stage = 'phase6';
     const phase6 = this.storage
       ? await buildPhase6Dashboard({
           userId,
@@ -505,6 +543,7 @@ export class VoxaCompanionService {
           isNightMode: false,
         };
 
+    stage = 'phase7';
     const daysAway = await getDaysSinceLastVisit();
     const phase7 = buildPhase7Dashboard({
       bundle,
@@ -518,6 +557,7 @@ export class VoxaCompanionService {
       celebrating: !!phase4.delightMoment,
     });
 
+    stage = 'phase8';
     const phase8 = await buildPhase8Dashboard({
       userId,
       bundle,
@@ -535,6 +575,7 @@ export class VoxaCompanionService {
       storage: this.storage,
     });
 
+    stage = 'phase9';
     const phase9 = await buildPhase9Dashboard({
       userId,
       profile,
@@ -552,6 +593,7 @@ export class VoxaCompanionService {
       storage: this.storage,
     });
 
+    stage = 'phase10';
     const phase10 = this.storage
       ? await buildPhase10Dashboard({
           userId,
@@ -603,6 +645,7 @@ export class VoxaCompanionService {
           pendingLevelUp: null,
         } satisfies Phase10DashboardData);
 
+    stage = 'phase11';
     const phase11 = await buildPhase11Dashboard({
       userId,
       profile,
@@ -618,6 +661,7 @@ export class VoxaCompanionService {
       storage: this.storage,
     });
 
+    stage = 'phase12';
     const phase12 = await buildPhase12Dashboard({
       userId,
       profile,
@@ -662,6 +706,14 @@ export class VoxaCompanionService {
       phase11,
       phase12,
     };
+    } catch (err) {
+      console.error(
+        `[HomeDashboard] build failed at stage=${stage}`,
+        err,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw err;
+    }
   }
 
   async loadChatMessages(conversationId: string) {
@@ -1236,6 +1288,36 @@ export class VoxaCompanionService {
       ? await getMoodIntelligenceService(this.storage).buildAdaptationBlock(input.userId, effectiveUserText)
       : '';
 
+    let checkInBlock = '';
+    if (this.storage) {
+      const checkIn = getDailyCheckInService(this.storage);
+      const [morning, evening] = await Promise.all([
+        checkIn.getTodayEntry('morning'),
+        checkIn.getTodayEntry('evening'),
+      ]);
+      const entry =
+        evening && !evening.skipped
+          ? evening
+          : morning && !morning.skipped
+            ? morning
+            : null;
+      if (entry) {
+        checkInBlock = buildTodayCheckInPromptBlock({
+          period: entry.period,
+          moodLabel: entry.answers.mood ?? entry.mood,
+          focus: entry.answers.priority ?? entry.answers.focus,
+          worrying: entry.answers.worrying,
+          smiled: entry.answers.smiled ?? entry.answers.wentWell,
+        });
+      }
+    }
+
+    const wantsChallenge =
+      /challenge (my|me)|stress-?test|push back respectfully|challenge my thinking/i.test(
+        effectiveUserText,
+      );
+    const challengeBlock = wantsChallenge ? buildChallengeMePromptExtension(effectiveUserText) : '';
+
     const reflectionBlock = this.storage
       ? getDailyReflectionService(this.storage).formatForPrompt(
           await getDailyReflectionService(this.storage).list(input.userId, 7),
@@ -1256,7 +1338,16 @@ export class VoxaCompanionService {
       }
     }
 
-    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}`;
+    let notesBlock = '';
+    if (this.storage) {
+      const { formatNotesForPrompt, listNotesForConversationContext } = await import(
+        './notes/notes-context-service'
+      );
+      const permitted = await listNotesForConversationContext(this.storage, input.userId, 3);
+      notesBlock = formatNotesForPrompt(permitted);
+    }
+
+    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${checkInBlock ? `\n\n${checkInBlock}` : ''}${challengeBlock ? `\n\n${challengeBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}${notesBlock ? `\n\n${notesBlock}` : ''}`;
     const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const aiInput = {

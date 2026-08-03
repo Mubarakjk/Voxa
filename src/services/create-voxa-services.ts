@@ -28,7 +28,7 @@ import {
   UsageTrackingService,
 } from './billing';
 import { createMusicRecognitionService } from './music/music-recognition-service';
-import { IBillingService, IPurchaseManager, ISubscriptionRepository } from './billing/billing-contracts';
+import { IBillingService, ISubscriptionRepository } from './billing/billing-contracts';
 import { RevenueCatPurchaseManager } from './billing/revenuecat-purchase-manager';
 import { RevenueCatBillingService } from './billing/revenuecat-billing-service';
 import { RevenueCatSubscriptionSynchroniser } from './billing/revenuecat-subscription-synchroniser';
@@ -36,6 +36,12 @@ import { SubscriptionEntitlementService } from './billing/subscription-entitleme
 import { SubscriptionAnalyticsService } from './billing/subscription-analytics-service';
 import { PaywallImpressionService } from './billing/paywall-impression-service';
 import { ModelRoutingService } from './billing/model-routing-service';
+import { BillingService } from './billing/billing-service';
+import { EntitlementAccessService } from './billing/entitlement-access-service';
+import { resetRoutineCoachService } from './routine/routine-coach-service';
+import { resetCompanionJournalService } from './journal/companion-journal-service';
+import { resetNutritionService } from './nutrition/nutrition-service';
+import { resetNotesServiceForTests } from './notes/notes-service';
 
 export type CreateVoxaServicesOptions = {
   storage?: IStorageService;
@@ -77,14 +83,17 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     usageTracking,
   );
   const entitlementService = new SubscriptionEntitlementService(storage);
-  const purchaseManager: IPurchaseManager = new RevenueCatPurchaseManager(entitlementService);
+  const purchaseManager = new RevenueCatPurchaseManager(entitlementService);
   const synchroniser = new RevenueCatSubscriptionSynchroniser(
     subscriptionRepo,
     entitlementService,
-    purchaseManager as RevenueCatPurchaseManager,
+    purchaseManager,
   );
+  purchaseManager.setCustomerInfoEntitlementHandler((userId, entitlement) => {
+    void synchroniser.syncFromCustomerInfo(userId, entitlement);
+  });
   const billing: IBillingService = new RevenueCatBillingService(
-    purchaseManager as RevenueCatPurchaseManager,
+    purchaseManager,
     synchroniser,
     entitlementService,
     subscriptionRepo,
@@ -96,9 +105,21 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     entitlementService,
     storage,
   );
+  const billingService = new BillingService(
+    billing,
+    subscription,
+    entitlementService,
+    synchroniser,
+    purchaseManager,
+  );
   const featureGate = new FeatureGateService();
   const subscriptionAnalytics = new SubscriptionAnalyticsService(storage);
   const paywallImpressions = new PaywallImpressionService(storage);
+  const entitlementAccess = new EntitlementAccessService(
+    subscription,
+    featureGate,
+    paywallImpressions,
+  );
   const modelRouting = new ModelRoutingService();
   createMusicRecognitionService(storage);
 
@@ -111,10 +132,12 @@ export function createVoxaServices(options: CreateVoxaServicesOptions = {}): Vox
     usageTracking,
     subscriptionRepo,
     billing,
+    billingService,
     purchaseManager,
     subscription,
     featureGate,
     entitlementService,
+    entitlementAccess,
     subscriptionAnalytics,
     paywallImpressions,
     modelRouting,
@@ -133,6 +156,10 @@ export function getVoxaServices(): VoxaServices {
 }
 
 export function resetVoxaServices(options: CreateVoxaServicesOptions = {}): VoxaServices {
+  resetRoutineCoachService();
+  resetCompanionJournalService();
+  resetNutritionService();
+  resetNotesServiceForTests();
   voxaServicesSingleton = createVoxaServices(options);
   return voxaServicesSingleton;
 }

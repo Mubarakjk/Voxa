@@ -1,13 +1,50 @@
-/** Haptic feedback stubs — wire expo-haptics when added to the project. */
+import * as Haptics from 'expo-haptics';
+import { AccessibilityInfo, Platform } from 'react-native';
+
+let reduceMotion = false;
+AccessibilityInfo.isReduceMotionEnabled?.().then((v) => {
+  reduceMotion = Boolean(v);
+});
+AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => {
+  reduceMotion = Boolean(v);
+});
+
+async function run(fn: () => Promise<void>) {
+  if (reduceMotion || Platform.OS === 'web') return;
+  try {
+    await fn();
+  } catch {
+    // Haptics unavailable on simulator / unsupported devices
+  }
+}
 
 export async function hapticLight() {
-  // no-op until expo-haptics is installed
+  await run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+}
+
+export async function hapticMedium() {
+  await run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
 }
 
 export async function hapticSuccess() {
-  // no-op
+  await run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+}
+
+export async function hapticWarning() {
+  await run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
+}
+
+export async function hapticError() {
+  await run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
+}
+
+export async function hapticSelection() {
+  await run(() => Haptics.selectionAsync());
 }
 
 export async function hapticCelebrate() {
-  // no-op
+  await run(async () => {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  });
 }

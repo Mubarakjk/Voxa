@@ -1,12 +1,13 @@
 import { STORAGE_KEYS } from '../../constants/storage-keys';
 import { CreateMessageInput, createId, Message, nowIso, UpdateMessageInput } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IMessageRepository, IStorageService } from '../contracts';
 
 export class LocalMessageRepository implements IMessageRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<Message[]> {
-    return (await this.storage.getItem<Message[]>(STORAGE_KEYS.messages)) ?? [];
+    return asArray(await this.storage.getItem<Message[]>(STORAGE_KEYS.messages));
   }
 
   private async writeAll(messages: Message[]): Promise<void> {

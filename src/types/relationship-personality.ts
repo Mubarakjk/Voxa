@@ -89,6 +89,8 @@ export type CompanionControlPreferences = {
   playfulness: number;
   optimism: number;
   respectfulness: number;
+  /** When false, relationship insight surfaces stay hidden */
+  showRelationshipInsights?: boolean;
 };
 
 export function createDefaultEvolvingPersonality(now: ISODateString): EvolvingPersonalityTraits {
@@ -144,6 +146,7 @@ export function createDefaultCompanionControls(): CompanionControlPreferences {
     playfulness: 0.45,
     optimism: 0.65,
     respectfulness: 0.85,
+    showRelationshipInsights: true,
   };
 }
 

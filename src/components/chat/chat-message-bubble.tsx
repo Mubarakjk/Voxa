@@ -281,7 +281,7 @@ function ActionRow({
 export const ChatMessageBubble = memo(ChatMessageBubbleComponent);
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-end', gap: spacing.xs, marginBottom: spacing.sm },
+  row: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-end', gap: spacing.sm, marginBottom: spacing.md },
   rowUser: { justifyContent: 'flex-end' },
   bubbleAvatar: {
     width: 28,
@@ -292,26 +292,26 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   bubble: {
-    maxWidth: '84%',
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    maxWidth: '82%',
+    borderRadius: 20,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.sm + 4,
     gap: spacing.sm,
   },
   voiceBubble: { minWidth: 250 },
   bubbleVoxa: {
     backgroundColor: colors.chatVoxa,
-    borderBottomLeftRadius: 8,
+    borderBottomLeftRadius: 6,
     borderWidth: 1,
     borderColor: colors.glassBorder,
   },
   bubbleUser: {
     backgroundColor: colors.chatUser,
-    borderBottomRightRadius: 8,
+    borderBottomRightRadius: 6,
   },
   bookmarked: { borderColor: colors.primarySoft },
   failed: { borderWidth: 1, borderColor: colors.danger },
-  messageText: { lineHeight: 23 },
+  messageText: { lineHeight: 22, fontSize: 16 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
   speakBtn: {
     minWidth: 28,

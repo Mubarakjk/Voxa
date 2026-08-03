@@ -1,7 +1,6 @@
 import { UserProfile } from '../../types';
-import { HybridTextToSpeechService } from './text-to-speech-service';
-import { resolveVoiceIdentity, resolveVoiceSpeechConfig } from './voice-identity-resolver';
-import { speakSimple, stopSimpleSpeech, isSimpleSpeechActive } from './simple-speech-service';
+import { resolveSpeechConfigForProfile } from './voice-options-service';
+import { speakExclusive, stopAllSpeech, getSpeechOwner } from './speech-playback-coordinator';
 import { voiceNotePlayerService } from '../audio/voice-note-player-service';
 
 /** Strip markdown / UI noise so spoken replies sound natural. */
@@ -16,7 +15,6 @@ export function textForSpeech(raw: string): string {
     .trim();
 }
 
-const hybridTts = new HybridTextToSpeechService();
 let speakingMessageId: string | null = null;
 
 export function getSpeakingMessageId() {
@@ -24,37 +22,32 @@ export function getSpeakingMessageId() {
 }
 
 export function isCompanionSpeaking() {
-  return hybridTts.isSpeaking() || isSimpleSpeechActive();
+  return getSpeechOwner() === 'companion' || getSpeechOwner() === 'bubble';
 }
 
 export async function stopCompanionSpeech() {
   speakingMessageId = null;
-  await hybridTts.stop();
-  stopSimpleSpeech();
+  await stopAllSpeech();
   await voiceNotePlayerService.stop();
 }
 
 /**
- * Speak a companion reply aloud.
- * Prefers OpenAI TTS when configured; falls back to on-device expo-speech.
+ * Speak a companion reply aloud using the curated selected VoiceOption.
+ * OpenAI TTS is preferred when configured; Hybrid TTS falls back to on-device speech
+ * with the same pitch/rate mapping (not a different personality).
  */
 export async function speakCompanionReply(
   text: string,
   profile: UserProfile | null,
-  options?: { messageId?: string },
+  options?: { messageId?: string; owner?: 'companion' | 'bubble' },
 ): Promise<void> {
   const cleaned = textForSpeech(text);
   if (!cleaned || !profile) return;
 
-  await stopCompanionSpeech();
   speakingMessageId = options?.messageId ?? null;
-
-  const identity = resolveVoiceIdentity(profile);
-  const speech = resolveVoiceSpeechConfig(identity, profile.preferences.voicePersonality);
+  const speech = resolveSpeechConfigForProfile(profile);
   try {
-    await hybridTts.speak(cleaned, speech);
-  } catch {
-    await speakSimple(cleaned, profile);
+    await speakExclusive(options?.owner ?? 'companion', cleaned, speech);
   } finally {
     speakingMessageId = null;
   }

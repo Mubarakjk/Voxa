@@ -1,18 +1,12 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { LoadingPulse } from '../premium/premium-ui';
 import { PrimaryButton } from './buttons';
 import { VoxaText } from './voxa-text';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 export function LoadingState({ label = 'Loading...' }: { label?: string }) {
-  return (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.primarySoft} size="large" />
-      <VoxaText variant="caption" color="textMuted" style={styles.label}>
-        {label}
-      </VoxaText>
-    </View>
-  );
+  return <LoadingPulse label={label} />;
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
@@ -37,7 +31,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     gap: spacing.md,
   },
-  label: { marginTop: spacing.sm },
   errorTitle: { textAlign: 'center' },
   errorMessage: { textAlign: 'center', lineHeight: 22 },
 });

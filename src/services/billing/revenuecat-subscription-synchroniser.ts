@@ -1,4 +1,5 @@
 import { hasSupabaseConfig } from '../../config/env';
+import { getRevenueCatEntitlementId } from '../../config/revenuecat-env';
 import { getSupabaseClient } from '../supabase/client';
 import { UserProfile } from '../../types';
 import { ISubscriptionRepository } from './billing-contracts';
@@ -53,7 +54,7 @@ export class RevenueCatSubscriptionSynchroniser {
       const record: SubscriptionMirrorRecord = {
         user_id: userId,
         revenuecat_app_user_id: entitlement.revenueCatAppUserId ?? userId,
-        entitlement_id: entitlement.entitlementId ?? 'voxa_pro',
+        entitlement_id: entitlement.entitlementId ?? getRevenueCatEntitlementId(),
         product_id: entitlement.productId,
         platform: undefined,
         status: entitlement.isPro
@@ -138,10 +139,8 @@ export class RevenueCatSubscriptionSynchroniser {
 }
 
 export async function bootstrapBillingForProfile(
-  synchroniser: RevenueCatSubscriptionSynchroniser,
-  purchaseManager: RevenueCatPurchaseManager,
+  billingService: import('./billing-service').BillingService,
   profile: UserProfile,
 ): Promise<void> {
-  await purchaseManager.configure(profile.id);
-  await synchroniser.linkAuthenticatedUser(profile.id);
+  await billingService.configureForUser(profile.id);
 }

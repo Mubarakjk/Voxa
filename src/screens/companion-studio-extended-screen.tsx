@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
     backgroundColor: colors.surface,
   },
-  chipActive: { borderColor: colors.primarySoft, backgroundColor: 'rgba(139, 124, 246, 0.12)' },
+  chipActive: { borderColor: colors.primarySoft, backgroundColor: 'rgba(45, 212, 191, 0.12)' },
   input: {
     color: colors.text,
     fontSize: 15,

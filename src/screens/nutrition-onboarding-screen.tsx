@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   modeRowSelected: {
     borderColor: colors.primarySoft,
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
   },
   modeCopy: { flex: 1, gap: 4 },
   radio: {

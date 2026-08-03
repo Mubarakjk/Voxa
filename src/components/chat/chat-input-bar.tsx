@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { isFeatureVisible } from '../../config/feature-status';
+import { isMicrophoneChatEnabled, isVoiceNotesEnabled } from '../../config/release-voice';
 import { colors, layout, radius, spacing } from '../../constants/theme';
 import { useVoxa } from '../../context/voxa-context';
 import { PendingAttachmentInput } from '../../types';
@@ -46,7 +47,7 @@ export function ChatInputBar({
   const [voiceNoteBusy, setVoiceNoteBusy] = useState(false);
 
   const showCamera = isFeatureVisible('cameraPhoto');
-  const showVoiceNote = isFeatureVisible('voiceNote');
+  const showVoiceNote = isVoiceNotesEnabled() && isMicrophoneChatEnabled() && isFeatureVisible('voiceNote');
   const showGallery = isFeatureVisible('galleryPicker');
 
   useEffect(() => {

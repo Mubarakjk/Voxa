@@ -4,8 +4,10 @@ import { Platform } from 'react-native';
 import { hasSupabaseConfig, getSupabaseUrl } from '../../config/env';
 import {
   getRevenueCatAndroidApiKey,
+  getRevenueCatAnnualProductId,
   getRevenueCatEntitlementId,
   getRevenueCatIosApiKey,
+  getRevenueCatMonthlyProductId,
   getRevenueCatOfferingId,
   getRevenueCatApiKeyForPlatform,
   hasRevenueCatConfig,
@@ -87,6 +89,18 @@ export function validateBillingEnvironment(): BillingValidationReport {
       detail: getRevenueCatOfferingId(),
     },
     {
+      id: 'rc_product_monthly',
+      label: 'Monthly product ID',
+      ok: Boolean(getRevenueCatMonthlyProductId()),
+      detail: getRevenueCatMonthlyProductId(),
+    },
+    {
+      id: 'rc_product_annual',
+      label: 'Annual product ID',
+      ok: Boolean(getRevenueCatAnnualProductId()),
+      detail: getRevenueCatAnnualProductId(),
+    },
+    {
       id: 'supabase',
       label: 'Supabase URL + anon key',
       ok: hasSupabaseConfig(),
@@ -119,7 +133,15 @@ export function validateBillingEnvironment(): BillingValidationReport {
   ];
 
   const requiredForPurchases = checks.filter((check) =>
-    ['rc_platform_key', 'rc_entitlement', 'rc_offering', 'ios_bundle', 'android_package'].includes(check.id),
+    [
+      'rc_platform_key',
+      'rc_entitlement',
+      'rc_offering',
+      'rc_product_monthly',
+      'rc_product_annual',
+      'ios_bundle',
+      'android_package',
+    ].includes(check.id),
   );
 
   return {
@@ -143,14 +165,13 @@ export function validateOfferingPackages(offerings: {
     };
   }
 
-  const monthlyValid = offerings.monthly?.productId === VOXA_PRICING.productIds.monthly;
-  const annualValid = offerings.annual?.productId === VOXA_PRICING.productIds.annual;
+  const monthlyId = getRevenueCatMonthlyProductId();
+  const annualId = getRevenueCatAnnualProductId();
+  const monthlyValid = offerings.monthly?.productId === monthlyId;
+  const annualValid = offerings.annual?.productId === annualId;
 
   if (!monthlyValid || !annualValid) {
-    const missing = [
-      !monthlyValid ? VOXA_PRICING.productIds.monthly : null,
-      !annualValid ? VOXA_PRICING.productIds.annual : null,
-    ]
+    const missing = [!monthlyValid ? monthlyId : null, !annualValid ? annualId : null]
       .filter(Boolean)
       .join(', ');
     return {

@@ -3,6 +3,7 @@ import { CompanionIntelligenceBundle } from '../../types/companion-intelligence'
 import { Goal, Memory } from '../../types';
 import { ConversationMilestone, ConversationMilestoneKind } from '../../types/phase8-retention';
 import { TodayRoutineSummary } from '../../types/routine';
+import { asStringArray } from '../../utils/as-array';
 import { IStorageService } from '../contracts';
 
 export function detectConversationMilestone(input: {
@@ -12,7 +13,7 @@ export function detectConversationMilestone(input: {
   routine: TodayRoutineSummary;
   shownIds?: string[];
 }): ConversationMilestone | null {
-  const shown = new Set(input.shownIds ?? []);
+  const shown = new Set(asStringArray(input.shownIds));
   const rel = input.bundle.relationship;
   const candidates: ConversationMilestone[] = [];
 
@@ -65,7 +66,12 @@ export class ConversationMilestonesService {
 
   async loadShownIds(): Promise<string[]> {
     if (!this.storage) return [];
-    return (await this.storage.getItem<string[]>(STORAGE_KEYS.conversationMilestonesShown)) ?? [];
+    const raw = await this.storage.getItem<unknown>(STORAGE_KEYS.conversationMilestonesShown);
+    const shown = asStringArray(raw);
+    if (raw != null && !Array.isArray(raw)) {
+      await this.storage.setItem(STORAGE_KEYS.conversationMilestonesShown, shown);
+    }
+    return shown;
   }
 
   async markShown(milestone: ConversationMilestone): Promise<void> {

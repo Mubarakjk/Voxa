@@ -9,6 +9,7 @@ import { proactiveConversationService } from '../proactive/proactive-conversatio
 import { FriendRelationshipProfile, buildFriendRelationshipProfile } from './friend-relationship-engine';
 import { RelationshipMoment, relationshipMomentsEngine } from './relationship-moments-engine';
 import { VoiceSession } from '../../types';
+import { asArray } from '../../utils/as-array';
 
 export type WowExperienceData = {
   dailyQuote: string;
@@ -75,7 +76,7 @@ export function buildWowExperience(input: BuildWowExperienceInput): WowExperienc
     now,
   });
 
-  const lastUserMessage = [...input.recentMessages].reverse().find((m) => m.role === 'user');
+  const lastUserMessage = [...asArray<Message>(input.recentMessages)].reverse().find((m) => m.role === 'user');
   const continueConversation =
     input.recentConversation && lastUserMessage
       ? {
@@ -99,7 +100,9 @@ export function buildWowExperience(input: BuildWowExperienceInput): WowExperienc
 
   const achievements = buildAchievements(input.bundle, input.goals, input.memories);
 
-  const weeklyReflection = input.bundle.weeklyReflections[0];
+  const weeklyReflection = asArray<(typeof input.bundle.weeklyReflections)[number]>(
+    input.bundle.weeklyReflections,
+  )[0];
   const weeklyRecap = weeklyReflection
     ? weeklyReflection.relationshipGrowth || weeklyReflection.progress
     : null;
@@ -147,7 +150,7 @@ export function buildWowExperience(input: BuildWowExperienceInput): WowExperienc
     achievements,
     weeklyRecap,
     monthlyRecap,
-    lifeTimeline: input.bundle.lifeTimeline.slice(0, 12),
+    lifeTimeline: asArray<LifeTimelineEvent>(input.bundle.lifeTimeline).slice(0, 12),
     voiceMemoryCount,
     progressPercent,
     heroMessage,
@@ -166,7 +169,9 @@ function buildAchievements(
 ): WowExperienceData['achievements'] {
   const items: WowExperienceData['achievements'] = [];
 
-  bundle.relationship.milestones.slice(0, 3).forEach((m) => {
+  asArray<(typeof bundle.relationship.milestones)[number]>(bundle.relationship.milestones)
+    .slice(0, 3)
+    .forEach((m) => {
     items.push({ id: m.id, title: m.label, subtitle: 'Milestone unlocked', icon: 'trophy-outline' });
   });
 
@@ -197,11 +202,12 @@ function buildAchievements(
     });
   }
 
-  if (bundle.insideJokes.length > 0) {
+  const jokes = asArray<(typeof bundle.insideJokes)[number]>(bundle.insideJokes);
+  if (jokes.length > 0) {
     items.push({
       id: 'inside-joke',
       title: 'Inside joke',
-      subtitle: bundle.insideJokes[0].label.slice(0, 40),
+      subtitle: jokes[0].label.slice(0, 40),
       icon: 'happy-outline',
     });
   }

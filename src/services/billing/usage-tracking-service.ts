@@ -70,8 +70,9 @@ export class UsageTrackingService {
 
   async record(userId: string, metric: UsageMetric, amount = 1): Promise<UsageBucket> {
     const usage = await this.getUsage(userId);
-    usage.daily[metric] += amount;
-    usage.monthly[metric] += amount;
+    const delta = Math.max(0, amount);
+    usage.daily[metric] = Math.max(0, usage.daily[metric] + delta);
+    usage.monthly[metric] = Math.max(0, usage.monthly[metric] + delta);
     return this.saveUsage(userId, usage);
   }
 

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
 import { StaggerFade } from '../premium/premium-ui';
+import { CountUpNumber } from '../premium/count-up-number';
 import { colors, radius, spacing } from '../../constants/theme';
 import { DailyBriefing } from '../../types/daily-briefing';
 import { Reminder } from '../../types';
@@ -19,6 +20,7 @@ type Props = {
   upcomingReminder: Reminder | null;
   routineSummary: TodayRoutineSummary;
   reflectionPending: boolean;
+  showRelationship?: boolean;
   onFollowUp: () => void;
   onReflection: () => void;
   onNews: () => void;
@@ -34,6 +36,7 @@ export function HomeMorningBriefCard({
   upcomingReminder,
   routineSummary,
   reflectionPending,
+  showRelationship = true,
   onFollowUp,
   onReflection,
   onNews,
@@ -65,17 +68,26 @@ export function HomeMorningBriefCard({
           {dailyBriefing.personalMessage}
         </VoxaText>
 
-        <Pressable style={styles.relationshipRow} onPress={onRelationship}>
-          <View style={styles.track}>
-            <View style={[styles.fill, { width: `${relationship.progressPercent}%` }]} />
-          </View>
-          <View style={styles.relMeta}>
-            <VoxaText variant="caption" color="textMuted">
-              {relationship.progressPercent}% toward {relationship.nextStageLabel ?? 'Inner Circle'}
-            </VoxaText>
-            <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-          </View>
-        </Pressable>
+        {showRelationship ? (
+          <Pressable
+            style={styles.relationshipRow}
+            onPress={onRelationship}
+            accessibilityRole="button"
+            accessibilityLabel={`${relationship.stageLabel}, ${relationship.progressPercent} percent toward next stage`}>
+            <View style={styles.track}>
+              <View style={[styles.fill, { width: `${relationship.progressPercent}%` }]} />
+            </View>
+            <View style={styles.relMeta}>
+              <View style={styles.relCount}>
+                <CountUpNumber value={relationship.progressPercent} style={styles.relCountText} />
+                <VoxaText variant="caption" color="textMuted">
+                  % toward {relationship.nextStageLabel ?? 'Inner Circle'}
+                </VoxaText>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+            </View>
+          </Pressable>
+        ) : null}
 
         <BriefRow
           icon="compass-outline"
@@ -182,6 +194,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
   },
   relMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  relCount: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  relCountText: { fontSize: 13, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   rowBody: { flex: 1, gap: 2 },
   pressed: { opacity: 0.85 },

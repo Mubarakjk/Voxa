@@ -1,5 +1,7 @@
 import { COMPANION_MODES } from '../../constants/companion-modes';
+import { personalityStylePromptBlock } from '../../constants/companion-identity';
 import { VOXA_SAFETY } from '../../constants/safety';
+import { getVoiceOption } from '../../constants/voice-options';
 import { buildHumanStyleExtension } from '../personality/human-response-style';
 import { CompanionModeId, Goal, Memory, Reminder, UserProfile } from '../../types';
 
@@ -59,6 +61,12 @@ export function buildVoxaSystemPrompt(input: {
     `Current time: ${now}`,
     `Default mode: ${input.userProfile.companion.defaultMode}`,
     `Voice personality: ${input.userProfile.preferences.voicePersonality}`,
+    (() => {
+      const voice = getVoiceOption(input.userProfile.preferences.selectedVoiceOptionId);
+      return `Speaking voice: ${voice.displayName} (${voice.shortDescription})`;
+    })(),
+    `Companion name: ${input.userProfile.companionIdentity?.voxaName ?? 'Voxa'}`,
+    personalityStylePromptBlock(input.userProfile.companionIdentity?.personalityStyle),
     input.userProfile.mainReason ? `Main reason for Voxa: ${input.userProfile.mainReason}` : '',
     '',
     '## Relevant memories',
@@ -70,10 +78,15 @@ export function buildVoxaSystemPrompt(input: {
     '## Upcoming reminders',
     remindersBlock,
     '',
+    '## Notes privacy',
+    '- User notes are private by default. Never claim you read a note unless its content was attached in this conversation or the user explicitly shared it.',
+    '- Do not invent note contents.',
+    '',
     '## Behavior',
     '- Reference context naturally — never recite lists.',
     '- Be proactive about reminders and goals when relevant.',
     '- Keep replies focused: usually 1–3 short paragraphs.',
+    '- You are an AI companion — be honest about that if asked.',
     buildHumanStyleExtension(),
     input.companionContextExtension ?? '',
   ]

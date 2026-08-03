@@ -1,12 +1,13 @@
 import { NavigationContainer, DarkTheme, useNavigationContainerRef } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorState, LoadingState } from './src/components/ui/screen-state';
 import { colors } from './src/constants/theme';
 import { hasSupabaseConfig } from './src/config/env';
+import { isScheduledCallsEnabled } from './src/config/scheduled-calls';
 import { AuthProvider, useAuth } from './src/context/auth-context';
 import { VoxaProvider, useVoxa } from './src/context/voxa-context';
 import { AuthNavigator } from './src/navigation/auth-navigator';
@@ -14,6 +15,8 @@ import { RootNavigator } from './src/navigation/root-navigator';
 import { OnboardingScreen } from './src/screens/onboarding-screen';
 import { CelebrationOverlay } from './src/components/phase10/celebration-overlay';
 import { useProactiveCheckInNotifications } from './src/hooks/use-proactive-check-in-notifications';
+import { useScheduledCallNotifications } from './src/hooks/use-scheduled-call-notifications';
+import { runScheduledCallNotificationCleanup } from './src/services/scheduled-calls/scheduled-call-notification-cleanup';
 import { RootStackParamList } from './src/navigation/types';
 
 const navTheme = {
@@ -39,6 +42,19 @@ function AppRoot() {
     navigationRef,
     enabled: isReady && Boolean(profile?.onboardingComplete),
   });
+
+  useScheduledCallNotifications({
+    profile,
+    services,
+    navigationRef,
+    enabled:
+      isScheduledCallsEnabled() && isReady && Boolean(profile?.onboardingComplete),
+  });
+
+  useEffect(() => {
+    if (!isReady || isScheduledCallsEnabled()) return;
+    void runScheduledCallNotificationCleanup(services.storage, profile?.id).catch(() => undefined);
+  }, [isReady, profile?.id, services.storage]);
 
   if (isLoading) {
     return (

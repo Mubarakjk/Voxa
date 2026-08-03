@@ -102,9 +102,9 @@ const styles = StyleSheet.create({
   special: {
     padding: spacing.md,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 124, 246, 0.25)',
+    borderColor: 'rgba(45, 212, 191, 0.25)',
     gap: spacing.xs,
   },
   missed: { fontStyle: 'italic', textAlign: 'center' },

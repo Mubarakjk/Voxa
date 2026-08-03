@@ -40,6 +40,8 @@ export type UserPreferences = {
    * Does not enable microphone recording.
    */
   voxaSpeaksReplies?: boolean;
+  /** Curated product voice id (aurora, nova, …). */
+  selectedVoiceOptionId?: string;
   /** Fine-grained companion behaviour controls. */
   companionControls?: import('./relationship-personality').CompanionControlPreferences;
 };
@@ -94,6 +96,7 @@ export function createDefaultPreferences(): UserPreferences {
     morningGreetingEnabled: true,
     eveningReflectionEnabled: true,
     voxaSpeaksReplies: true,
+    selectedVoiceOptionId: 'aurora',
     companionControls: createDefaultCompanionControls(),
   };
 }

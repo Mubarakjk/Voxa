@@ -150,6 +150,6 @@ export class WeeklyRecapService {
 let instance: WeeklyRecapService | null = null;
 
 export function getWeeklyRecapService(storage: IStorageService, repositories?: VoxaRepositories) {
-  if (!instance || repositories) instance = new WeeklyRecapService(storage, repositories);
+  if (!instance) instance = new WeeklyRecapService(storage, repositories);
   return instance;
 }

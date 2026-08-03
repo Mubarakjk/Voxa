@@ -6,13 +6,14 @@ import {
   Reminder,
   UpdateReminderInput,
 } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IReminderRepository, IStorageService } from '../contracts';
 
 export class LocalReminderRepository implements IReminderRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<Reminder[]> {
-    return (await this.storage.getItem<Reminder[]>(STORAGE_KEYS.reminders)) ?? [];
+    return asArray(await this.storage.getItem<Reminder[]>(STORAGE_KEYS.reminders));
   }
 
   private async writeAll(reminders: Reminder[]): Promise<void> {

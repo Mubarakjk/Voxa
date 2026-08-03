@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   copy: { flex: 1, gap: 4 },
 });

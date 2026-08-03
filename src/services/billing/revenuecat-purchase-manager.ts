@@ -1,20 +1,20 @@
 import Purchases, {
   CustomerInfo,
+  CustomerInfoUpdateListener,
   LOG_LEVEL,
   PACKAGE_TYPE,
   PurchasesOfferings,
   PurchasesPackage,
 } from 'react-native-purchases';
 
+import { formatFallbackPrice, VOXA_PRICING } from '../../constants/voxa-pricing';
 import {
-  calculateAnnualSavingsPercent,
-  formatFallbackPrice,
-  VOXA_PRICING,
-} from '../../constants/voxa-pricing';
-import {
+  getRevenueCatAnnualProductId,
   getRevenueCatApiKeyForPlatform,
   getRevenueCatEntitlementId,
+  getRevenueCatMonthlyProductId,
   getRevenueCatOfferingId,
+  getRevenueCatProductIds,
   hasRevenueCatConfig,
 } from '../../config/revenuecat-env';
 import { BillingPeriod } from '../../types/subscription';
@@ -26,6 +26,13 @@ import {
   PurchaseOutcome,
 } from './billing-types';
 import { BillingLog } from './billing-logger';
+import { normalizeEntitlementSnapshot } from './entitlement-normalize';
+import {
+  isBillingPending,
+  isBillingUserCancelled,
+  sanitizeBillingMessage,
+  toFriendlyBillingError,
+} from './friendly-billing-errors';
 import { validateOfferingPackages } from './billing-validation';
 import { getBillingRuntime, getPurchasesUnavailableMessage } from './runtime-environment';
 import { SubscriptionEntitlementService } from './subscription-entitlement-service';
@@ -40,20 +47,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isUserCancelled(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { userCancelled?: boolean; code?: string | number };
-  return candidate.userCancelled === true || candidate.code === 'PurchaseCancelledError' || candidate.code === 1;
-}
-
-function isPending(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const code = (error as { code?: string | number }).code;
-  return code === 'PURCHASE_PENDING_ERROR' || code === 'PaymentPendingError';
-}
-
 function mapPeriodFromPackage(pkg: PurchasesPackage): BillingPeriod {
   if (pkg.packageType === PACKAGE_TYPE.ANNUAL) return 'annual';
+  return 'monthly';
+}
+
+function billingPeriodForProductId(productId: string): BillingPeriod {
+  const annualId = getRevenueCatAnnualProductId();
+  if (productId === annualId || productId.toLowerCase().includes('annual')) return 'annual';
   return 'monthly';
 }
 
@@ -87,25 +88,26 @@ function findPackage(
   const current = offerings.all[offeringId] ?? offerings.current;
   if (!current) return undefined;
 
+  const productIds = getRevenueCatProductIds();
   const byId =
     period === 'monthly'
       ? current.availablePackages.find(
           (pkg) =>
-            pkg.product.identifier === VOXA_PRICING.productIds.monthly ||
-            pkg.identifier === VOXA_PRICING.productIds.monthly ||
+            pkg.product.identifier === productIds.monthly ||
+            pkg.identifier === productIds.monthly ||
             pkg.packageType === PACKAGE_TYPE.MONTHLY,
         )
       : current.availablePackages.find(
           (pkg) =>
-            pkg.product.identifier === VOXA_PRICING.productIds.annual ||
-            pkg.identifier === VOXA_PRICING.productIds.annual ||
+            pkg.product.identifier === productIds.annual ||
+            pkg.identifier === productIds.annual ||
             pkg.packageType === PACKAGE_TYPE.ANNUAL,
         );
 
   return byId ?? current.availablePackages.find((pkg) => mapPeriodFromPackage(pkg) === period);
 }
 
-function entitlementFromCustomerInfo(
+export function entitlementFromCustomerInfo(
   info: CustomerInfo,
   entitlementService: SubscriptionEntitlementService,
 ): EntitlementSnapshot {
@@ -121,6 +123,7 @@ function entitlementFromCustomerInfo(
     return {
       isPro: false,
       source: 'none',
+      entitlementId,
       revenueCatAppUserId: info.originalAppUserId,
       cachedAt,
       offline: false,
@@ -128,20 +131,21 @@ function entitlementFromCustomerInfo(
   }
 
   const productId = active.productIdentifier;
-  const billingPeriod: BillingPeriod = productId.includes('annual') ? 'annual' : 'monthly';
+  const billingPeriod = billingPeriodForProductId(productId);
   const isTrial = active.periodType === 'TRIAL';
+  const expiresAt = active.expirationDate ?? undefined;
 
-  return {
-    isPro: true,
+  const mapped: EntitlementSnapshot = {
+    isPro: Boolean(active.isActive),
     source: isTrial ? 'platform_trial' : 'revenuecat',
     entitlementId,
     productId,
     billingPeriod,
-    expiresAt: active.expirationDate ?? undefined,
+    expiresAt,
     purchaseDate: active.originalPurchaseDate ?? undefined,
     willRenew: active.willRenew,
     isTrialActive: isTrial,
-    trialEnd: isTrial ? active.expirationDate ?? undefined : undefined,
+    trialEnd: isTrial ? expiresAt : undefined,
     billingIssue: active.billingIssueDetectedAt != null,
     gracePeriod: active.isActive && active.billingIssueDetectedAt != null,
     refunded: !active.isActive && active.unsubscribeDetectedAt != null,
@@ -149,11 +153,14 @@ function entitlementFromCustomerInfo(
     cachedAt,
     offline: false,
   };
+
+  return normalizeEntitlementSnapshot(mapped);
 }
 
 function fallbackOfferings(): OfferingsSnapshot {
   const monthlyPrice = formatFallbackPrice(VOXA_PRICING.monthlyFallbackGBP);
   const annualPrice = formatFallbackPrice(VOXA_PRICING.annualFallbackGBP);
+  const productIds = getRevenueCatProductIds();
 
   return {
     configured: hasRevenueCatConfig(),
@@ -168,8 +175,8 @@ function fallbackOfferings(): OfferingsSnapshot {
       : 'Showing development fallback prices. Store packages are not loaded.',
     message: getBillingRuntime().isExpoGo ? getPurchasesUnavailableMessage() : undefined,
     monthly: {
-      identifier: VOXA_PRICING.productIds.monthly,
-      productId: VOXA_PRICING.productIds.monthly,
+      identifier: productIds.monthly,
+      productId: productIds.monthly,
       priceString: `${monthlyPrice} (fallback)`,
       price: VOXA_PRICING.monthlyFallbackGBP,
       currencyCode: VOXA_PRICING.currency,
@@ -177,8 +184,8 @@ function fallbackOfferings(): OfferingsSnapshot {
       trialEligible: false,
     },
     annual: {
-      identifier: VOXA_PRICING.productIds.annual,
-      productId: VOXA_PRICING.productIds.annual,
+      identifier: productIds.annual,
+      productId: productIds.annual,
       priceString: `${annualPrice} (fallback)`,
       price: VOXA_PRICING.annualFallbackGBP,
       currencyCode: VOXA_PRICING.currency,
@@ -205,8 +212,19 @@ export class RevenueCatPurchaseManager {
   private lastRefreshAt: string | undefined;
   private purchaseInFlight = false;
   private restoreInFlight = false;
+  private customerInfoListener: CustomerInfoUpdateListener | null = null;
+  private onCustomerInfoEntitlement:
+    | ((userId: string, entitlement: EntitlementSnapshot) => void | Promise<void>)
+    | null = null;
 
   constructor(private readonly entitlementService: SubscriptionEntitlementService) {}
+
+  /** Called when CustomerInfo changes (listener) so profile/Supabase can sync. */
+  setCustomerInfoEntitlementHandler(
+    handler: ((userId: string, entitlement: EntitlementSnapshot) => void | Promise<void>) | null,
+  ) {
+    this.onCustomerInfoEntitlement = handler;
+  }
 
   isAvailable(): boolean {
     const runtime = getBillingRuntime();
@@ -243,6 +261,7 @@ export class RevenueCatPurchaseManager {
         Purchases.configure({ apiKey, appUserID: appUserId });
         globalConfigured = true;
         configuredForUserId = appUserId;
+        this.ensureCustomerInfoListener();
         BillingLog.configureSuccess();
         return;
       }
@@ -253,10 +272,45 @@ export class RevenueCatPurchaseManager {
         configuredForUserId = appUserId;
         BillingLog.accountLinkSuccess();
       }
+
+      this.ensureCustomerInfoListener();
     } catch (err) {
-      BillingLog.configureFailure(err instanceof Error ? err.message : 'configure failed');
-      throw err;
+      BillingLog.configureFailure(toFriendlyBillingError(err, 'generic'));
+      if (__DEV__) {
+        console.error('[Voxa Billing] Purchases.configure failed (non-blocking)', err);
+      }
+      // Do not throw — app must boot on free access when billing is unavailable.
     }
+  }
+
+  private ensureCustomerInfoListener() {
+    if (this.customerInfoListener || !globalConfigured) return;
+
+    this.customerInfoListener = (info: CustomerInfo) => {
+      const userId = configuredForUserId;
+      if (!userId) return;
+
+      const entitlement = entitlementFromCustomerInfo(info, this.entitlementService);
+      BillingLog.customerInfoUpdate(entitlement.isPro);
+
+      void (async () => {
+        if (this.onCustomerInfoEntitlement) {
+          await this.onCustomerInfoEntitlement(userId, entitlement);
+        } else {
+          await this.entitlementService.setEntitlement(userId, entitlement);
+        }
+      })().catch((err) => {
+        BillingLog.entitlementRefreshFailure(toFriendlyBillingError(err, 'generic'));
+      });
+    };
+
+    Purchases.addCustomerInfoUpdateListener(this.customerInfoListener);
+  }
+
+  removeCustomerInfoListener() {
+    if (!this.customerInfoListener) return;
+    Purchases.removeCustomerInfoUpdateListener(this.customerInfoListener);
+    this.customerInfoListener = null;
   }
 
   async logIn(appUserId: string): Promise<CustomerInfoSnapshot> {
@@ -268,10 +322,11 @@ export class RevenueCatPurchaseManager {
     try {
       const { customerInfo } = await Purchases.logIn(appUserId);
       configuredForUserId = appUserId;
+      this.ensureCustomerInfoListener();
       BillingLog.accountLinkSuccess();
       return this.snapshotFromCustomerInfo(customerInfo, appUserId);
     } catch (err) {
-      BillingLog.accountLinkFailure(err instanceof Error ? err.message : 'logIn failed');
+      BillingLog.accountLinkFailure(toFriendlyBillingError(err, 'generic'));
       throw err;
     }
   }
@@ -282,7 +337,7 @@ export class RevenueCatPurchaseManager {
       await Purchases.logOut();
       BillingLog.accountLogoutSuccess();
     } catch (err) {
-      BillingLog.accountLogoutFailure(err instanceof Error ? err.message : 'logOut failed');
+      BillingLog.accountLogoutFailure(toFriendlyBillingError(err, 'generic'));
     } finally {
       configuredForUserId = undefined;
       this.lastOfferings = null;
@@ -297,13 +352,15 @@ export class RevenueCatPurchaseManager {
 
     BillingLog.entitlementRefreshStart();
     try {
+      configuredForUserId = appUserId;
       const info = await Purchases.getCustomerInfo();
       this.lastRefreshAt = new Date().toISOString();
       const snapshot = this.snapshotFromCustomerInfo(info, appUserId);
+      await this.entitlementService.setEntitlement(appUserId, snapshot.entitlement);
       BillingLog.entitlementRefreshSuccess(snapshot.entitlement.isPro);
       return snapshot;
     } catch (err) {
-      BillingLog.entitlementRefreshFailure(err instanceof Error ? err.message : 'refresh failed');
+      BillingLog.entitlementRefreshFailure(toFriendlyBillingError(err, 'generic'));
       throw err;
     }
   }
@@ -328,10 +385,14 @@ export class RevenueCatPurchaseManager {
         return this.lastOfferings;
       }
 
-      const monthly = current.availablePackages.find(
-        (pkg) => mapPeriodFromPackage(pkg) === 'monthly',
-      );
-      const annual = current.availablePackages.find((pkg) => mapPeriodFromPackage(pkg) === 'annual');
+      const monthlyId = getRevenueCatMonthlyProductId();
+      const annualId = getRevenueCatAnnualProductId();
+      const monthly =
+        current.availablePackages.find((pkg) => pkg.product.identifier === monthlyId) ??
+        current.availablePackages.find((pkg) => mapPeriodFromPackage(pkg) === 'monthly');
+      const annual =
+        current.availablePackages.find((pkg) => pkg.product.identifier === annualId) ??
+        current.availablePackages.find((pkg) => mapPeriodFromPackage(pkg) === 'annual');
 
       this.lastOfferings = enrichOfferings({
         configured: true,
@@ -347,7 +408,7 @@ export class RevenueCatPurchaseManager {
       BillingLog.offeringLoadSuccess('store');
       return this.lastOfferings;
     } catch (err) {
-      BillingLog.offeringLoadFailure(err instanceof Error ? err.message : 'offerings failed');
+      BillingLog.offeringLoadFailure(toFriendlyBillingError(err, 'offerings'));
       this.lastOfferings = enrichOfferings(fallbackOfferings());
       return this.lastOfferings;
     }
@@ -355,7 +416,7 @@ export class RevenueCatPurchaseManager {
 
   async purchaseSubscription(period: BillingPeriod, appUserId: string): Promise<PurchaseOutcome> {
     if (this.purchaseInFlight) {
-      return { success: false, errorMessage: 'Purchase already in progress.' };
+      return { success: false, errorMessage: 'Purchase already in progress. Please wait a moment.' };
     }
 
     if (!this.isAvailable()) {
@@ -375,7 +436,10 @@ export class RevenueCatPurchaseManager {
       if (!offerings.monthlyPackageValid && period === 'monthly') {
         const outcome: PurchaseOutcome = {
           success: false,
-          errorMessage: offerings.setupMessage ?? 'Monthly package unavailable.',
+          errorMessage: sanitizeBillingMessage(
+            offerings.setupMessage ?? 'Monthly package unavailable.',
+            'purchase',
+          ),
         };
         this.lastPurchase = outcome;
         BillingLog.purchaseFailure(outcome.errorMessage!);
@@ -384,7 +448,10 @@ export class RevenueCatPurchaseManager {
       if (!offerings.annualPackageValid && period === 'annual') {
         const outcome: PurchaseOutcome = {
           success: false,
-          errorMessage: offerings.setupMessage ?? 'Annual package unavailable.',
+          errorMessage: sanitizeBillingMessage(
+            offerings.setupMessage ?? 'Annual package unavailable.',
+            'purchase',
+          ),
         };
         this.lastPurchase = outcome;
         BillingLog.purchaseFailure(outcome.errorMessage!);
@@ -396,7 +463,10 @@ export class RevenueCatPurchaseManager {
       if (!pkg) {
         const outcome: PurchaseOutcome = {
           success: false,
-          errorMessage: offerings.setupMessage ?? 'Subscription package unavailable.',
+          errorMessage: sanitizeBillingMessage(
+            offerings.setupMessage ?? 'Subscription package unavailable.',
+            'purchase',
+          ),
         };
         this.lastPurchase = outcome;
         BillingLog.purchaseFailure(outcome.errorMessage!);
@@ -441,14 +511,18 @@ export class RevenueCatPurchaseManager {
       BillingLog.purchaseSuccess(pkg.product.identifier);
       return outcome;
     } catch (err) {
-      if (isUserCancelled(err)) {
+      if (isBillingUserCancelled(err)) {
         const outcome: PurchaseOutcome = { success: false, cancelled: true };
         this.lastPurchase = outcome;
         BillingLog.purchaseCancelled();
         return outcome;
       }
-      if (isPending(err)) {
-        const outcome: PurchaseOutcome = { success: false, pending: true };
+      if (isBillingPending(err)) {
+        const outcome: PurchaseOutcome = {
+          success: false,
+          pending: true,
+          errorMessage: toFriendlyBillingError(err, 'purchase'),
+        };
         this.lastPurchase = outcome;
         BillingLog.purchasePending();
         return outcome;
@@ -456,7 +530,7 @@ export class RevenueCatPurchaseManager {
 
       const outcome: PurchaseOutcome = {
         success: false,
-        errorMessage: err instanceof Error ? err.message : 'Purchase failed.',
+        errorMessage: toFriendlyBillingError(err, 'purchase'),
       };
       this.lastPurchase = outcome;
       BillingLog.purchaseFailure(outcome.errorMessage!);
@@ -468,7 +542,7 @@ export class RevenueCatPurchaseManager {
 
   async restorePurchases(appUserId: string): Promise<PurchaseOutcome> {
     if (this.restoreInFlight) {
-      return { success: false, errorMessage: 'Restore already in progress.' };
+      return { success: false, errorMessage: 'Restore already in progress. Please wait a moment.' };
     }
 
     if (!this.isAvailable()) {
@@ -484,6 +558,7 @@ export class RevenueCatPurchaseManager {
     BillingLog.restoreStart();
 
     try {
+      configuredForUserId = appUserId;
       const info = await Purchases.restorePurchases();
       const entitlement = entitlementFromCustomerInfo(info, this.entitlementService);
       await this.entitlementService.setEntitlement(appUserId, entitlement);
@@ -509,7 +584,7 @@ export class RevenueCatPurchaseManager {
     } catch (err) {
       const outcome: PurchaseOutcome = {
         success: false,
-        errorMessage: err instanceof Error ? err.message : 'Restore failed.',
+        errorMessage: toFriendlyBillingError(err, 'restore'),
       };
       this.lastRestore = outcome;
       BillingLog.restoreFailure(outcome.errorMessage!);
@@ -567,8 +642,7 @@ export async function openPlatformSubscriptionManagement(): Promise<boolean> {
   try {
     await Purchases.showManageSubscriptions();
     return true;
-  } catch (err) {
-    console.warn('[Voxa Billing] Unable to open subscription management.', err);
+  } catch {
     return false;
   }
 }

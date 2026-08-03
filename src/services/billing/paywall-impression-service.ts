@@ -1,7 +1,6 @@
+import { PAYWALL_COOLDOWN_MS } from '../../constants/free-pro-access';
 import { STORAGE_KEYS } from '../../constants/storage-keys';
 import { IStorageService } from '../contracts';
-
-const COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 export class PaywallImpressionService {
   constructor(private readonly storage: IStorageService) {}
@@ -14,7 +13,7 @@ export class PaywallImpressionService {
     if (force) return true;
     const last = await this.storage.getItem<number>(this.key(userId));
     if (!last) return true;
-    return Date.now() - last >= COOLDOWN_MS;
+    return Date.now() - last >= PAYWALL_COOLDOWN_MS;
   }
 
   async recordImpression(userId: string): Promise<void> {

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { FadeIn, ScreenHeader, SectionCard } from '../components/premium/premium-ui';
 import { PrimaryButton } from '../components/ui/buttons';
@@ -10,10 +10,12 @@ import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
 import { isFeatureVisible } from '../config/feature-status';
+import { isFreeLaunchMode } from '../config/launch-mode';
 import { hasSupabaseConfig, getDataSourceMode } from '../config/env';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { useVoxa } from '../context/voxa-context';
+import { usePlanStatus } from '../hooks/use-plan-status';
 import { RootStackParamList } from '../navigation/types';
 import { getAIProviderInfo } from '../services/ai/create-ai-service';
 import { notificationService } from '../services/notifications/notification-service';
@@ -26,8 +28,16 @@ import {
   cycleTheme,
 } from '../utils/settings';
 import { createDefaultCompanionControls } from '../types/relationship-personality';
+import { trackEvent } from '../services/analytics/analytics-service';
+import { navigateToPaywall } from '../utils/paywall-navigation';
 import { openPlatformSubscriptionManagement } from '../services/billing/revenuecat-purchase-manager';
-import { PlanStatus } from '../types/subscription';
+import { LEGAL_URLS } from '../constants/legal-urls';
+import { toFriendlyBillingError } from '../services/billing/friendly-billing-errors';
+import {
+  restoreAlertMessage,
+  restoreAlertTitle,
+  RESTORE_FAILURE_MESSAGE,
+} from '../services/billing/restore-messages';
 import { getVoxaDisplayName } from '../utils/companion-display';
 import { requestAccountDeletion } from '../services/privacy/account-deletion-service';
 import { getWeatherService } from '../services/weather/weather-service';
@@ -39,22 +49,21 @@ export function YouScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { isAuthEnabled, signOut } = useAuth();
   const { profile, refreshProfile, resetLocalData, services, signOutCleanup } = useVoxa();
+  const { planStatus, reload: reloadPlanStatus } = usePlanStatus();
   const [debugInfo, setDebugInfo] = useState<DebugPanelInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
-  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
   const [weatherLocationLabel, setWeatherLocationLabel] = useState('Not set');
   const [nutritionMode, setNutritionMode] = useState<NutritionMode>('off');
 
-  const loadPlanStatus = useCallback(async () => {
+  const loadExtras = useCallback(async () => {
     if (!profile) return;
-    setPlanStatus(await services.subscription.getPlanStatus(profile.id));
     const pref = await getWeatherService(services.storage).getPreference();
     setWeatherLocationLabel(getWeatherService(services.storage).formatLocationLabel(pref));
     if (isFeatureVisible('calorieTracking')) {
       const nutritionPrefs = await getNutritionService(services.storage).getPreferences(profile.id);
       setNutritionMode(nutritionPrefs.mode);
     }
-  }, [profile, services.storage, services.subscription]);
+  }, [profile, services.storage]);
 
   const loadDebugInfo = useCallback(async () => {
     if (!profile) return;
@@ -65,8 +74,9 @@ export function YouScreen() {
     useCallback(() => {
       void refreshProfile();
       void loadDebugInfo();
-      void loadPlanStatus();
-    }, [refreshProfile, loadDebugInfo, loadPlanStatus]),
+      void reloadPlanStatus();
+      void loadExtras();
+    }, [refreshProfile, loadDebugInfo, reloadPlanStatus, loadExtras]),
   );
 
   const exportData = async () => {
@@ -92,7 +102,8 @@ export function YouScreen() {
   const handlePress = async (itemId: string, label: string, displayOnly?: boolean) => {
     if (displayOnly) return;
     if (itemId === 'companion-customise') return navigation.navigate('CompanionStudio');
-    if (itemId === 'voice') return navigation.navigate('CompanionStudioVoice');
+    if (itemId === 'voice') return navigation.navigate('VoicePicker');
+    if (itemId === 'notes') return navigation.navigate('NotesHub');
     if (itemId === 'voxa-speaks' && profile) {
       const next = profile.preferences.voxaSpeaksReplies === false;
       await services.repositories.userProfile.updateProfile({
@@ -114,6 +125,7 @@ export function YouScreen() {
     }
     if (itemId === 'privacy-policy') return navigation.navigate('PrivacyPolicy');
     if (itemId === 'terms') return navigation.navigate('TermsOfService');
+    if (itemId === 'scheduled-calls') return navigation.navigate('ScheduledCalls');
     if (itemId === 'theme' && profile) {
       await services.repositories.userProfile.updateProfile({
         preferences: { ...profile.preferences, ...cycleTheme(profile) },
@@ -139,9 +151,26 @@ export function YouScreen() {
     if (itemId === 'life-os') return navigation.navigate('LifeOSHub');
     if (itemId === 'memory-debug') return navigation.navigate('Memory');
     if (itemId === 'music' && isFeatureVisible('musicRecognition')) return navigation.navigate('Music');
-    if (itemId === 'subscription-upgrade' || itemId === 'subscription-plan' || itemId === 'subscription-usage') {
-      return navigation.navigate('Paywall', { source: 'you' });
+    if (
+      itemId === 'subscription-upgrade' ||
+      itemId === 'subscription-plan' ||
+      itemId === 'subscription-compare'
+    ) {
+      navigateToPaywall(navigation, 'you');
+      return;
     }
+    if (itemId === 'about-voxa') {
+      Alert.alert(
+        'About Voxa',
+        'Voxa is your AI companion for reflection, growth, and everyday life. Everything is included — no subscriptions required in this version.',
+      );
+      return;
+    }
+    if (itemId === 'contact-support') {
+      void Linking.openURL(`mailto:${LEGAL_URLS.supportEmail}?subject=Voxa%20Support`);
+      return;
+    }
+    if (itemId === 'app-version') return;
     if (itemId === 'subscription-manage') {
       const opened = await openPlatformSubscriptionManagement();
       if (!opened) {
@@ -154,10 +183,22 @@ export function YouScreen() {
     }
     if (itemId === 'subscription-restore') {
       if (!profile) return;
-      await services.subscription.restorePurchases(profile.id);
-      await refreshProfile();
-      await loadPlanStatus();
-      Alert.alert('Restore complete', 'Your subscription status has been refreshed.');
+      try {
+        trackEvent('restore_started');
+        await services.billingService.restorePurchases(profile.id);
+        await refreshProfile();
+        await reloadPlanStatus();
+        const status = await services.billingService.getPlanStatus(profile.id);
+        if (status.isPro) {
+          trackEvent('restore_succeeded');
+        } else {
+          trackEvent('restore_no_entitlement');
+        }
+        Alert.alert(restoreAlertTitle(status.isPro), restoreAlertMessage(status.isPro));
+      } catch (err) {
+        trackEvent('restore_failed');
+        Alert.alert('Restore failed', toFriendlyBillingError(err, 'restore') || RESTORE_FAILURE_MESSAGE);
+      }
       return;
     }
     if (itemId === 'export-data') return exportData();
@@ -268,19 +309,52 @@ export function YouScreen() {
     );
   }
 
-  const sections = buildSettingsSections(profile, planStatus ?? undefined, weatherLocationLabel, nutritionMode);
+  const appVersion = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0';
+  const sections = buildSettingsSections(
+    profile,
+    planStatus ?? undefined,
+    weatherLocationLabel,
+    nutritionMode,
+    appVersion,
+  );
   const subscription = sections.find((s) => s.title === 'Subscription');
   const companion = sections.find((s) => s.title === 'Companion');
   const personalisation = sections.find((s) => s.title === 'Personalisation');
+  const preferences = sections.find((s) => s.title === 'Preferences');
   const notifications = sections.find((s) => s.title === 'Notifications & check-ins');
   const privacy = sections.find((s) => s.title === 'Privacy & data');
+  const support = sections.find((s) => s.title === 'Support');
+  const about = sections.find((s) => s.title === 'About');
+  const freeLaunch = isFreeLaunchMode();
   const voxaName = getVoxaDisplayName(profile);
+
+  const renderSection = (section: { title: string; items: Array<{ id: string; label: string; value?: string; displayOnly?: boolean }> }) => (
+    <View key={section.title}>
+      <SectionHeader title={section.title} />
+      <GlassCard style={styles.group}>
+        {section.items.map((item, index) => (
+          <SettingRow
+            key={item.id}
+            label={item.label}
+            value={item.value}
+            displayOnly={item.displayOnly}
+            isLast={index === section.items.length - 1}
+            onPress={() => handlePress(item.id, item.label, item.displayOnly)}
+          />
+        ))}
+      </GlassCard>
+    </View>
+  );
 
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
-          <ScreenHeader eyebrow="Your space" title="You" subtitle="Profile, companion, and preferences." />
+          <ScreenHeader
+            eyebrow="Your space"
+            title="You"
+            subtitle={freeLaunch ? 'Settings and preferences.' : 'Profile, companion, and preferences.'}
+          />
         </FadeIn>
 
         <GlassCard variant="highlight" style={styles.profile}>
@@ -293,107 +367,75 @@ export function YouScreen() {
             <View style={styles.profileInfo}>
               <VoxaText variant="subtitle">{profile.displayName}</VoxaText>
               <VoxaText variant="caption" color="textSecondary">
-                {profile.email ?? 'Voxa companion'} · {getDataSourceMode()}
+                {profile.email ?? 'Signed in locally'}
               </VoxaText>
             </View>
           </View>
         </GlassCard>
 
-        <SectionCard
-          title="Companion Studio"
-          subtitle={`Shape ${voxaName}'s voice, personality & look`}
-          actionLabel="Open"
-          onPress={() => navigation.navigate('CompanionStudio')}
-        />
-
-        {subscription ? (
+        {freeLaunch ? (
           <>
-            <SectionHeader title="Subscription" />
+            {companion ? renderSection(companion) : null}
+            {preferences ? renderSection(preferences) : null}
+            {privacy ? renderSection(privacy) : null}
+            {support ? renderSection(support) : null}
+            {about ? renderSection(about) : null}
+          </>
+        ) : (
+          <>
+            <SectionCard
+              title="Companion Studio"
+              subtitle={`Shape ${voxaName}'s voice, personality & look`}
+              actionLabel="Open"
+              onPress={() => navigation.navigate('CompanionStudio')}
+            />
+
+            {subscription ? renderSection(subscription) : null}
+
+            {companion ? (
+              <>
+                <SectionHeader title="Companion & memory" />
+                <GlassCard style={styles.group}>
+                  {companion.items
+                    .filter((item) => !['features', 'music', 'memory-debug'].includes(item.id))
+                    .map((item, index, arr) => (
+                      <SettingRow
+                        key={item.id}
+                        label={item.label}
+                        value={item.value}
+                        isLast={index === arr.length - 1}
+                        onPress={() => handlePress(item.id, item.label, 'displayOnly' in item ? item.displayOnly : undefined)}
+                      />
+                    ))}
+                </GlassCard>
+              </>
+            ) : null}
+
+            {[personalisation, notifications].map((section) => (section ? renderSection(section) : null))}
+
+            {privacy ? renderSection(privacy) : null}
+
+            <SectionHeader title="More" />
             <GlassCard style={styles.group}>
-              {subscription.items.map((item, index) => (
-                <SettingRow
-                  key={item.id}
-                  label={item.label}
-                  value={item.value}
-                  isLast={index === subscription.items.length - 1}
-                  onPress={() => handlePress(item.id, item.label, item.displayOnly)}
-                />
-              ))}
+              <SettingRow label="All features" value="" onPress={() => navigation.navigate('Features')} />
+              <SettingRow label="My Companion" value="Bond & insights" onPress={() => navigation.navigate('MyCompanion')} />
+              <SettingRow label="Life Book" value="Chapters" onPress={() => navigation.navigate('LifeBook')} />
+              <SettingRow label="Memories" value="View" onPress={() => navigation.navigate('Memory')} isLast={!isFeatureVisible('musicRecognition')} />
+              {isFeatureVisible('musicRecognition') ? (
+                <SettingRow label="Music recognition" value="" onPress={() => navigation.navigate('Music')} isLast />
+              ) : null}
             </GlassCard>
           </>
-        ) : null}
-
-        {companion ? (
-          <>
-            <SectionHeader title="Companion & memory" />
-            <GlassCard style={styles.group}>
-              {companion.items
-                .filter((item) => !['features', 'music', 'memory-debug'].includes(item.id))
-                .map((item, index, arr) => (
-                  <SettingRow
-                    key={item.id}
-                    label={item.label}
-                    value={item.value}
-                    isLast={index === arr.length - 1}
-                    onPress={() => handlePress(item.id, item.label, item.displayOnly)}
-                  />
-                ))}
-            </GlassCard>
-          </>
-        ) : null}
-
-        {[personalisation, notifications].map((section) =>
-          section ? (
-            <View key={section.title}>
-              <SectionHeader title={section.title} />
-              <GlassCard style={styles.group}>
-                {section.items.map((item, index) => (
-                  <SettingRow
-                    key={item.id}
-                    label={item.label}
-                    value={item.value}
-                    displayOnly={item.displayOnly}
-                    isLast={index === section.items.length - 1}
-                    onPress={() => handlePress(item.id, item.label, item.displayOnly)}
-                  />
-                ))}
-              </GlassCard>
-            </View>
-          ) : null,
         )}
 
-        {privacy ? (
-          <>
-            <SectionHeader title="Privacy & data" />
-            <GlassCard style={styles.group}>
-              {privacy.items.map((item, index) => (
-                <SettingRow
-                  key={item.id}
-                  label={item.label}
-                  value={item.value}
-                  isLast={index === privacy.items.length - 1}
-                  onPress={() => handlePress(item.id, item.label, item.displayOnly)}
-                />
-              ))}
-            </GlassCard>
-          </>
+        {__DEV__ ? (
+          <Pressable style={styles.debugToggle} onPress={() => setShowDebug((v) => !v)}>
+            <VoxaText variant="caption" color="textMuted">
+              {showDebug ? 'Hide diagnostics' : 'Diagnostics'}
+            </VoxaText>
+            <Ionicons name={showDebug ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+          </Pressable>
         ) : null}
-
-        <SectionHeader title="More" />
-        <GlassCard style={styles.group}>
-          <SettingRow label="All features" value="" onPress={() => navigation.navigate('Features')} />
-          <SettingRow label="Memories" value="View" onPress={() => navigation.navigate('Memory')} isLast={!isFeatureVisible('musicRecognition')} />
-          {isFeatureVisible('musicRecognition') ? (
-            <SettingRow label="Music recognition" value="" onPress={() => navigation.navigate('Music')} isLast />
-          ) : null}
-        </GlassCard>
-
-        <Pressable style={styles.debugToggle} onPress={() => setShowDebug((v) => !v)}>
-          <VoxaText variant="caption" color="textMuted">
-            {showDebug ? 'Hide diagnostics' : 'Diagnostics'}
-          </VoxaText>
-          <Ionicons name={showDebug ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-        </Pressable>
 
         {showDebug && __DEV__ ? (
           <GlassCard style={styles.group}>
@@ -474,6 +516,8 @@ function SettingRow({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={value ? `${label}, ${value}` : label}
       style={({ pressed }) => [styles.row, !isLast && styles.rowBorder, pressed && styles.rowPressed]}>
       {content}
     </Pressable>
@@ -492,7 +536,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(139, 124, 246, 0.15)',
+    backgroundColor: 'rgba(45, 212, 191, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -505,7 +549,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md12,
+    minHeight: layout.minTapTarget,
   },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.glassBorder },
   rowPressed: { backgroundColor: colors.surfaceStrong },

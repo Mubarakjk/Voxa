@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CompositeScreenProps, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
@@ -10,7 +10,9 @@ import {
   FadeIn,
   ScreenHeader,
   SectionCard,
+  SkeletonBlock,
   StatCard,
+  StaggerFade,
 } from '../components/premium/premium-ui';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
@@ -18,7 +20,7 @@ import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
 import { getGoalCategoryLabel } from '../constants/goal-options';
 import { isExperimentalFeaturesEnabled } from '../config/feature-status';
 import { isMemoryPinned, sortMemoriesWithPinnedFirst, VOICE_MEMORY_TAG } from '../utils/memory-pinned';
-import { colors, layout, spacing } from '../constants/theme';
+import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { useCachedDashboard } from '../hooks/use-cached-dashboard';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
@@ -39,8 +41,11 @@ import { MonthlyReplayCard } from '../components/phase8/monthly-replay-card';
 import { Phase12JourneyHub } from '../components/phase12/phase12-journey-hub';
 import { JourneyPlaySection } from '../components/phase10/journey-play-section';
 import { OurStorySection } from '../components/phase11/our-story-section';
+import { CommandBarSheet } from '../components/life-os/command-bar-sheet';
 import { recordTiming } from '../utils/performance-metrics';
-import { openVoiceConversation } from '../utils/voice-navigation';
+import { canStartLiveVoice, openVoiceConversation } from '../utils/voice-navigation';
+import { hapticSuccess } from '../utils/haptics';
+import { handleCommandBarResult } from '../utils/command-bar-navigation';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Journey'>,
@@ -58,13 +63,20 @@ export function JourneyScreen({ navigation }: Props) {
 
   const { dashboard, isLoading, load } = useCachedDashboard(profile?.id, fetchDashboard);
 
-  const routineCoach = getRoutineCoachService(services.storage, services.repositories);
-  const journalService = getCompanionJournalService(services.storage, services.repositories);
+  const routineCoach = useMemo(
+    () => getRoutineCoachService(services.storage, services.repositories),
+    [services.storage, services.repositories],
+  );
+  const journalService = useMemo(
+    () => getCompanionJournalService(services.storage, services.repositories),
+    [services.storage, services.repositories],
+  );
   const [journalEntry, setJournalEntry] = useState<CompanionJournalEntry | null>(null);
   const [dailyNudge, setDailyNudge] = useState<string | null>(null);
   const [todaySchedule, setTodaySchedule] = useState<Awaited<ReturnType<typeof routineCoach.getTodaySchedule>> | null>(null);
   const [mounted, setMounted] = useState({ timeline: false, memories: false, goals: false, extras: false });
   const [refreshing, setRefreshing] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {
     const t1 = setTimeout(() => setMounted((m) => ({ ...m, timeline: true })), 80);
@@ -111,7 +123,12 @@ export function JourneyScreen({ navigation }: Props) {
   if (isLoading && !dashboard) {
     return (
       <ScreenShell padded={false}>
-        <EmptyState icon="trail-sign-outline" title="Loading your journey" message="Gathering memories, goals, and milestones..." />
+        <View style={styles.skeletonWrap}>
+          <SkeletonBlock height={48} />
+          <SkeletonBlock height={120} />
+          <SkeletonBlock height={160} />
+          <SkeletonBlock height={100} />
+        </View>
       </ScreenShell>
     );
   }
@@ -119,7 +136,13 @@ export function JourneyScreen({ navigation }: Props) {
   if (!dashboard) {
     return (
       <ScreenShell padded={false}>
-        <EmptyState icon="trail-sign-outline" title="Your journey" message="Start talking with Voxa to build your story." />
+        <EmptyState
+          icon="trail-sign-outline"
+          title="Your journey starts here"
+          message="Talk with Voxa, set a goal, or complete a routine — your story will grow here."
+          actionLabel="Start talking"
+          onAction={() => navigation.navigate('Talk')}
+        />
       </ScreenShell>
     );
   }
@@ -142,13 +165,14 @@ export function JourneyScreen({ navigation }: Props) {
     if (!profile) return;
     try {
       await routineCoach.markBlock(profile.id, blockId, 'completed');
+      void hapticSuccess();
       void getRelationshipGrowthService(services.storage, services.repositories)
         .recordRoutineCompleted(profile.id)
         .catch(() => undefined);
       void load();
       void loadExtras();
-    } catch (err) {
-      Alert.alert('Could not update routine', err instanceof Error ? err.message : 'Try again.');
+    } catch {
+      Alert.alert('Could not update routine', 'Something went wrong. Please try again.');
     }
   };
 
@@ -182,51 +206,101 @@ export function JourneyScreen({ navigation }: Props) {
           <ScreenHeader
             eyebrow="Your story together"
             title="Journey"
-            subtitle="Memories, goals, milestones, and reflections — all in one place."
+            subtitle="Presence, progress, and the chapters you share."
           />
         </FadeIn>
 
-        <View style={styles.statsRow}>
-          <StatCard label="Memories" value={String(dashboard.memories.length)} detail="What Voxa remembers" />
-          <StatCard label="Goals" value={String(dashboard.activeGoals.length)} detail="Active right now" />
-          <StatCard label="Bond" value={`${phase2.relationshipDashboard.relationshipScore}`} detail="Relationship score" />
-        </View>
+        <Pressable
+          onPress={() => setCommandOpen(true)}
+          style={styles.searchEntry}
+          accessibilityRole="button"
+          accessibilityLabel="Search your life">
+          <Ionicons name="search-outline" size={18} color={colors.textMuted} />
+          <VoxaText variant="body" color="textMuted">
+            Search your life…
+          </VoxaText>
+        </Pressable>
 
-        <Phase12JourneyHub
-          data={dashboard.phase12}
-          onNavigate={(screen) => {
-            if (screen === 'ScheduledCheckIns') stackNav.navigate('ScheduledCheckIns');
-            else if (screen === 'ProactiveCheckIns') stackNav.navigate('ProactiveCheckIns');
-            else if (screen === 'DailyReflection') stackNav.navigate('DailyReflection');
-            else if (screen === 'RelationshipGrowth') stackNav.navigate('RelationshipGrowth');
-            else if (screen === 'MoodTimeline') stackNav.navigate('MoodTimeline');
-            else if (screen === 'WeeklyLetter') stackNav.navigate('WeeklyLetter');
-            else if (screen === 'PhotoMemories') stackNav.navigate('PhotoMemories');
-            else if (screen === 'MoodJournal') stackNav.navigate('MoodJournal');
-            else if (screen === 'CoachingHub') stackNav.navigate('CoachingHub');
-            else if (screen === 'ConversationWorlds') stackNav.navigate('ConversationWorlds');
-            else if (screen === 'RelationshipTimeline') stackNav.navigate('RelationshipTimeline');
-            else if (screen === 'CompanionChallenges') stackNav.navigate('CompanionChallenges');
-            else if (screen === 'GiftsCollection') stackNav.navigate('GiftsCollection');
-            else if (screen === 'DailyNews') stackNav.navigate('DailyNews');
-          }}
-        />
+        {wow.streakDays >= 7 && wow.streakDays % 7 === 0 ? (
+          <StaggerFade index={0}>
+            <GlassCard style={styles.streakCelebrate}>
+              <VoxaText variant="caption" color="primarySoft">
+                Streak celebration
+              </VoxaText>
+              <VoxaText variant="subtitle">{wow.streakDays}-day streak</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                Showing up this consistently is rare. Open Achievements to see what you unlocked.
+              </VoxaText>
+              <Pressable
+                onPress={() => stackNav.navigate('AchievementCentre')}
+                style={styles.streakCta}
+                accessibilityRole="button"
+                accessibilityLabel="Open achievements">
+                <VoxaText variant="caption" color="primarySoft">
+                  View achievements
+                </VoxaText>
+              </Pressable>
+            </GlassCard>
+          </StaggerFade>
+        ) : null}
+
+        <StaggerFade index={0}>
+          <View style={styles.statsRow}>
+            <StatCard label="Memories" value={String(dashboard.memories.length)} detail="What Voxa remembers" />
+            <StatCard label="Goals" value={String(dashboard.activeGoals.length)} detail="Active right now" />
+            <StatCard label="Bond" value={`${phase2.relationshipDashboard.relationshipScore}`} detail="Relationship score" />
+          </View>
+        </StaggerFade>
+
+        <StaggerFade index={1}>
+          <SectionCard
+            title="Life Dashboard"
+            subtitle="Life Score, today’s focus, and your toolkit"
+            actionLabel="Open"
+            onPress={() => stackNav.navigate('LifeOSHub')}
+          />
+        </StaggerFade>
+
+        <StaggerFade index={2}>
+          <Phase12JourneyHub
+            data={dashboard.phase12}
+            onNavigate={(screen) => {
+              if (screen === 'ScheduledCheckIns') stackNav.navigate('ScheduledCheckIns');
+              else if (screen === 'ProactiveCheckIns') stackNav.navigate('ProactiveCheckIns');
+              else if (screen === 'DailyReflection') stackNav.navigate('DailyReflection');
+              else if (screen === 'RelationshipGrowth') stackNav.navigate('RelationshipGrowth');
+              else if (screen === 'MoodTimeline') stackNav.navigate('MoodTimeline');
+              else if (screen === 'WeeklyLetter') stackNav.navigate('WeeklyLetter');
+              else if (screen === 'PhotoMemories') stackNav.navigate('PhotoMemories');
+              else if (screen === 'MoodJournal') stackNav.navigate('MoodJournal');
+              else if (screen === 'CoachingHub') stackNav.navigate('CoachingHub');
+              else if (screen === 'ConversationWorlds') stackNav.navigate('ConversationWorlds');
+              else if (screen === 'RelationshipTimeline') stackNav.navigate('RelationshipTimeline');
+              else if (screen === 'CompanionChallenges') stackNav.navigate('CompanionChallenges');
+              else if (screen === 'GiftsCollection') stackNav.navigate('GiftsCollection');
+              else if (screen === 'DailyNews') stackNav.navigate('DailyNews');
+              else if (screen === 'NotesHub') stackNav.navigate('NotesHub');
+            }}
+          />
+        </StaggerFade>
 
         {dashboard.phase11?.ourStory?.length ? (
-          <FadeIn delay={12}>
+          <StaggerFade index={3}>
             <OurStorySection entries={dashboard.phase11.ourStory} />
-          </FadeIn>
+          </StaggerFade>
         ) : null}
 
         {dashboard.phase10 ? (
-          <JourneyPlaySection
-            data={dashboard.phase10}
-            onArcade={() => stackNav.navigate('GamesHub')}
-            onAchievements={() => stackNav.navigate('AchievementCentre')}
-            onDecks={() => stackNav.navigate('ConversationDecks')}
-            onChallenge={() => stackNav.navigate('DailyChallenge')}
-            onMission={() => stackNav.navigate('WeeklyMission')}
-          />
+          <StaggerFade index={4}>
+            <JourneyPlaySection
+              data={dashboard.phase10}
+              onArcade={() => stackNav.navigate('GamesHub')}
+              onAchievements={() => stackNav.navigate('AchievementCentre')}
+              onDecks={() => stackNav.navigate('ConversationDecks')}
+              onChallenge={() => stackNav.navigate('DailyChallenge')}
+              onMission={() => stackNav.navigate('WeeklyMission')}
+            />
+          </StaggerFade>
         ) : null}
 
         {phase8.sharedTimeline.length > 0 ? (
@@ -278,15 +352,6 @@ export function JourneyScreen({ navigation }: Props) {
             <CoachScoreCard phase5={dashboard.phase5} />
           </FadeIn>
         ) : null}
-
-        <FadeIn delay={47}>
-          <SectionCard
-            title="Life OS"
-            subtitle="Goals, vision, dreams & decisions"
-            actionLabel="Open"
-            onPress={() => stackNav.navigate('LifeOSHub')}
-          />
-        </FadeIn>
 
         <FadeIn delay={48}>
           <SectionCard
@@ -614,13 +679,13 @@ export function JourneyScreen({ navigation }: Props) {
           </>
         ) : null}
 
-        {experimental && wow.voiceMemoryCount > 0 ? (
+        {experimental && canStartLiveVoice() && wow.voiceMemoryCount > 0 ? (
           <>
             <SectionHeader title="Voice memories" />
             <SectionCard title="Voice conversations" subtitle={`${wow.voiceMemoryCount} voice moments saved`}>
               <Pressable onPress={() => openVoiceConversation(stackNav, { autoStart: true })}>
                 <VoxaText variant="caption" color="primarySoft">
-                  Start a voice call →
+                  Continue in Talk →
                 </VoxaText>
               </Pressable>
             </SectionCard>
@@ -653,6 +718,11 @@ export function JourneyScreen({ navigation }: Props) {
           </>
         ) : null}
       </ScrollView>
+      <CommandBarSheet
+        visible={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        onNavigate={(result) => handleCommandBarResult(stackNav, result)}
+      />
     </ScreenShell>
   );
 }
@@ -662,7 +732,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
     paddingBottom: layout.tabBarHeight + spacing.xxl,
-    gap: spacing.lg,
+    gap: spacing.xl,
+  },
+  streakCelebrate: { gap: spacing.sm },
+  streakCta: { minHeight: 44, justifyContent: 'center' },
+  searchEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  skeletonWrap: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.xl,
+    gap: spacing.md,
   },
   statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
   achievementRow: { gap: spacing.sm, paddingBottom: spacing.md },

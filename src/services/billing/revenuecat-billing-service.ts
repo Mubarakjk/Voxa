@@ -85,8 +85,22 @@ export class RevenueCatBillingService implements IBillingService {
   }
 
   async configureForUser(userId: string): Promise<void> {
-    await this.purchaseManager.configure(userId);
-    await this.synchroniser.linkAuthenticatedUser(userId);
+    try {
+      if (!hasRevenueCatConfig()) {
+        if (__DEV__) {
+          console.info('[Voxa Billing] Billing unavailable in this development build.');
+        }
+        return;
+      }
+      await this.purchaseManager.configure(userId);
+      await this.synchroniser.linkAuthenticatedUser(userId);
+    } catch (err) {
+      BillingLog.configureFailure(err instanceof Error ? err.message : 'Billing configure failed');
+      if (__DEV__) {
+        console.error('[Voxa Billing] configureForUser failed (non-blocking)', err);
+      }
+      // Keep cached/free entitlement — never block app bootstrap.
+    }
   }
 
   async signOut(userId: string): Promise<void> {

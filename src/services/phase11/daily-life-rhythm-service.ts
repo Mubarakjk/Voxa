@@ -23,7 +23,7 @@ export function buildDailyLifeRhythm(input: {
       greeting: `Good morning, ${input.firstName}.`,
       focusLine: input.todayFocus,
       routineHint: input.routineNext ? `Next up: ${input.routineNext}` : null,
-      weatherPlaceholder: 'Weather — add your city in settings later',
+      weatherPlaceholder: '',
       quoteLine: QUOTES[seed % QUOTES.length],
       reflectionLine: null,
       progressLine: input.routineTotal > 0 ? `${input.routineDone}/${input.routineTotal} routine blocks today` : null,
@@ -47,7 +47,7 @@ export function buildDailyLifeRhythm(input: {
 
   return {
     period: 'afternoon',
-    greeting: `Hey ${input.firstName}.`,
+    greeting: `Good afternoon, ${input.firstName}.`,
     focusLine: input.todayFocus,
     routineHint: input.routineNext,
     weatherPlaceholder: '',

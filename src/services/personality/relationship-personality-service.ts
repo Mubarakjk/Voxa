@@ -10,6 +10,7 @@ import {
 import { createDefaultAdaptiveState } from '../../types/phase3-intelligence';
 import { Goal, Message, UserProfile, nowIso } from '../../types';
 import { CompanionModeId } from '../../types';
+import { asArray, asStringArray } from '../../utils/as-array';
 import { conversationStyleEngine } from './conversation-style-engine';
 import { dailyPersonalityEngine } from './daily-personality-engine';
 import { insideJokesEngine } from './inside-jokes-engine';
@@ -104,15 +105,59 @@ export function hydrateIntelligenceBundle(
 ): CompanionIntelligenceBundle {
   const startedAt = bundle.relationship?.relationshipStartedAt ?? nowIso();
   const defaults = createDefaultIntelligenceBundle(userId, displayName, startedAt);
+  const profileIn = bundle.profile;
+  const relationshipIn = bundle.relationship;
+  const qualityIn = bundle.conversationQuality;
 
   return {
-    profile: bundle.profile ?? defaults.profile,
-    relationship: bundle.relationship ?? defaults.relationship,
-    conversationQuality: bundle.conversationQuality ?? defaults.conversationQuality,
-    lifeTimeline: bundle.lifeTimeline ?? defaults.lifeTimeline,
-    personality:
-      bundle.personality ?? createDefaultEvolvingPersonality(startedAt),
-    insideJokes: bundle.insideJokes ?? [],
+    profile: {
+      ...defaults.profile,
+      ...profileIn,
+      userId,
+      goals: asStringArray(profileIn?.goals),
+      routines: asStringArray(profileIn?.routines),
+      habits: asStringArray(profileIn?.habits),
+      moodTrend: asArray(profileIn?.moodTrend),
+      favouriteTopics: asStringArray(profileIn?.favouriteTopics),
+      productivityPatterns: asStringArray(profileIn?.productivityPatterns),
+      fitnessProgress: asStringArray(profileIn?.fitnessProgress),
+      studyProgress: asStringArray(profileIn?.studyProgress),
+      interests: asStringArray(profileIn?.interests),
+      relationships: asArray(profileIn?.relationships),
+      importantDates: asArray(profileIn?.importantDates),
+      recentAchievements: asStringArray(profileIn?.recentAchievements),
+      currentChallenges: asStringArray(profileIn?.currentChallenges),
+      communicationStyle: profileIn?.communicationStyle ?? defaults.profile.communicationStyle,
+      preferredMode: profileIn?.preferredMode ?? defaults.profile.preferredMode,
+      updatedAt: profileIn?.updatedAt ?? defaults.profile.updatedAt,
+    },
+    relationship: {
+      ...defaults.relationship,
+      ...relationshipIn,
+      userId,
+      relationshipStartedAt: relationshipIn?.relationshipStartedAt ?? startedAt,
+      conversationCount: Number(relationshipIn?.conversationCount) || 0,
+      voiceCallCount: Number(relationshipIn?.voiceCallCount) || 0,
+      sharedMemoryCount: Number(relationshipIn?.sharedMemoryCount) || 0,
+      goalsAchievedTogether: Number(relationshipIn?.goalsAchievedTogether) || 0,
+      milestones: asArray(relationshipIn?.milestones),
+      favouriteTopics: asStringArray(relationshipIn?.favouriteTopics),
+      preferredConversationHours: asArray(relationshipIn?.preferredConversationHours),
+      summary:
+        typeof relationshipIn?.summary === 'string' && relationshipIn.summary.trim()
+          ? relationshipIn.summary
+          : defaults.relationship.summary,
+      updatedAt: relationshipIn?.updatedAt ?? defaults.relationship.updatedAt,
+    },
+    conversationQuality: {
+      recentQuestions: asStringArray(qualityIn?.recentQuestions),
+      recentGreetings: asStringArray(qualityIn?.recentGreetings),
+      recentSuggestedTopics: asStringArray(qualityIn?.recentSuggestedTopics),
+      updatedAt: qualityIn?.updatedAt ?? startedAt,
+    },
+    lifeTimeline: asArray(bundle.lifeTimeline),
+    personality: bundle.personality ?? createDefaultEvolvingPersonality(startedAt),
+    insideJokes: asArray(bundle.insideJokes),
     conversationStyle: {
       ...createDefaultConversationStyle(startedAt),
       ...bundle.conversationStyle,
@@ -121,8 +166,29 @@ export function hydrateIntelligenceBundle(
       emojiAffinity: bundle.conversationStyle?.emojiAffinity ?? 0.3,
       humourAffinity: bundle.conversationStyle?.humourAffinity ?? 0.5,
     },
-    weeklyReflections: bundle.weeklyReflections ?? [],
-    adaptive: bundle.adaptive ?? createDefaultAdaptiveState(startedAt),
+    weeklyReflections: asArray(bundle.weeklyReflections),
+    adaptive: (() => {
+      const adaptiveIn = bundle.adaptive ?? createDefaultAdaptiveState(startedAt);
+      const sports = adaptiveIn.sportsPreferences;
+      const baseline = adaptiveIn.emotionalBaseline;
+      return {
+        ...createDefaultAdaptiveState(startedAt),
+        ...adaptiveIn,
+        sportsPreferences: {
+          teams: asStringArray(sports?.teams),
+          athletes: asStringArray(sports?.athletes),
+          sports: asStringArray(sports?.sports),
+          updatedAt: sports?.updatedAt ?? startedAt,
+        },
+        emotionalBaseline: {
+          averageMood: baseline?.averageMood ?? 'neutral',
+          recentTrend: baseline?.recentTrend ?? 'steady',
+          lastShiftDetectedAt: baseline?.lastShiftDetectedAt,
+          checkInsOfferedAt: asArray(baseline?.checkInsOfferedAt),
+        },
+        updatedAt: adaptiveIn.updatedAt ?? startedAt,
+      };
+    })(),
   };
 }
 

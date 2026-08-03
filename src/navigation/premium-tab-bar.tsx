@@ -8,23 +8,21 @@ import { VoxaText } from '../components/ui/voxa-text';
 
 type TabConfig = { icon: keyof typeof Ionicons.glyphMap; label: string; center?: boolean };
 
-function buildTabConfig(experimental: boolean): Record<string, TabConfig> {
+function buildTabConfig(): Record<string, TabConfig> {
   return {
     Home: { icon: 'home', label: 'Home' },
     Talk: { icon: 'chatbubbles', label: 'Talk' },
-    ...(experimental
-      ? { Voxa: { icon: 'radio', label: 'Voxa', center: true } }
-      : { Routine: { icon: 'calendar', label: 'Routine', center: true } }),
+    Voxa: { icon: 'sparkles', label: 'Voxa', center: true },
     Journey: { icon: 'compass', label: 'Journey' },
     You: { icon: 'person', label: 'You' },
   };
 }
 
-type Props = BottomTabBarProps & { experimental?: boolean };
+type Props = BottomTabBarProps;
 
-export function PremiumTabBar({ state, navigation, experimental = false }: Props) {
+export function PremiumTabBar({ state, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const TAB_CONFIG = buildTabConfig(experimental);
+  const TAB_CONFIG = buildTabConfig();
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -84,7 +82,7 @@ const styles = StyleSheet.create({
   },
   tabCenter: { marginTop: -10 },
   tabFocused: {
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
   },
   iconWrap: {
     width: 32,
@@ -96,13 +94,13 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(139, 124, 246, 0.18)',
+    backgroundColor: 'rgba(45, 212, 191, 0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 124, 246, 0.35)',
+    borderColor: 'rgba(45, 212, 191, 0.35)',
     marginBottom: 2,
   },
   iconWrapCenterFocused: {
-    backgroundColor: 'rgba(139, 124, 246, 0.28)',
+    backgroundColor: 'rgba(45, 212, 191, 0.28)',
     borderColor: colors.primarySoft,
   },
   label: {

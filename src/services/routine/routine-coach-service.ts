@@ -311,8 +311,14 @@ export function getRoutineCoachService(
   storage: IStorageService,
   repositories?: VoxaRepositories,
 ): RoutineCoachService {
-  if (!routineCoachService || repositories) {
+  // Only create once. Passing repositories every call must NOT recreate the instance —
+  // that breaks useCallback/useFocusEffect identity and causes infinite re-renders.
+  if (!routineCoachService) {
     routineCoachService = new RoutineCoachService(storage, repositories);
   }
   return routineCoachService;
+}
+
+export function resetRoutineCoachService() {
+  routineCoachService = null;
 }

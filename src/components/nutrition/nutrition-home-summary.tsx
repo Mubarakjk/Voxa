@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,7 +19,7 @@ type Props = {
  */
 export function NutritionHomeSummary({ onPress }: Props) {
   const { profile, services } = useVoxa();
-  const nutrition = getNutritionService(services.storage);
+  const nutrition = useMemo(() => getNutritionService(services.storage), [services.storage]);
   const [summary, setSummary] = useState<NutritionTodaySummary | null>(null);
 
   const load = useCallback(async () => {
@@ -35,7 +35,11 @@ export function NutritionHomeSummary({ onPress }: Props) {
     setSummary(await nutrition.getTodaySummary(profile.id));
   }, [nutrition, profile]);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   if (!summary || summary.mode === 'off') return null;
 
@@ -74,7 +78,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   copy: { flex: 1, gap: 2 },
 });

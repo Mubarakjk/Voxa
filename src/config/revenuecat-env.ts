@@ -1,5 +1,12 @@
-import { VOXA_PRICING } from '../constants/voxa-pricing';
 import { Platform } from 'react-native';
+
+import { VOXA_PRICING } from '../constants/voxa-pricing';
+
+export {
+  getRevenueCatAnnualProductId,
+  getRevenueCatMonthlyProductId,
+  getRevenueCatProductIds,
+} from './revenuecat-product-ids';
 
 export function getRevenueCatIosApiKey(): string | undefined {
   return process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY?.trim() || undefined;

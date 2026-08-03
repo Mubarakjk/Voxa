@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 
+import { areAllFeaturesUnlocked } from '../../config/launch-mode';
 import { colors, radius, spacing } from '../../constants/theme';
 import { VoxaText } from '../ui/voxa-text';
 
@@ -76,7 +77,7 @@ export function AccentCard({
         <VoxaText variant="subtitle">{flag}</VoxaText>
         <View style={styles.accentMeta}>
           <VoxaText variant="body">{label}</VoxaText>
-          {isPremium ? (
+          {isPremium && !areAllFeaturesUnlocked() ? (
             <VoxaText variant="caption" color="primarySoft">
               Pro
             </VoxaText>
@@ -179,7 +180,7 @@ const styles = StyleSheet.create({
   },
   accentSelected: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
   },
   accentDisabled: { opacity: 0.45 },
   accentHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(139, 124, 246, 0.15)',
+    backgroundColor: 'rgba(45, 212, 191, 0.15)',
   },
   sectionCard: {
     borderRadius: radius.lg,

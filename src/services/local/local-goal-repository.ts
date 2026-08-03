@@ -7,13 +7,14 @@ import {
   nowIso,
   UpdateGoalInput,
 } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IGoalRepository, IStorageService } from '../contracts';
 
 export class LocalGoalRepository implements IGoalRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<Goal[]> {
-    return (await this.storage.getItem<Goal[]>(STORAGE_KEYS.goals)) ?? [];
+    return asArray(await this.storage.getItem<Goal[]>(STORAGE_KEYS.goals));
   }
 
   private async writeAll(goals: Goal[]): Promise<void> {

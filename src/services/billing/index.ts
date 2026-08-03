@@ -10,9 +10,12 @@ export {
   applyTrialExpiry,
 } from './subscription-service';
 export { RevenueCatPurchaseManager, openPlatformSubscriptionManagement } from './revenuecat-purchase-manager';
+export { BillingService } from './billing-service';
 export { RevenueCatBillingService } from './revenuecat-billing-service';
 export { RevenueCatSubscriptionSynchroniser, bootstrapBillingForProfile } from './revenuecat-subscription-synchroniser';
 export { SubscriptionEntitlementService } from './subscription-entitlement-service';
+export { EntitlementAccessService } from './entitlement-access-service';
+export type { FeatureAccessKey } from './entitlement-access-service';
 export { SubscriptionAnalyticsService } from './subscription-analytics-service';
 export { PaywallImpressionService } from './paywall-impression-service';
 export { ModelRoutingService, modelRoutingService } from './model-routing-service';

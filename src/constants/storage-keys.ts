@@ -109,6 +109,13 @@ export const STORAGE_KEYS = {
   nutritionPreferences: '@voxa/nutrition_preferences',
   nutritionDailyLogs: '@voxa/nutrition_daily_logs',
   nutritionOfflineQueue: '@voxa/nutrition_offline_queue',
+  notes: '@voxa/notes',
+  noteFolders: '@voxa/note_folders',
+  onboardingDraft: '@voxa/onboarding_draft',
+  selectedVoiceOptionId: '@voxa/selected_voice_option',
+  companionFocusState: '@voxa/companion_focus_state',
+  scheduledCompanionCalls: '@voxa/scheduled_companion_calls',
+  scheduledCallsPreferences: '@voxa/scheduled_calls_preferences',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

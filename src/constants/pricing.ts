@@ -1,3 +1,4 @@
+import { getRevenueCatProductIds } from '../config/revenuecat-product-ids';
 import {
   calculateAnnualSavingsPercent,
   formatFallbackPrice,
@@ -28,7 +29,10 @@ export const PRICING_CONFIG = {
     monthly: VOXA_PRICING.monthlyFallbackGBP,
     annual: VOXA_PRICING.annualFallbackGBP,
   },
-  productIds: VOXA_PRICING.productIds,
+  /** Prefer `getRevenueCatProductIds()` — this getter keeps call sites compatible. */
+  get productIds() {
+    return getRevenueCatProductIds();
+  },
   billingPeriods: {
     monthly: {
       id: 'monthly' as BillingPeriod,
@@ -142,32 +146,32 @@ export const PRO_VALUE_GROUPS = [
 ] as const;
 
 export const PRO_TOP_BENEFITS = [
-  'Generous fair-use AI chat',
-  'Unlimited voice notes under fair use',
-  'Full Life OS & Future Self',
-  'Advanced memory & Weekly Letter',
-  'Premium worlds & cosmetics',
+  'Higher fair-use AI conversations',
+  'Advanced memory depth and pinned memories',
+  'Full Life Book and Life OS tools',
+  'Companion insights and Weekly Letter',
+  'Premium voices and richer personalisation',
+  'Advanced Note AI actions',
 ] as const;
 
 export const FREE_VS_PRO_COMPARISON = [
   { label: 'AI chat', free: '20/day', pro: 'Generous fair use' },
-  { label: 'Voice notes', free: '5/day', pro: 'Generous fair use' },
-  { label: 'Camera analysis', free: '2/day', pro: 'More daily' },
   { label: 'Memories', free: '50 active', pro: 'Advanced & pinned' },
+  { label: 'Life Book', free: 'Preview', pro: 'Full chapters' },
   { label: 'Life OS tools', free: 'Preview', pro: 'Full access' },
   { label: 'Weekly Letter', free: 'Preview', pro: 'Full letter' },
+  { label: 'Note AI', free: 'Basic', pro: 'Advanced actions' },
   { label: 'Mood insights', free: 'Basic', pro: 'Advanced trends' },
-  { label: 'Arcade & challenges', free: 'Limited', pro: 'Full stats & rewards' },
+  { label: 'Companion voices', free: 'Standard', pro: 'Premium voices' },
 ] as const;
 
 export const FREE_FEATURES = [
-  'AI chat with daily allowance',
-  'Voice notes & rituals',
-  'Basic Journey & memories',
-  'One daily challenge',
-  'Basic Companion Studio',
-  'Morning & evening ritual',
-  'Privacy & account controls',
+  'Meaningful AI chat with a daily allowance',
+  'Daily check-in, routines and goals',
+  'Basic Journey, Notes and memories',
+  'Challenge Me with fair limits',
+  'Spoken reply playback',
+  'Privacy, export and account controls',
 ] as const;
 
 export { calculateAnnualSavingsPercent } from './voxa-pricing';

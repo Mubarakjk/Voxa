@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: colors.primarySoft,
-    backgroundColor: 'rgba(139, 124, 246, 0.15)',
+    backgroundColor: 'rgba(45, 212, 191, 0.15)',
   },
   dayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dayChip: {
