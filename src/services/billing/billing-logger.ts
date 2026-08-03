@@ -1,5 +1,11 @@
-/** Safe billing logs — never print secrets or full transaction payloads. */
+/** Safe billing logs — DEBUG builds only. Never print secrets or full transaction payloads. */
+
+function canLog(): boolean {
+  return typeof __DEV__ !== 'undefined' && __DEV__;
+}
+
 export function billingLog(scope: string, detail?: Record<string, unknown>) {
+  if (!canLog()) return;
   const safe = detail
     ? Object.fromEntries(
         Object.entries(detail).filter(([key]) => !/secret|token|key|password|authorization/i.test(key)),
@@ -23,6 +29,8 @@ export const BillingLog = {
   entitlementRefreshStart: () => billingLog('ENTITLEMENT REFRESH START'),
   entitlementRefreshSuccess: (isPro: boolean) => billingLog('ENTITLEMENT REFRESH SUCCESS', { isPro }),
   entitlementRefreshFailure: (message: string) => billingLog('ENTITLEMENT REFRESH FAILURE', { message }),
+  customerInfoUpdate: (isPro: boolean) => billingLog('CUSTOMER INFO UPDATE', { isPro }),
+  foregroundRefresh: (isPro: boolean) => billingLog('FOREGROUND REFRESH', { isPro }),
   restoreStart: () => billingLog('RESTORE START'),
   restoreSuccess: (found: boolean) => billingLog('RESTORE SUCCESS', { found }),
   restoreNone: () => billingLog('RESTORE NONE'),

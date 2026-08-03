@@ -78,6 +78,6 @@ export class WeeklyGrowthService {
 let instance: WeeklyGrowthService | null = null;
 
 export function getWeeklyGrowthService(storage: IStorageService, repositories?: VoxaRepositories) {
-  if (!instance || repositories) instance = new WeeklyGrowthService(storage, repositories);
+  if (!instance) instance = new WeeklyGrowthService(storage, repositories);
   return instance;
 }

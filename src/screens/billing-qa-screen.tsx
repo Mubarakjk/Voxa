@@ -151,7 +151,7 @@ export function BillingQAScreen() {
   const busy = billingStateMachine.isBusy() || purchaseManager.isPurchaseInFlight() || purchaseManager.isRestoreInFlight();
 
   const headerTone = useMemo(() => {
-    if (summary.requiredOk) return ['rgba(139,124,246,0.28)', 'rgba(6,6,12,0)'] as const;
+    if (summary.requiredOk) return ['rgba(45,212,191,0.28)', 'rgba(6,6,12,0)'] as const;
     return ['rgba(248,113,113,0.18)', 'rgba(6,6,12,0)'] as const;
   }, [summary.requiredOk]);
 

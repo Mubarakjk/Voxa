@@ -1,3 +1,5 @@
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
@@ -7,9 +9,11 @@ import { GlassCard } from '../components/ui/glass-card';
 import { VoxaText } from '../components/ui/voxa-text';
 import { colors, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
+import { RootStackParamList } from '../navigation/types';
 import { DebatePerspective, DebateResult } from '../types/phase5-life-os';
 import { getPhase5LifeOSService } from '../services/life-os/phase5-life-os-service';
 import { LifeOSScreenShell } from '../components/phase5/life-os-screen-shell';
+import { CHALLENGE_ME_STARTER } from '../services/chat/challenge-me-prompt';
 
 const PERSPECTIVES: Array<{ id: DebatePerspective; label: string }> = [
   { id: 'challenge', label: 'Challenge my idea' },
@@ -22,6 +26,7 @@ const PERSPECTIVES: Array<{ id: DebatePerspective; label: string }> = [
 ];
 
 export function DebateModeScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { profile, services } = useVoxa();
   const service = getPhase5LifeOSService(services.storage, services.repositories);
   const [topic, setTopic] = useState('');
@@ -34,6 +39,13 @@ export function DebateModeScreen() {
     setResult(r);
   };
 
+  const discussWithVoxa = () => {
+    const starter = topic.trim()
+      ? `${CHALLENGE_ME_STARTER}\n\nTopic: ${topic.trim()}`
+      : CHALLENGE_ME_STARTER;
+    navigation.navigate('MainTabs', { screen: 'Talk', params: { starterPrompt: starter } });
+  };
+
   return (
     <LifeOSScreenShell title="Debate Mode" subtitle="Respectful, constructive challenge — strongest cases for and against.">
       <GlassCard style={styles.field}>
@@ -44,18 +56,25 @@ export function DebateModeScreen() {
           placeholderTextColor={colors.textMuted}
           style={styles.input}
           multiline
+          accessibilityLabel="Debate topic"
         />
       </GlassCard>
 
       <View style={styles.chips}>
         {PERSPECTIVES.map((p) => (
-          <Pressable key={p.id} onPress={() => setPerspective(p.id)} style={[styles.chip, perspective === p.id && styles.chipActive]}>
+          <Pressable
+            key={p.id}
+            onPress={() => setPerspective(p.id)}
+            style={[styles.chip, perspective === p.id && styles.chipActive]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: perspective === p.id }}>
             <VoxaText variant="caption" color={perspective === p.id ? 'primarySoft' : 'textMuted'}>{p.label}</VoxaText>
           </Pressable>
         ))}
       </View>
 
       <PrimaryButton label="Start debate" onPress={() => void run()} />
+      <PrimaryButton label="Discuss with Voxa" onPress={discussWithVoxa} variant="ghost" />
 
       {result ? (
         <>
@@ -80,6 +99,17 @@ export function DebateModeScreen() {
           <SectionCard title="Conclusion">
             <VoxaText variant="body" color="textSecondary">{result.conclusion}</VoxaText>
           </SectionCard>
+          <PrimaryButton
+            label="Continue in Talk"
+            onPress={() =>
+              navigation.navigate('MainTabs', {
+                screen: 'Talk',
+                params: {
+                  starterPrompt: `${CHALLENGE_ME_STARTER}\n\nTopic: ${topic.trim()}\nBetter question: ${result.betterQuestion}`,
+                },
+              })
+            }
+          />
         </>
       ) : null}
     </LifeOSScreenShell>
@@ -90,6 +120,13 @@ const styles = StyleSheet.create({
   field: { padding: spacing.md },
   input: { color: colors.text, minHeight: 60 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  chip: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 8, backgroundColor: colors.surface },
+  chip: {
+    minHeight: 40,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+  },
   chipActive: { borderWidth: 1, borderColor: colors.primarySoft },
 });

@@ -1,6 +1,8 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { hasSupabaseConfig } from '../config/env';
+import { isBillingDormant } from '../config/launch-mode';
 import { recordSyncFailure, recordSyncSuccess } from '../utils/debug-info';
 import { authService } from '../services/auth/auth-service';
 import { createBackgroundServices, BackgroundServices } from '../services/background/background-services';
@@ -15,6 +17,9 @@ import {
 import { UserProfile } from '../types';
 import { validateBillingEnvironment } from '../services/billing/billing-validation';
 import { BillingLog } from '../services/billing/billing-logger';
+import { hasRevenueCatConfig } from '../config/revenuecat-env';
+
+const FOREGROUND_ENTITLEMENT_REFRESH_MIN_MS = 5_000;
 
 type VoxaContextValue = {
   isReady: boolean;
@@ -66,7 +71,7 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
         const cachedProfile = await services.repositories.userProfile.getProfile();
         if (authUser && cachedProfile && cachedProfile.id !== authUser.id) {
           console.warn('[Voxa] Stale local profile cache detected — clearing before cloud sync.');
-          await services.subscription.signOutBilling(cachedProfile.id);
+          await services.billingService.signOut(cachedProfile.id);
           await clearAllLocalVoxaData(services.storage);
         }
       }
@@ -91,16 +96,39 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
         throw new Error('User profile not found. Please sign in again.');
       }
 
-      const billingValidation = validateBillingEnvironment();
-      if (!billingValidation.allRequiredOk) {
-        const failedLabels = billingValidation.checks.filter((check) => !check.ok).map((check) => check.label);
-        BillingLog.configureFailure(`Startup billing validation: ${failedLabels.join(', ')}`);
-      } else {
-        BillingLog.configureSuccess();
+      if (!isBillingDormant()) {
+        const billingValidation = validateBillingEnvironment();
+        if (!hasRevenueCatConfig()) {
+          if (__DEV__) {
+            console.info('[Voxa Billing] Billing unavailable in this development build.');
+          }
+        } else if (!billingValidation.allRequiredOk) {
+          const failedLabels = billingValidation.checks.filter((check) => !check.ok).map((check) => check.label);
+          BillingLog.configureFailure(`Startup billing validation: ${failedLabels.join(', ')}`);
+          if (__DEV__) {
+            console.warn('[Voxa Billing] Validation incomplete — continuing with free access.', failedLabels);
+          }
+        } else {
+          BillingLog.configureSuccess();
+        }
+
+        try {
+          await services.subscription.syncProfile(currentProfile);
+        } catch (billingErr) {
+          if (__DEV__) {
+            console.error('[Voxa Billing] syncProfile failed (non-blocking)', billingErr);
+          }
+        }
       }
 
-      await services.subscription.syncProfile(currentProfile);
-      await services.subscription.refreshUsageCounts(currentProfile.id, services.repositories);
+      try {
+        await services.subscription.refreshUsageCounts(currentProfile.id, services.repositories);
+      } catch (usageErr) {
+        if (__DEV__) {
+          console.warn('[Voxa Billing] refreshUsageCounts failed (non-blocking)', usageErr);
+        }
+      }
+
       const syncedProfile = await services.repositories.userProfile.getProfile();
 
       setProfile(syncedProfile ?? currentProfile);
@@ -108,7 +136,9 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
       recordSyncSuccess();
 
       if (currentProfile.onboardingComplete) {
-        await background.runStartupTasks(currentProfile.id, syncedProfile ?? currentProfile);
+        void background.runStartupTasks(currentProfile.id, syncedProfile ?? currentProfile).catch((startupErr) => {
+          if (__DEV__) console.warn('[Voxa] Startup tasks failed (non-blocking)', startupErr);
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initialize Voxa.');
@@ -122,6 +152,33 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  const lastForegroundRefreshAt = useRef(0);
+
+  useEffect(() => {
+    if (!isReady || !profile?.id || isBillingDormant()) return;
+
+    const refreshEntitlements = () => {
+      const now = Date.now();
+      if (now - lastForegroundRefreshAt.current < FOREGROUND_ENTITLEMENT_REFRESH_MIN_MS) return;
+      lastForegroundRefreshAt.current = now;
+      void services.billingService
+        .refreshOnForeground(profile.id)
+        .then((entitlement) => {
+          BillingLog.foregroundRefresh(entitlement.isPro);
+        })
+        .catch(() => {
+          // Offline / store unavailable — keep last known normalized entitlement.
+        });
+    };
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state === 'active') refreshEntitlements();
+    };
+
+    const sub = AppState.addEventListener('change', onAppState);
+    return () => sub.remove();
+  }, [isReady, profile?.id, services.billingService]);
 
   const refreshProfile = useCallback(async () => {
     const nextProfile = await services.repositories.userProfile.getProfile();
@@ -153,7 +210,7 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
   const signOutCleanup = useCallback(async () => {
     try {
       if (profile?.id) {
-        await services.subscription.signOutBilling(profile.id);
+        await services.billingService.signOut(profile.id);
       }
       if (hasSupabaseConfig()) {
         await clearAllLocalVoxaData(services.storage);

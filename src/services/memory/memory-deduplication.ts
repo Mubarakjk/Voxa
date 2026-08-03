@@ -78,3 +78,20 @@ export function resolveImportance(
   const next = incoming ?? 3;
   return Math.max(existing, next) as Memory['importance'];
 }
+
+/** Suggest merge pairs among existing memories (for Smart Memory UX). */
+export function findNearDuplicatePairs(memories: Memory[]): Array<{ a: Memory; b: Memory; score: number }> {
+  const pairs: Array<{ a: Memory; b: Memory; score: number }> = [];
+  for (let i = 0; i < memories.length; i += 1) {
+    for (let j = i + 1; j < memories.length; j += 1) {
+      const a = memories[i];
+      const b = memories[j];
+      if (a.category !== b.category) continue;
+      const titleScore = jaccardSimilarity(tokenSet(a.title), tokenSet(b.title));
+      const contentScore = jaccardSimilarity(tokenSet(a.content), tokenSet(b.content));
+      const score = Math.max(titleScore, (titleScore + contentScore) / 2);
+      if (score >= 0.45) pairs.push({ a, b, score });
+    }
+  }
+  return pairs.sort((x, y) => y.score - x.score).slice(0, 8);
+}

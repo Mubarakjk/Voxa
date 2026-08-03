@@ -1,14 +1,13 @@
-/** Central Voxa Pro pricing — store metadata overrides these fallbacks. */
+/**
+ * Central Voxa Pro pricing display fallbacks.
+ * Store product IDs come from environment via `src/config/revenuecat-env.ts` — not hard-coded here.
+ */
 export const VOXA_PRICING = {
   monthlyFallbackGBP: 4.99,
   annualFallbackGBP: 39.99,
   entitlementId: 'voxa_pro',
   offeringId: 'default',
   trialDaysDisplayFallback: 7,
-  productIds: {
-    monthly: 'voxa_pro_monthly',
-    annual: 'voxa_pro_annual',
-  },
   currency: 'GBP',
   currencySymbol: '£',
 } as const;

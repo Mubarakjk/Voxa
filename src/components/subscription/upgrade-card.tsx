@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { isPaywallEnabled } from '../../config/launch-mode';
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
 import { colors, radius, spacing } from '../../constants/theme';
@@ -11,6 +12,8 @@ type UpgradeCardProps = {
 };
 
 export function UpgradeCard({ onPress, trialDaysLeft }: UpgradeCardProps) {
+  if (!isPaywallEnabled()) return null;
+
   return (
     <Pressable onPress={onPress}>
       <GlassCard variant="highlight" style={styles.card}>
@@ -42,7 +45,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(139, 124, 246, 0.15)',
+    backgroundColor: 'rgba(45, 212, 191, 0.15)',
   },
   copy: { flex: 1, gap: 2 },
 });

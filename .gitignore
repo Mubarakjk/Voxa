@@ -1,42 +1,91 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# ── Dependencies ────────────────────────────────────────────────
 node_modules/
 
-# Expo
+# ── Expo ────────────────────────────────────────────────────────
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# ── Environment & secrets (never commit real values) ───────────
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# ── Native / prebuild (generated locally) ───────────────────────
+/ios
+/android
 .kotlin/
+
+# ── iOS build artifacts ─────────────────────────────────────────
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+**/.xcode.env.local
+
+# ── Android build artifacts ───────────────────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+local.properties
+.cxx/
+*.keystore
+!debug.keystore
+
+# ── Signing & credentials ─────────────────────────────────────────
 *.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.pem
 
-# Metro
+# ── Metro ───────────────────────────────────────────────────────
 .metro-health-check*
 
-# debug
+# ── Debug logs ────────────────────────────────────────────────────
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
 
-# macOS
+# ── macOS ─────────────────────────────────────────────────────────
 .DS_Store
-*.pem
+*.swp
+*.swo
+*~
 
-# local env files
-.env
-.env*.local
-
-# typescript
+# ── TypeScript ────────────────────────────────────────────────────
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# ── Test / coverage ───────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── IDE ───────────────────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# ── EAS / build outputs ───────────────────────────────────────────
+*.app
+build/

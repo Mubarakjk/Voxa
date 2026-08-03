@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: spacing.sm,
   },
-  optionActive: { borderColor: colors.primary, backgroundColor: 'rgba(139, 124, 246, 0.1)' },
+  optionActive: { borderColor: colors.primary, backgroundColor: 'rgba(45, 212, 191, 0.1)' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
@@ -150,5 +150,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.glassBorder,
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(139, 124, 246, 0.12)' },
+  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(45, 212, 191, 0.12)' },
 });

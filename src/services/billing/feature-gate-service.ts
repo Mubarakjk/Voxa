@@ -1,3 +1,5 @@
+import { areAllFeaturesUnlocked } from '../../config/launch-mode';
+import { getUnlockedPlanStatus } from '../../constants/free-launch-plan-status';
 import { FREE_PLAN_LIMITS, PRO_PLAN_LIMITS } from '../../constants/pricing';
 import {
   GateFeature,
@@ -24,6 +26,9 @@ export class FeatureGateService {
   }
 
   canAccessFeature(feature: GateFeature, status: PlanStatus, usage?: UsageBucket): GateResult {
+    if (areAllFeaturesUnlocked()) {
+      return { allowed: true, feature };
+    }
     const definition = FEATURE_GATE_REGISTRY[feature];
     if (!definition?.implemented) {
       return {
@@ -77,6 +82,7 @@ export class FeatureGateService {
   }
 
   resolveLimits(status: PlanStatus): PlanLimits {
+    if (areAllFeaturesUnlocked()) return PRO_PLAN_LIMITS;
     return status.isPro ? PRO_PLAN_LIMITS : FREE_PLAN_LIMITS;
   }
 
@@ -91,7 +97,8 @@ export class FeatureGateService {
         feature: input.feature,
         limitReached: true,
         upgradeRequired: true,
-        reason: `Daily ${input.label} limit reached. Resets tomorrow.`,
+        reason:
+          "You've used today's allowance for this. You can continue using core Voxa features, or upgrade for more.",
         resetsAt: tomorrowIso(),
       };
     }
@@ -102,7 +109,8 @@ export class FeatureGateService {
         feature: input.feature,
         limitReached: true,
         upgradeRequired: true,
-        reason: `Monthly ${input.label} limit reached.`,
+        reason:
+          "You've reached this month's allowance. Core Voxa features remain available, or upgrade for more room.",
         resetsAt: nextMonthIso(),
       };
     }

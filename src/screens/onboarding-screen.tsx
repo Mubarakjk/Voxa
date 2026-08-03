@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,6 +23,8 @@ import {
   VoxaAvatarId,
   PersonalityStyleId,
 } from '../constants/companion-identity';
+import { STORAGE_KEYS } from '../constants/storage-keys';
+import { listVoiceOptions, VoiceOptionId } from '../constants/voice-options';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { createDefaultCompanionControls } from '../types/relationship-personality';
@@ -31,10 +34,15 @@ import {
   NotificationPreference,
   VoicePersonality,
 } from '../types';
-import { PRICING_CONFIG } from '../constants/pricing';
 import { notificationService } from '../services/notifications/notification-service';
 import { getRoutineCoachService } from '../services/routine/routine-coach-service';
 import { parseFlexibleTimeInput, validateAgeInput } from '../utils/time-parse';
+import {
+  previewVoiceOption,
+  stopVoiceOptionPreview,
+} from '../services/voice/voice-options-service';
+import { getVoiceOption } from '../constants/voice-options';
+import { trackEvent } from '../services/analytics/analytics-service';
 
 const STEPS = [
   'welcome',
@@ -43,6 +51,7 @@ const STEPS = [
   'personality',
   'avatar',
   'voxaIdentity',
+  'voice',
   'mode',
   'goals',
   'topics',
@@ -50,7 +59,8 @@ const STEPS = [
   'notifications',
   'memory',
   'coaching',
-  'subscription',
+  'preview',
+  'complete',
 ] as const;
 
 type Step = (typeof STEPS)[number];
@@ -75,6 +85,28 @@ type OnboardingScreenProps = {
   onComplete: () => void;
 };
 
+type OnboardingDraft = {
+  stepIndex: number;
+  displayName: string;
+  age: string;
+  mainReason: string;
+  personality: VoicePersonality;
+  personalityStyle: PersonalityStyleId;
+  avatarId: VoxaAvatarId;
+  voxaName: string;
+  voiceOptionId: VoiceOptionId;
+  defaultMode: CompanionModeId;
+  goalInterests: string[];
+  topics: string[];
+  wakeTime: string;
+  sleepTime: string;
+  skipSchedule: boolean;
+  notificationPref: NotificationPreference;
+  checkInStyle: CheckInStyle;
+  memoryLevel: 'minimal' | 'balanced' | 'deep';
+  subscriptionChoice?: 'explore_pro' | 'free' | null;
+};
+
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const { profile, services, refreshProfile } = useVoxa();
   const insets = useSafeAreaInsets();
@@ -86,6 +118,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [personalityStyle, setPersonalityStyle] = useState<PersonalityStyleId>('warm');
   const [avatarId, setAvatarId] = useState<VoxaAvatarId>('orb_purple');
   const [voxaName, setVoxaName] = useState('Voxa');
+  const [voiceOptionId, setVoiceOptionId] = useState<VoiceOptionId>('aurora');
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [defaultMode, setDefaultMode] = useState<CompanionModeId>('friend');
   const [goalInterests, setGoalInterests] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
@@ -95,12 +129,93 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [notificationPref, setNotificationPref] = useState<NotificationPreference>('gentle');
   const [checkInStyle, setCheckInStyle] = useState<CheckInStyle>('gentle');
   const [memoryLevel, setMemoryLevel] = useState<'minimal' | 'balanced' | 'deep'>('balanced');
-  const [subscriptionChoice, setSubscriptionChoice] = useState<'explore_pro' | 'free' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
 
   const step = STEPS[stepIndex];
   const progress = ((stepIndex + 1) / STEPS.length) * 100;
+
+  useEffect(() => {
+    trackEvent('onboarding_started');
+    void (async () => {
+      try {
+        const draft = await services.storage.getItem<OnboardingDraft>(STORAGE_KEYS.onboardingDraft);
+        if (draft && typeof draft === 'object' && typeof draft.stepIndex === 'number') {
+          setStepIndex(Math.min(Math.max(0, draft.stepIndex), STEPS.length - 1));
+          if (typeof draft.displayName === 'string') setDisplayName(draft.displayName);
+          if (typeof draft.age === 'string') setAge(draft.age);
+          if (typeof draft.mainReason === 'string') setMainReason(draft.mainReason);
+          if (draft.personality) setPersonality(draft.personality);
+          if (draft.personalityStyle) setPersonalityStyle(draft.personalityStyle);
+          if (draft.avatarId) setAvatarId(draft.avatarId);
+          if (typeof draft.voxaName === 'string') setVoxaName(draft.voxaName);
+          if (draft.voiceOptionId) setVoiceOptionId(draft.voiceOptionId);
+          if (draft.defaultMode) setDefaultMode(draft.defaultMode);
+          if (Array.isArray(draft.goalInterests)) setGoalInterests(draft.goalInterests);
+          if (Array.isArray(draft.topics)) setTopics(draft.topics);
+          if (typeof draft.wakeTime === 'string') setWakeTime(draft.wakeTime);
+          if (typeof draft.sleepTime === 'string') setSleepTime(draft.sleepTime);
+          if (typeof draft.skipSchedule === 'boolean') setSkipSchedule(draft.skipSchedule);
+          if (draft.notificationPref) setNotificationPref(draft.notificationPref);
+          if (draft.checkInStyle) setCheckInStyle(draft.checkInStyle);
+          if (draft.memoryLevel) setMemoryLevel(draft.memoryLevel);
+        }
+      } catch {
+        await services.storage.removeItem(STORAGE_KEYS.onboardingDraft);
+      }
+      setDraftReady(true);
+    })();
+    return () => {
+      void stopVoiceOptionPreview();
+    };
+  }, [services.storage]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const draft: OnboardingDraft = {
+      stepIndex,
+      displayName,
+      age,
+      mainReason,
+      personality,
+      personalityStyle,
+      avatarId,
+      voxaName,
+      voiceOptionId,
+      defaultMode,
+      goalInterests,
+      topics,
+      wakeTime,
+      sleepTime,
+      skipSchedule,
+      notificationPref,
+      checkInStyle,
+      memoryLevel,
+    };
+    void services.storage.setItem(STORAGE_KEYS.onboardingDraft, draft);
+  }, [
+    draftReady,
+    stepIndex,
+    displayName,
+    age,
+    mainReason,
+    personality,
+    personalityStyle,
+    avatarId,
+    voxaName,
+    voiceOptionId,
+    defaultMode,
+    goalInterests,
+    topics,
+    wakeTime,
+    sleepTime,
+    skipSchedule,
+    notificationPref,
+    checkInStyle,
+    memoryLevel,
+    services.storage,
+  ]);
 
   const toggleGoal = (id: string) => {
     setGoalInterests((current) =>
@@ -140,16 +255,21 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       setSleepTime(sleep.formatted);
     }
 
-    if (step === 'subscription' && !subscriptionChoice) {
-      setError('Choose a plan to continue.');
-      return false;
-    }
-
     return true;
+  };
+
+  const playVoicePreview = async (id: VoiceOptionId) => {
+    setPreviewLoading(true);
+    try {
+      await previewVoiceOption(getVoiceOption(id));
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const next = () => {
     if (!validateCurrentStep()) return;
+    trackEvent('onboarding_step_completed', { step });
 
     if (stepIndex < STEPS.length - 1) {
       setStepIndex((value) => value + 1);
@@ -198,6 +318,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         preferences: {
           ...profile.preferences,
           voicePersonality: personality,
+          selectedVoiceOptionId: voiceOptionId,
           checkInStyle,
           morningGreetingEnabled: notificationPref !== 'off',
           eveningReflectionEnabled: notificationPref !== 'off',
@@ -251,13 +372,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       }
 
       await refreshProfile();
-
-      if (subscriptionChoice === 'explore_pro') {
-        await services.subscriptionAnalytics.track('paywall_viewed', { source: 'onboarding' });
-      } else if (subscriptionChoice === 'free') {
-        await services.subscription.continueFree(profile.id);
-        await refreshProfile();
-      }
+      await services.storage.removeItem(STORAGE_KEYS.onboardingDraft);
+      await services.storage.setItem(STORAGE_KEYS.selectedVoiceOptionId, voiceOptionId);
+      trackEvent('onboarding_completed', {
+        voice: voiceOptionId,
+      });
 
       onComplete();
     } catch (err) {
@@ -286,10 +405,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <View style={styles.center}>
               <VoiceOrb size={120} />
               <VoxaText variant="title" style={styles.centerTitle}>
-                Let's set up Voxa
+                Meet the companion that grows with you.
               </VoxaText>
               <VoxaText variant="body" color="textSecondary" style={styles.centerCopy}>
-                A few questions so your companion feels personal from day one.
+                Talk, plan, reflect and keep the things that matter in one place.
               </VoxaText>
             </View>
           ) : null}
@@ -339,17 +458,77 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
           {step === 'reason' ? (
             <GlassCard style={styles.card}>
-              <VoxaText variant="subtitle">Main reason for using Voxa</VoxaText>
-              {['Emotional support', 'Stay organized', 'Learn & grow', 'Build habits', 'Company'].map(
-                (reason) => (
+              <VoxaText variant="subtitle">What would make Voxa genuinely useful to you?</VoxaText>
+              {[
+                'Someone to talk to',
+                'Staying organised',
+                'Motivation and accountability',
+                'Study and learning',
+                'Career and business',
+                'Fitness and healthy routines',
+                'Notes and ideas',
+                'Reflection and journaling',
+                'A mix of everything',
+              ].map((reason) => (
+                <Pressable
+                  key={reason}
+                  style={[styles.option, mainReason === reason && styles.optionActive]}
+                  onPress={() => setMainReason(reason)}>
+                  <VoxaText variant="body">{reason}</VoxaText>
+                </Pressable>
+              ))}
+            </GlassCard>
+          ) : null}
+
+          {step === 'voice' ? (
+            <GlassCard style={styles.card}>
+              <VoxaText variant="subtitle">How should Voxa sound?</VoxaText>
+              <VoxaText variant="caption" color="textMuted">
+                Preview a voice, then choose one. You can change this later in Settings.
+              </VoxaText>
+              {listVoiceOptions(false).map((option) => (
+                <Pressable
+                  key={option.id}
+                  style={[styles.option, voiceOptionId === option.id && styles.optionActive]}
+                  onPress={() => setVoiceOptionId(option.id)}>
+                  <VoxaText variant="body">
+                    {option.displayName} — {option.shortDescription}
+                  </VoxaText>
                   <Pressable
-                    key={reason}
-                    style={[styles.option, mainReason === reason && styles.optionActive]}
-                    onPress={() => setMainReason(reason)}>
-                    <VoxaText variant="body">{reason}</VoxaText>
+                    onPress={() => void playVoicePreview(option.id)}
+                    hitSlop={8}
+                    accessibilityLabel={`Preview ${option.displayName}`}>
+                    {previewLoading && voiceOptionId === option.id ? (
+                      <ActivityIndicator color={colors.primarySoft} />
+                    ) : (
+                      <VoxaText variant="caption" color="primarySoft">
+                        Preview
+                      </VoxaText>
+                    )}
                   </Pressable>
-                ),
-              )}
+                </Pressable>
+              ))}
+            </GlassCard>
+          ) : null}
+
+          {step === 'preview' ? (
+            <GlassCard style={styles.card}>
+              <VoxaText variant="subtitle">Your companion preview</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                Hi {displayName.trim() || 'there'}. I’ll keep things{' '}
+                {personalityStyle.replace('_', ' ')}, help you stay consistent and speak using the{' '}
+                {getVoiceOption(voiceOptionId).displayName} voice. I’ll remember your goals at a{' '}
+                {memoryLevel} level, but I won’t save everything you say.
+              </VoxaText>
+              <VoxaText variant="caption" color="textMuted">
+                Companion: {voxaName.trim() || 'Voxa'} · Check-ins: {checkInStyle} · Focus:{' '}
+                {mainReason || 'your day'}
+              </VoxaText>
+              <Pressable onPress={() => setStepIndex(STEPS.indexOf('basics'))} hitSlop={8}>
+                <VoxaText variant="caption" color="primarySoft" style={styles.skipLink}>
+                  Edit earlier answers
+                </VoxaText>
+              </Pressable>
             </GlassCard>
           ) : null}
 
@@ -539,15 +718,16 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
           {step === 'memory' ? (
             <GlassCard style={styles.card}>
-              <VoxaText variant="subtitle">Voxa remembers your life</VoxaText>
+              <VoxaText variant="subtitle">What may Voxa remember?</VoxaText>
               <VoxaText variant="body" color="textSecondary">
-                Important moments, goals, and feelings are saved to your Journey. Voxa recalls them naturally — never to overwhelm you.
+                You control what Voxa remembers. You can view, correct or delete memories at any time.
+                Notes stay private unless you explicitly share them.
               </VoxaText>
               {(
                 [
-                  { id: 'minimal' as const, label: 'Light', detail: 'Only the most important moments' },
-                  { id: 'balanced' as const, label: 'Balanced', detail: 'Recommended — thoughtful recall' },
-                  { id: 'deep' as const, label: 'Deep', detail: 'Rich memory for a closer bond' },
+                  { id: 'minimal' as const, label: 'Nothing automatically', detail: 'Only what you pin or ask to save' },
+                  { id: 'balanced' as const, label: 'Goals & preferences', detail: 'Recommended — useful without oversharing' },
+                  { id: 'deep' as const, label: 'Richer conversation details', detail: 'More continuity across chats' },
                 ] as const
               ).map((item) => (
                 <Pressable
@@ -589,28 +769,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </GlassCard>
           ) : null}
 
-          {step === 'subscription' ? (
+          {step === 'complete' ? (
             <GlassCard style={styles.card}>
-              <VoxaText variant="subtitle">Choose your experience</VoxaText>
-              <VoxaText variant="body" color="textSecondary">
-                Explore Voxa Pro after onboarding, or continue free. Trial eligibility comes from the App Store or Google Play when you subscribe.
+              <View style={styles.completeOrb}>
+                <VoiceOrb size={88} active />
+              </View>
+              <VoxaText variant="title" style={styles.completeTitle}>
+                Welcome to Voxa.
               </VoxaText>
-              <Pressable
-                style={[styles.option, subscriptionChoice === 'explore_pro' && styles.optionActive]}
-                onPress={() => setSubscriptionChoice('explore_pro')}>
-                <VoxaText variant="body">Explore Voxa Pro</VoxaText>
-                <VoxaText variant="caption" color="textSecondary">
-                  See Pro benefits — subscribe when you are ready
-                </VoxaText>
-              </Pressable>
-              <Pressable
-                style={[styles.option, subscriptionChoice === 'free' && styles.optionActive]}
-                onPress={() => setSubscriptionChoice('free')}>
-                <VoxaText variant="body">Continue Free</VoxaText>
-                <VoxaText variant="caption" color="textSecondary">
-                  Basic chat, memory, reminders & daily briefing
-                </VoxaText>
-              </Pressable>
+              <VoxaText variant="body" color="textSecondary" style={styles.completeBody}>
+                Everything is ready. Let's start building your journey together.
+              </VoxaText>
             </GlassCard>
           ) : null}
 
@@ -688,7 +857,7 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   option: {
     padding: spacing.md,
@@ -700,7 +869,7 @@ const styles = StyleSheet.create({
   },
   optionActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139, 124, 246, 0.1)',
+    backgroundColor: 'rgba(45, 212, 191, 0.1)',
   },
   avatarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, justifyContent: 'center' },
   avatarOption: {
@@ -716,4 +885,7 @@ const styles = StyleSheet.create({
   backSpacer: { flex: 1 },
   error: { textAlign: 'center', marginTop: spacing.sm },
   skipLink: { textAlign: 'center', paddingVertical: spacing.sm },
+  completeOrb: { alignItems: 'center', paddingVertical: spacing.md },
+  completeTitle: { textAlign: 'center' },
+  completeBody: { textAlign: 'center', lineHeight: 24 },
 });

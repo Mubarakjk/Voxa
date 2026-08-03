@@ -44,6 +44,7 @@ import { ContextCardsRow } from '../components/phase4/context-cards-row';
 import { SmartActionsRow } from '../components/phase4/smart-actions-row';
 import { ConversationCanvasCard } from '../components/phase4/conversation-canvas-card';
 import { colors, layout, radius, spacing } from '../constants/theme';
+import { isPaywallEnabled } from '../config/launch-mode';
 import { useVoxa } from '../context/voxa-context';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { FeatureLimitError } from '../services/billing/subscription-service';
@@ -62,10 +63,11 @@ import {
   speakCompanionReply,
   stopCompanionSpeech,
 } from '../services/voice/companion-speech-service';
+import { navigateToPaywall } from '../utils/paywall-navigation';
 import { recordChatLatency } from '../utils/chat-debug-state';
 import { logFeature } from '../utils/feature-logger';
 import { recordTiming } from '../utils/performance-metrics';
-import { openVoiceConversation } from '../utils/voice-navigation';
+import { canStartLiveVoice, canStartSafeCall, openVoiceConversation } from '../utils/voice-navigation';
 import { isFeatureVisible } from '../config/feature-status';
 import { trackEvent } from '../services/analytics/analytics-service';
 import {
@@ -544,7 +546,8 @@ export function ChatScreen() {
 
       if (result.sideEffect?.type === 'open_voice_conversation') {
         const stackNav = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
-        if (stackNav) {
+        const allowed = result.sideEffect.safe ? canStartSafeCall() : canStartLiveVoice();
+        if (stackNav && allowed) {
           openVoiceConversation(stackNav, {
             safe: result.sideEffect.safe,
             autoStart: result.sideEffect.autoStart,
@@ -562,10 +565,12 @@ export function ChatScreen() {
         }
       }
       logFeature('chat.send', 'failure', err instanceof Error ? err.message : 'send failed', Date.now() - started);
-      if (err instanceof FeatureLimitError) {
+      if (err instanceof FeatureLimitError && isPaywallEnabled()) {
+        trackEvent('free_limit_reached', { feature: err.feature });
+        void services.subscriptionAnalytics.track('free_limit_reached', { feature: err.feature });
         setLimitMessage(err.message);
         setLimitModalVisible(true);
-      } else {
+      } else if (!(err instanceof FeatureLimitError)) {
         setError(err instanceof Error ? err.message : 'Failed to send message.');
       }
     } finally {
@@ -1227,10 +1232,22 @@ export function ChatScreen() {
 
       <LimitReachedModal
         visible={limitModalVisible}
-        message={limitMessage}
+        message={
+          limitMessage ||
+          "You've used today's conversation allowance. You can continue using core Voxa features, or upgrade for more."
+        }
         onUpgrade={() => {
           setLimitModalVisible(false);
-          navigation.navigate('Paywall', { source: 'chat-limit' });
+          void (async () => {
+            if (!profile) {
+              navigateToPaywall(navigation, 'chat-limit');
+              return;
+            }
+            const show = await services.entitlementAccess.shouldShowContextualPaywall(profile.id);
+            if (!show) return;
+            await services.entitlementAccess.markPaywallShown(profile.id, 'chat-limit');
+            navigateToPaywall(navigation, 'chat-limit');
+          })();
         }}
         onContinueFree={() => setLimitModalVisible(false)}
       />
@@ -1261,9 +1278,9 @@ const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1, gap: 2 },
   headerAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: layout.minTapTarget,
+    height: layout.minTapTarget,
+    borderRadius: layout.minTapTarget / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -1316,7 +1333,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.glassBorder,
   },
-  modeRowActive: { backgroundColor: 'rgba(139, 124, 246, 0.08)' },
+  modeRowActive: { backgroundColor: 'rgba(45, 212, 191, 0.08)' },
   modeRowCopy: { flex: 1, gap: 2 },
   menuSheet: {
     position: 'absolute',

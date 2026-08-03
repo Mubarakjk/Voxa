@@ -6,18 +6,19 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#06060C",
+    "backgroundColor": "#0B0F14",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#06060C"
+      "backgroundColor": "#0B0F14"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.voxa.companion",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Voxa uses your microphone when you choose to record audio in supported features.",
+        "NSMicrophoneUsageDescription": "Voxa may use the microphone if you enable optional audio features in a future update. Spoken replies do not require microphone access.",
+        "UIBackgroundModes": ["audio"],
         "NSCameraUsageDescription": "Voxa uses the camera to capture photos and videos in chat.",
         "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat.",
         "NSLocationWhenInUseUsageDescription": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually."
@@ -27,7 +28,7 @@
       "package": "app.voxa.companion",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#06060C"
+        "backgroundColor": "#0B0F14"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -44,12 +45,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@config-plugins/react-native-webrtc",
       "@react-native-community/datetimepicker",
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#8B7CF6"
+          "color": "#2DD4BF"
         }
       ],
       [

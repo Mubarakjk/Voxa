@@ -30,7 +30,10 @@ export type FeatureKey =
   | 'weather'
   | 'newsDigest'
   | 'calorieTracking'
-  | 'socialGames';
+  | 'socialGames'
+  | 'notes'
+  | 'notesAdvancedAI'
+  | 'premiumVoices';
 
 export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   chat: 'stable',
@@ -57,6 +60,9 @@ export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   newsDigest: 'stable',
   calorieTracking: 'stable',
   socialGames: 'stable',
+  notes: 'stable',
+  notesAdvancedAI: 'stable',
+  premiumVoices: 'stable',
 };
 
 export function isExperimentalFeaturesEnabled(): boolean {

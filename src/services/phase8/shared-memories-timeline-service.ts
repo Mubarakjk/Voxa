@@ -1,6 +1,7 @@
 import { CompanionIntelligenceBundle } from '../../types/companion-intelligence';
 import { Goal, Memory } from '../../types';
 import { SharedTimelineEntry } from '../../types/phase8-retention';
+import { asArray } from '../../utils/as-array';
 
 export function buildSharedMemoriesTimeline(input: {
   bundle: CompanionIntelligenceBundle;
@@ -11,7 +12,7 @@ export function buildSharedMemoriesTimeline(input: {
   const limit = input.limit ?? 12;
   const entries: SharedTimelineEntry[] = [];
 
-  for (const event of input.bundle.lifeTimeline) {
+  for (const event of asArray<typeof input.bundle.lifeTimeline[number]>(input.bundle.lifeTimeline)) {
     entries.push({
       id: event.id,
       title: event.title,
@@ -21,7 +22,7 @@ export function buildSharedMemoriesTimeline(input: {
     });
   }
 
-  for (const goal of input.goals.filter((g) => g.status === 'completed')) {
+  for (const goal of asArray<Goal>(input.goals).filter((g) => g.status === 'completed')) {
     entries.push({
       id: `goal-done-${goal.id}`,
       title: goal.title,
@@ -31,7 +32,7 @@ export function buildSharedMemoriesTimeline(input: {
     });
   }
 
-  for (const memory of input.memories.slice(0, 20)) {
+  for (const memory of asArray<Memory>(input.memories).slice(0, 20)) {
     if (memory.importance >= 6 || memory.tags?.includes('remember-this')) {
       entries.push({
         id: `mem-${memory.id}`,

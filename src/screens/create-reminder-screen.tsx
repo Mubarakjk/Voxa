@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   androidPickers: {
     gap: spacing.sm,

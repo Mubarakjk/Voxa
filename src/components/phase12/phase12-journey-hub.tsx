@@ -19,6 +19,7 @@ export function Phase12JourneyHub({ data, onNavigate }: Props) {
     {
       title: 'Today',
       items: [
+        { icon: 'document-text-outline', label: 'Notes', screen: 'NotesHub' },
         { icon: 'moon-outline', label: 'Daily reflection', screen: 'DailyReflection' },
         { icon: 'newspaper-outline', label: 'Daily updates', screen: 'DailyNews', badge: data.dailyNews ? 'New' : undefined },
         { icon: 'happy-outline', label: 'Mood journal', screen: 'MoodJournal', badge: data.moodLoggedToday ? undefined : 'Log' },

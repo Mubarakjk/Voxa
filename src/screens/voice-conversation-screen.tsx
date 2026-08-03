@@ -17,7 +17,9 @@ import { useVoxa } from '../context/voxa-context';
 import { useVoiceCallController } from '../hooks/use-voice-call-controller';
 import { useVoiceMetering } from '../hooks/use-voice-metering';
 import { RootStackParamList } from '../navigation/types';
+import { isPaywallEnabled } from '../config/launch-mode';
 import { FeatureLimitError } from '../services/billing/subscription-service';
+import { navigateToPaywall } from '../utils/paywall-navigation';
 import { mapMoodToOrb } from '../services/intelligence/mood-adaptation-service';
 import { getMoodIntelligenceService } from '../services/intelligence/mood-intelligence-service';
 import { VoiceAudioRoute, voiceAudioRouteService } from '../services/voice/voice-audio-route-service';
@@ -49,10 +51,14 @@ export function VoiceConversationScreen({ navigation, route }: Props) {
       else await voice.startCall(profile.companion.lastUsedMode ?? 'friend');
     } catch (err) {
       if (err instanceof FeatureLimitError) {
-        Alert.alert('Voice limit reached', err.message, [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => navigation.navigate('Paywall', { source: 'voice-limit' }) },
-        ]);
+        if (isPaywallEnabled()) {
+          Alert.alert('Voice limit reached', err.message, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => navigateToPaywall(navigation, 'voice-limit') },
+          ]);
+        } else {
+          Alert.alert('Voice unavailable', err instanceof Error ? err.message : 'Try again.');
+        }
       } else {
         Alert.alert('Voice failed', err instanceof Error ? err.message : 'Try again.');
       }

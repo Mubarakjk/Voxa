@@ -1,4 +1,5 @@
-import { IUserProfileRepository } from '../contracts';
+import { areAllFeaturesUnlocked, isBillingDormant } from '../../config/launch-mode';
+import { getUnlockedPlanStatus } from '../../constants/free-launch-plan-status';
 import {
   createDefaultSubscription,
   PlanStatus,
@@ -6,9 +7,11 @@ import {
 } from '../../types/subscription';
 import { UserProfile, nowIso } from '../../types';
 import { IBillingService, ISubscriptionRepository } from './billing-contracts';
+import { IUserProfileRepository } from '../contracts';
 import { UsageTrackingService } from './usage-tracking-service';
 import { SubscriptionEntitlementService } from './subscription-entitlement-service';
 import { EntitlementSnapshot } from './billing-types';
+import { normalizeEntitlementSnapshot } from './entitlement-normalize';
 import { migrateLegacyLocalSubscription } from './legacy-subscription-migration';
 import { IStorageService } from '../contracts';
 
@@ -62,10 +65,11 @@ export function applyTrialExpiry(subscription: UserSubscription): UserSubscripti
 }
 
 function planStatusFromEntitlement(
-  entitlement: EntitlementSnapshot,
+  entitlementInput: EntitlementSnapshot,
   subscription: UserSubscription,
 ): PlanStatus {
-  const isTrialActive = Boolean(entitlement.isTrialActive && entitlement.trialEnd);
+  const entitlement = normalizeEntitlementSnapshot(entitlementInput);
+  const isTrialActive = Boolean(entitlement.isTrialActive && entitlement.trialEnd && entitlement.isPro);
   const trialDaysLeft = isTrialActive && entitlement.trialEnd
     ? Math.max(0, Math.ceil((new Date(entitlement.trialEnd).getTime() - Date.now()) / 86400000))
     : 0;
@@ -79,7 +83,7 @@ function planStatusFromEntitlement(
     isTrialActive: isTrialActive && trialDaysLeft > 0,
     trialDaysLeft,
     trialEnd: entitlement.trialEnd ?? subscription.trialEnd,
-    subscriptionPlan: isPro ? 'pro' : subscription.subscriptionPlan,
+    subscriptionPlan: isPro ? 'pro' : 'free',
     isFoundingMember: Boolean(subscription.isFoundingMember),
     billingPeriod: entitlement.billingPeriod,
     renewalDate: entitlement.expiresAt,
@@ -124,6 +128,9 @@ export class SubscriptionService {
   }
 
   async buildPlanStatus(userId: string, subscriptionInput?: UserSubscription): Promise<PlanStatus> {
+    if (areAllFeaturesUnlocked()) {
+      return getUnlockedPlanStatus();
+    }
     const entitlement = await this.entitlementService.getCachedEntitlement(userId);
     const subscription = applyTrialExpiry(
       subscriptionInput ?? (await this.subscriptionRepo.getSubscription(userId)),

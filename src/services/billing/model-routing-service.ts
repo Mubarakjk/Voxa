@@ -54,9 +54,11 @@ const MODEL_ROUTES: Record<ModelTask, ModelRoute> = {
   },
 };
 
+import { areAllFeaturesUnlocked } from '../../config/launch-mode';
+
 export class ModelRoutingService {
   resolve(task: ModelTask, isPro = false): ModelRoute {
-    if (task === 'deep_planning' && !isPro) {
+    if (task === 'deep_planning' && !isPro && !areAllFeaturesUnlocked()) {
       return MODEL_ROUTES.ordinary_conversation;
     }
     return MODEL_ROUTES[task];

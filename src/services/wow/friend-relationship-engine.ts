@@ -1,5 +1,6 @@
 import { CompanionIntelligenceBundle } from '../../types/companion-intelligence';
 import { Goal, Memory, UserProfile, VoiceSession } from '../../types';
+import { asArray, asStringArray } from '../../utils/as-array';
 
 export type FriendRelationshipProfile = {
   daysTogether: number;
@@ -28,7 +29,10 @@ export type BuildFriendProfileInput = {
 };
 
 export function buildFriendRelationshipProfile(input: BuildFriendProfileInput): FriendRelationshipProfile {
-  const { bundle, memories, goals, voiceSessions } = input;
+  const bundle = input.bundle;
+  const memories = asArray<Memory>(input.memories);
+  const goals = asArray<Goal>(input.goals);
+  const voiceSessions = asArray<VoiceSession>(input.voiceSessions);
   const rel = bundle.relationship;
   const ip = bundle.profile;
 
@@ -46,14 +50,15 @@ export function buildFriendRelationshipProfile(input: BuildFriendProfileInput): 
   const favouriteGames = memories.filter((m) => /game|play|gaming/i.test(m.content)).map((m) => m.title);
   const dreams = memories.filter((m) => /dream|hope|wish|someday/i.test(m.content)).map((m) => m.title);
 
-  const insideJokes = bundle.insideJokes.map((j) => j.label);
-  const importantPeople = ip.relationships.map((r) => r.name);
-  const birthdays = ip.importantDates.filter((d) => d.category === 'birthday').map((d) => d.label);
-  const importantDates = ip.importantDates.map((d) => d.label);
+  const insideJokes = asArray<{ label: string }>(bundle.insideJokes).map((j) => j.label);
+  const importantPeople = asArray<{ name: string }>(ip.relationships).map((r) => r.name);
+  const importantDateItems = asArray<{ category: string; label: string }>(ip.importantDates);
+  const birthdays = importantDateItems.filter((d) => d.category === 'birthday').map((d) => d.label);
+  const importantDates = importantDateItems.map((d) => d.label);
   const achievementsTogether = [
-    ...rel.milestones.map((m) => m.label),
+    ...asArray<{ label: string }>(rel.milestones).map((m) => m.label),
     ...goals.filter((g) => g.progress >= 100).map((g) => g.title),
-    ...ip.recentAchievements,
+    ...asStringArray(ip.recentAchievements),
   ];
 
   const relationshipScore = Math.min(
@@ -78,8 +83,8 @@ export function buildFriendRelationshipProfile(input: BuildFriendProfileInput): 
   if (midGoal) {
     naturalRecallLines.push(`Last week you were working on "${midGoal.title}" — how's that going?`);
   }
-  if (ip.relationships[0]) {
-    naturalRecallLines.push(`You mentioned ${ip.relationships[0].name} before — everything okay there?`);
+  if (importantPeople[0]) {
+    naturalRecallLines.push(`You mentioned ${importantPeople[0]} before — everything okay there?`);
   }
 
   return {

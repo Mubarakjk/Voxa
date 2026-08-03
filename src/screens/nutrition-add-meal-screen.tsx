@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   tabOn: {
     borderColor: colors.primarySoft,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   card: { gap: spacing.sm },
   input: {
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   },
   kindChipOn: {
     borderColor: colors.primarySoft,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   quickRow: {
     flexDirection: 'row',

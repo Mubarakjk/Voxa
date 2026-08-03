@@ -1,4 +1,5 @@
 import { getFeatureStatus, isFeatureVisible } from '../../config/feature-status';
+import { isVoiceNotesEnabled } from '../../config/release-voice';
 import { GateResult } from '../../types/subscription';
 import { FeatureGateService } from '../billing/feature-gate-service';
 import { SubscriptionService } from '../billing/subscription-service';
@@ -11,6 +12,13 @@ export async function checkVoiceNoteGate(input: {
   featureGate: FeatureGateService;
   usageTracking: UsageTrackingService;
 }): Promise<GateResult & { dailyUsed?: number; dailyLimit?: number }> {
+  if (!isVoiceNotesEnabled()) {
+    return {
+      allowed: false,
+      feature: 'voice_note',
+      reason: 'feature_disabled',
+    };
+  }
   const status = await input.subscription.getPlanStatus(input.userId);
   const usage = await input.usageTracking.getUsage(input.userId);
   const result = input.featureGate.canAccessFeature('voice_note', status, usage);
@@ -27,7 +35,7 @@ export async function checkVoiceNoteGate(input: {
 }
 
 export function isVoiceNoteUiVisible(): boolean {
-  return isFeatureVisible('voiceNote');
+  return isVoiceNotesEnabled() && isFeatureVisible('voiceNote');
 }
 
 export function getVoiceNoteFeatureDiagnostics() {

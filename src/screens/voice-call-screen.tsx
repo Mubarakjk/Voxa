@@ -16,7 +16,9 @@ import { colors, layout, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { useVoiceCallController } from '../hooks/use-voice-call-controller';
 import { RootStackParamList } from '../navigation/types';
+import { isPaywallEnabled } from '../config/launch-mode';
 import { FeatureLimitError } from '../services/billing/subscription-service';
+import { navigateToPaywall } from '../utils/paywall-navigation';
 import { VoiceSession } from '../types';
 import { getVoxaAvatarTint, getVoxaDisplayName } from '../utils/companion-display';
 import { formatDuration } from '../utils/interactions';
@@ -63,10 +65,14 @@ export function VoiceCallScreen() {
       await voice.startCall(mode);
     } catch (err) {
       if (err instanceof FeatureLimitError) {
-        Alert.alert('Voice limit reached', err.message, [
-          { text: 'Continue Free', style: 'cancel' },
-          { text: 'Upgrade to Pro', onPress: () => navigation.navigate('Paywall', { source: 'voice-limit' }) },
-        ]);
+        if (isPaywallEnabled()) {
+          Alert.alert('Voice limit reached', err.message, [
+            { text: 'Continue Free', style: 'cancel' },
+            { text: 'Upgrade to Pro', onPress: () => navigateToPaywall(navigation, 'voice-limit') },
+          ]);
+        } else {
+          Alert.alert('Voice unavailable', err.message);
+        }
       } else {
         Alert.alert('Voice call failed', err instanceof Error ? err.message : 'Please try again.');
       }

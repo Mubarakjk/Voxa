@@ -121,8 +121,13 @@ export function getCompanionJournalService(
   storage: IStorageService,
   repositories?: VoxaRepositories,
 ): CompanionJournalService {
-  if (!instance || repositories) {
+  // Singleton — do not recreate when repositories is passed on every render.
+  if (!instance) {
     instance = new CompanionJournalService(storage, repositories);
   }
   return instance;
+}
+
+export function resetCompanionJournalService() {
+  instance = null;
 }

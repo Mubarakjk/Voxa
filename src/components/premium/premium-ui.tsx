@@ -4,6 +4,7 @@ import { Animated, Easing, Pressable, StyleSheet, View, ViewStyle } from 'react-
 
 import { colors, layout, radius, spacing, typography } from '../../constants/theme';
 import { PREMIUM_MOTION, staggerDelay } from '../../utils/premium-motion';
+import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { VoxaText } from '../ui/voxa-text';
 import {
   CompanionOrbMood,
@@ -212,15 +213,63 @@ export function TimelineItem({
   );
 }
 
-export function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyphMap; title: string; message: string }) {
+export function EmptyState({
+  icon,
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <View style={styles.emptyState}>
-      <Ionicons name={icon} size={28} color={colors.textMuted} />
-      <VoxaText variant="subtitle">{title}</VoxaText>
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name={icon} size={28} color={colors.primarySoft} />
+      </View>
+      <VoxaText variant="subtitle" style={styles.emptyTitle}>
+        {title}
+      </VoxaText>
       <VoxaText variant="body" color="textSecondary" style={styles.emptyMessage}>
         {message}
       </VoxaText>
+      {actionLabel && onAction ? (
+        <PremiumButton label={actionLabel} onPress={onAction} />
+      ) : null}
     </View>
+  );
+}
+
+export function SkeletonBlock({ height = 72, style }: { height?: number; style?: ViewStyle }) {
+  const opacity = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.7, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.35, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          height,
+          borderRadius: radius.lg,
+          backgroundColor: colors.surfaceStrong,
+          opacity,
+        },
+        style,
+      ]}
+    />
   );
 }
 
@@ -321,10 +370,16 @@ export function TypingDots({ tint = colors.primarySoft }: { tint?: string }) {
 }
 
 export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(PREMIUM_MOTION.slideUp.distance)).current;
+  const reduceMotion = useReduceMotion();
+  const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const translateY = useRef(new Animated.Value(reduceMotion ? 0 : PREMIUM_MOTION.slideUp.distance)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      opacity.setValue(1);
+      translateY.setValue(0);
+      return;
+    }
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: PREMIUM_MOTION.fadeIn.duration, delay, useNativeDriver: true }),
       Animated.timing(translateY, {
@@ -335,7 +390,7 @@ export function FadeIn({ children, delay = 0 }: { children: ReactNode; delay?: n
         useNativeDriver: true,
       }),
     ]).start();
-  }, [delay, opacity, translateY]);
+  }, [delay, opacity, reduceMotion, translateY]);
 
   return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
 }
@@ -352,20 +407,28 @@ export function SpringPressable({
 }: {
   children: ReactNode;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: ViewStyle | ViewStyle[];
   disabled?: boolean;
 }) {
+  const reduceMotion = useReduceMotion();
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn = () => {
+    if (reduceMotion) return;
     Animated.spring(scale, { toValue: PREMIUM_MOTION.buttonScale.pressIn, useNativeDriver: true, ...PREMIUM_MOTION.spring }).start();
   };
   const pressOut = () => {
+    if (reduceMotion) return;
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, ...PREMIUM_MOTION.spring }).start();
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={pressIn} onPressOut={pressOut} disabled={disabled}>
+    <Pressable
+      onPress={onPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      disabled={disabled}
+      accessibilityRole="button">
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
@@ -445,8 +508,20 @@ const styles = StyleSheet.create({
   },
   timelineLine: { flex: 1, width: 2, backgroundColor: colors.glassBorder, marginTop: 4 },
   timelineCopy: { flex: 1, gap: 2, paddingBottom: spacing.sm },
-  emptyState: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
-  emptyMessage: { textAlign: 'center', maxWidth: 280 },
+  emptyState: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.22)',
+    marginBottom: spacing.sm,
+  },
+  emptyTitle: { textAlign: 'center', maxWidth: 300 },
+  emptyMessage: { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
   loadingPulse: { alignItems: 'center', paddingVertical: spacing.xl },
   premiumButton: {
     flexDirection: 'row',
@@ -459,9 +534,9 @@ const styles = StyleSheet.create({
   },
   premiumButtonPrimary: { backgroundColor: colors.primary },
   premiumButtonGhost: {
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 124, 246, 0.28)',
+    borderColor: 'rgba(45, 212, 191, 0.28)',
   },
   pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.45 },

@@ -3,27 +3,34 @@ import { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors } from '../../constants/theme';
+import { colors, layout, spacing } from '../../constants/theme';
 
 type Props = {
   children: ReactNode;
   scroll?: boolean;
   padded?: boolean;
-  glow?: 'purple' | 'blue' | 'safe' | 'none';
+  /** Ambient glow accent. `purple` kept as alias for primary teal brand glow. */
+  glow?: 'primary' | 'purple' | 'blue' | 'safe' | 'none';
   style?: ViewStyle;
 };
 
-export function ScreenShell({ children, scroll, padded = true, glow = 'purple', style }: Props) {
+export function ScreenShell({ children, scroll, padded = true, glow = 'primary', style }: Props) {
   const insets = useSafeAreaInsets();
   const glowColor =
-    glow === 'blue' ? colors.blueGlow : glow === 'safe' ? colors.safeGlow : glow === 'none' ? 'transparent' : colors.glow;
+    glow === 'blue'
+      ? colors.blueGlow
+      : glow === 'safe'
+        ? colors.safeGlow
+        : glow === 'none'
+          ? 'transparent'
+          : colors.glow;
 
   const content = (
     <View
       style={[
         styles.content,
-        padded && { paddingHorizontal: 20 },
-        { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 },
+        padded && { paddingHorizontal: layout.screenPadding },
+        { paddingTop: insets.top + spacing.md12, paddingBottom: insets.bottom + spacing.md },
         style,
       ]}>
       {children}
@@ -32,7 +39,7 @@ export function ScreenShell({ children, scroll, padded = true, glow = 'purple', 
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['#0E0E18', colors.background, colors.backgroundDeep]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['#12202A', colors.background, colors.backgroundDeep]} style={StyleSheet.absoluteFill} />
       {glow !== 'none' && (
         <View pointerEvents="none" style={[styles.glowOrb, { backgroundColor: glowColor }]} />
       )}

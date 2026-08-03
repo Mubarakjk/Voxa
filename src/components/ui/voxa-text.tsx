@@ -1,6 +1,6 @@
 import { StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 
-import { colors, typography } from '../../constants/theme';
+import { colors, spacing, typography } from '../../constants/theme';
 
 type ColorKey = 'text' | 'textSecondary' | 'textMuted' | 'primary' | 'primarySoft' | 'safe' | 'danger';
 
@@ -26,6 +26,7 @@ export function VoxaText({ children, variant = 'body', color = 'text', style, nu
   return (
     <Text
       numberOfLines={numberOfLines}
+      maxFontSizeMultiplier={1.35}
       style={[typography[variant], { color: colorMap[color] }, style]}>
       {children}
     </Text>
@@ -43,5 +44,5 @@ export function SectionHeader({ title, style }: { title: string; style?: ViewSty
 }
 
 const headerStyles = StyleSheet.create({
-  row: { marginBottom: 12 },
+  row: { marginBottom: spacing.md12, marginTop: spacing.xs },
 });

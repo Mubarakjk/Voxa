@@ -73,7 +73,7 @@ export const SOCIAL_GAME_CATALOG: SocialGameDefinition[] = [
     description: 'Draw a card, answer, listen, pass. Soft prompts for connection — not interrogation.',
     players: '2+',
     duration: '10–30 min',
-    accent: '#8B7CF6',
+    accent: '#2DD4BF',
   },
 ];
 

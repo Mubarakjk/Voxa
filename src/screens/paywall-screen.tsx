@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,9 +17,10 @@ import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { VoiceOrb } from '../components/ui/voice-orb';
+import { CONTEXTUAL_PAYWALL_SOURCES, PAYWALL_COPY } from '../constants/free-pro-access';
+import { LEGAL_URLS } from '../constants/legal-urls';
 import {
   calculateAnnualSavingsPercent,
-  formatPrice,
   formatPriceFromStore,
   FREE_FEATURES,
   FREE_VS_PRO_COMPARISON,
@@ -26,6 +28,7 @@ import {
   PRO_TOP_BENEFITS,
 } from '../constants/pricing';
 import { colors, layout, radius, spacing } from '../constants/theme';
+import { isPaywallEnabled } from '../config/launch-mode';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { OfferingsSnapshot } from '../services/billing/billing-types';
@@ -33,6 +36,16 @@ import { billingStateMachine } from '../services/billing/billing-state-machine';
 import { getBillingRuntime, getPurchasesUnavailableMessage } from '../services/billing/runtime-environment';
 import { BillingPeriod } from '../types/subscription';
 import { trackEvent } from '../services/analytics/analytics-service';
+import {
+  restoreAlertMessage,
+  restoreAlertTitle,
+  RESTORE_FAILURE_MESSAGE,
+} from '../services/billing/restore-messages';
+import {
+  sanitizeBillingMessage,
+  toFriendlyBillingError,
+} from '../services/billing/friendly-billing-errors';
+import { hapticLight, hapticSelection, hapticSuccess, hapticWarning } from '../utils/haptics';
 
 type PaywallScreenProps = {
   source?: string;
@@ -51,6 +64,7 @@ type PaywallScreenProps = {
   errorMessage?: string | null;
   selectedPeriod: BillingPeriod;
   onSelectPeriod: (period: BillingPeriod) => void;
+  onPackageSelected?: (period: BillingPeriod) => void;
 };
 
 export function PaywallScreen({
@@ -67,18 +81,27 @@ export function PaywallScreen({
   errorMessage,
   selectedPeriod,
   onSelectPeriod,
+  onPackageSelected,
   purchaseDisabled,
   setupMessage,
 }: PaywallScreenProps) {
   const runtime = getBillingRuntime();
   const monthly = offerings?.monthly;
   const annual = offerings?.annual;
-  const monthlyDisplay = formatPriceFromStore(monthly?.priceString, monthly?.price ?? PRICING_CONFIG.prices.monthly);
-  const annualDisplay = formatPriceFromStore(annual?.priceString, annual?.price ?? PRICING_CONFIG.prices.annual);
-  const savingsPercent = calculateAnnualSavingsPercent(
-    monthly?.price ?? PRICING_CONFIG.prices.monthly,
-    annual?.price ?? PRICING_CONFIG.prices.annual,
-  );
+  const storePrices = offerings?.source === 'store';
+  const monthlyDisplay = storePrices
+    ? formatPriceFromStore(monthly?.priceString)
+    : offeringsLoading
+      ? '…'
+      : '—';
+  const annualDisplay = storePrices
+    ? formatPriceFromStore(annual?.priceString)
+    : offeringsLoading
+      ? '…'
+      : '—';
+  const savingsPercent = storePrices
+    ? calculateAnnualSavingsPercent(monthly?.price ?? 0, annual?.price ?? 0)
+    : 0;
   const trialDays =
     selectedPeriod === 'annual' ? annual?.trialDays : monthly?.trialDays;
   const trialEligible = Boolean(
@@ -97,7 +120,8 @@ export function PaywallScreen({
     !runtime.supportsNativePurchases ||
     offeringsLoading ||
     isLoading ||
-    selectedPackageValid === false
+    selectedPackageValid === false ||
+    offerings?.source === 'fallback'
   );
 
   const purchaseLabel = useMemo(() => {
@@ -105,11 +129,11 @@ export function PaywallScreen({
     if (trialEligible && trialDays) {
       return `Start ${trialDays}-day free trial`;
     }
-    return selectedPeriod === 'annual' ? 'Subscribe yearly' : 'Subscribe monthly';
-  }, [runtime.supportsNativePurchases, trialEligible, trialDays, selectedPeriod]);
+    return PAYWALL_COPY.subscribeLabel;
+  }, [runtime.supportsNativePurchases, trialEligible, trialDays]);
 
   return (
-    <ScreenShell padded={false} glow="purple">
+    <ScreenShell padded={false} glow="primary">
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {onClose ? (
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12} accessibilityLabel="Close paywall">
@@ -117,7 +141,7 @@ export function PaywallScreen({
           </Pressable>
         ) : null}
 
-        <LinearGradient colors={['rgba(139,124,246,0.35)', 'rgba(6,6,12,0)']} style={styles.heroGlow}>
+        <LinearGradient colors={['rgba(45,212,191,0.28)', 'rgba(11,15,20,0)']} style={styles.heroGlow}>
           <View style={styles.hero}>
             <View style={styles.proBadge}>
               <Ionicons name="diamond" size={14} color={colors.background} />
@@ -127,10 +151,10 @@ export function PaywallScreen({
             </View>
             <VoiceOrb size={88} tint={colors.primary} active />
             <VoxaText variant="title" style={styles.heroTitle}>
-              Deeper companion. Built for your life.
+              {PAYWALL_COPY.title}
             </VoxaText>
             <VoxaText variant="body" color="textSecondary" style={styles.heroCopy}>
-              Advanced memory, Life OS, mood insights, and generous fair-use AI — honestly priced at {monthlyDisplay}/month.
+              {PAYWALL_COPY.subtitle}
             </VoxaText>
           </View>
         </LinearGradient>
@@ -154,20 +178,26 @@ export function PaywallScreen({
 
         {offerings?.source === 'fallback' ? (
           <GlassCard style={styles.noticeCard}>
-            <VoxaText variant="caption" color="primarySoft">
-              Development fallback pricing
-            </VoxaText>
+            <VoxaText variant="subtitle">Plans temporarily unavailable</VoxaText>
             <VoxaText variant="body" color="textSecondary">
-              Store metadata is unavailable. Prices shown are local fallbacks only.
+              We couldn’t load subscription options from the App Store. Check your connection and try again later — the rest of Voxa still works.
             </VoxaText>
           </GlassCard>
         ) : null}
 
         {errorMessage ? (
           <GlassCard style={styles.errorCard}>
-            <VoxaText variant="body" color="danger">
-              {errorMessage}
-            </VoxaText>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <VoxaText variant="subtitle">Couldn’t complete purchase</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                {errorMessage.includes('Network') || errorMessage.includes('offline')
+                  ? 'Check your connection and try again. You won’t be charged twice.'
+                  : errorMessage.includes('cancel')
+                    ? 'Purchase cancelled — no charge was made.'
+                    : 'Please try again, or restore purchases if you already subscribed.'}
+              </VoxaText>
+            </View>
           </GlassCard>
         ) : null}
 
@@ -179,7 +209,14 @@ export function PaywallScreen({
               <View style={styles.periodRow}>
                 <Pressable
                   style={[styles.periodChip, selectedPeriod === 'monthly' && styles.periodChipActive]}
-                  onPress={() => onSelectPeriod('monthly')}
+                  onPress={() => {
+                    void hapticSelection();
+                    onSelectPeriod('monthly');
+                    onPackageSelected?.('monthly');
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: selectedPeriod === 'monthly' }}
+                  accessibilityLabel={`Monthly plan, ${monthlyDisplay} per month`}
                 >
                   <VoxaText variant="caption">Monthly</VoxaText>
                   <VoxaText variant="subtitle">{monthlyDisplay}</VoxaText>
@@ -188,9 +225,23 @@ export function PaywallScreen({
                   </VoxaText>
                 </Pressable>
                 <Pressable
-                  style={[styles.periodChip, selectedPeriod === 'annual' && styles.periodChipActive]}
-                  onPress={() => onSelectPeriod('annual')}
+                  style={[
+                    styles.periodChip,
+                    styles.periodChipRecommended,
+                    selectedPeriod === 'annual' && styles.periodChipActive,
+                  ]}
+                  onPress={() => {
+                    void hapticSelection();
+                    onSelectPeriod('annual');
+                    onPackageSelected?.('annual');
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: selectedPeriod === 'annual' }}
+                  accessibilityLabel={`Annual plan, ${annualDisplay} per year${savingsPercent > 0 ? `, save ${savingsPercent} percent` : ''}`}
                 >
+                  <VoxaText variant="caption" color="primarySoft">
+                    {PAYWALL_COPY.annualBestValueLabel}
+                  </VoxaText>
                   <VoxaText variant="caption">Yearly</VoxaText>
                   <VoxaText variant="subtitle">{annualDisplay}</VoxaText>
                   <VoxaText variant="caption" color="textMuted">
@@ -278,17 +329,20 @@ export function PaywallScreen({
 
         <GlassCard style={styles.disclosureCard}>
           <VoxaText variant="caption" color="textMuted">
-            Payment is charged to your App Store or Google Play account. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your device subscription settings.
+            Payment is charged to your Apple ID (or Google Play account). The subscription renews automatically
+            unless cancelled at least 24 hours before the end of the current period. After a free trial, if
+            offered and eligible, your subscription converts to a paid plan unless you cancel. Manage or cancel
+            anytime in your Apple ID / Google Play subscription settings.
           </VoxaText>
           <View style={styles.linkRow}>
-            <Pressable onPress={onOpenTerms}>
+            <Pressable onPress={onOpenTerms} accessibilityRole="link">
               <VoxaText variant="caption" color="primarySoft">
-                Terms
+                Terms of Use
               </VoxaText>
             </Pressable>
-            <Pressable onPress={onOpenPrivacy}>
+            <Pressable onPress={onOpenPrivacy} accessibilityRole="link">
               <VoxaText variant="caption" color="primarySoft">
-                Privacy
+                Privacy Policy
               </VoxaText>
             </Pressable>
           </View>
@@ -301,10 +355,16 @@ export function PaywallScreen({
             loading={isLoading}
             disabled={purchaseDisabledProp}
           />
-          <PrimaryButton label="Continue Free" variant="ghost" onPress={onContinueFree} disabled={isLoading} />
-          <Pressable onPress={onRestorePurchases} style={styles.restoreBtn} disabled={isLoading}>
+          <PrimaryButton label={PAYWALL_COPY.continueFreeLabel} variant="ghost" onPress={onContinueFree} disabled={isLoading} />
+          <Pressable
+            onPress={onRestorePurchases}
+            style={styles.restoreBtn}
+            disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel={PAYWALL_COPY.restoreLabel}
+          >
             <VoxaText variant="caption" color="textMuted">
-              Restore purchases
+              {PAYWALL_COPY.restoreLabel}
             </VoxaText>
           </Pressable>
         </View>
@@ -347,7 +407,14 @@ const styles = StyleSheet.create({
   heroTitle: { textAlign: 'center' },
   heroCopy: { textAlign: 'center', maxWidth: 320 },
   noticeCard: { padding: spacing.lg, gap: spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
-  errorCard: { padding: spacing.lg, borderColor: colors.danger, borderWidth: 1 },
+  errorCard: {
+    padding: spacing.lg,
+    borderColor: colors.danger,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
   pricingCard: { gap: spacing.md, padding: spacing.lg },
   periodRow: { flexDirection: 'row', gap: spacing.sm },
   periodChip: {
@@ -359,10 +426,23 @@ const styles = StyleSheet.create({
     gap: 4,
     alignItems: 'center',
   },
+  periodChipRecommended: {
+    borderColor: 'rgba(45,212,191,0.35)',
+  },
   periodChipActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139,124,246,0.12)',
+    backgroundColor: 'rgba(45,212,191,0.12)',
   },
+  bestValueBadge: {
+    position: 'absolute',
+    top: -10,
+    alignSelf: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  bestValueText: { color: colors.background, fontWeight: '700', fontSize: 10 },
   section: { gap: spacing.md },
   tableCard: { padding: 0, overflow: 'hidden' },
   tableHeader: {
@@ -392,6 +472,13 @@ type PaywallRouteProps = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
 
 export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
   const { profile, services, refreshProfile } = useVoxa();
+
+  useEffect(() => {
+    if (!isPaywallEnabled()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [offeringsLoading, setOfferingsLoading] = useState(true);
   const [offerings, setOfferings] = useState<OfferingsSnapshot | null>(null);
@@ -408,11 +495,11 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
     billingStateMachine.startLoadingOfferings();
     setOfferingsLoading(true);
     try {
-      const next = await services.subscription.getOfferings();
+      const next = await services.billingService.getOfferings();
       setOfferings(next);
       billingStateMachine.offeringsReady();
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Unable to load pricing.');
+      setErrorMessage(toFriendlyBillingError(err, 'offerings'));
       billingStateMachine.offeringsFailed();
     } finally {
       setOfferingsLoading(false);
@@ -421,49 +508,96 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
 
   useEffect(() => {
     void loadOfferings();
-    trackEvent('subscription_screen_opened', { source: route.params?.source ?? 'unknown' });
+    const source = route.params?.source ?? 'unknown';
+    trackEvent('paywall_opened', { source });
+    trackEvent('subscription_screen_opened', { source });
     if (profile) {
-      void services.subscriptionAnalytics.track('paywall_viewed', { source: route.params?.source });
-      void services.paywallImpressions.recordImpression(profile.id);
+      void services.subscriptionAnalytics.track('paywall_opened', { source });
+      if (CONTEXTUAL_PAYWALL_SOURCES.has(source)) {
+        void services.paywallImpressions.recordImpression(profile.id);
+      }
     }
   }, [loadOfferings, profile, route.params?.source, services.paywallImpressions, services.subscriptionAnalytics]);
+
+  const openLegalUrl = useCallback(async (url: string, fallback: () => void) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        return;
+      }
+    } catch {
+      // fall through to in-app screen
+    }
+    fallback();
+  }, []);
 
   const handlePurchase = async (period: BillingPeriod) => {
     if (!profile || !billingStateMachine.startPurchase()) return;
     setIsLoading(true);
     setErrorMessage(null);
+    void hapticLight();
     try {
-      await services.subscriptionAnalytics.track('purchase_started', { source: route.params?.source, productId: period });
-      const outcome = await services.subscription.purchase(profile.id, period);
+      trackEvent('purchase_started', { source: route.params?.source, period });
+      await services.subscriptionAnalytics.track('purchase_started', {
+        source: route.params?.source,
+        productId: period,
+      });
+      const outcome = await services.billingService.purchase(profile.id, period);
       if (outcome.success) {
+        const status = await services.billingService.getPlanStatus(profile.id);
+        if (!status.isPro) {
+          billingStateMachine.purchaseFailed();
+          void hapticWarning();
+          trackEvent('purchase_failed', { reason: 'no_entitlement' });
+          await services.subscriptionAnalytics.track('purchase_failed');
+          setErrorMessage('Purchase completed, but Voxa Pro is not active yet. Try Restore Purchases.');
+          return;
+        }
         billingStateMachine.purchaseSucceeded();
-        await services.subscriptionAnalytics.track('purchase_completed', { productId: outcome.productId });
+        void hapticSuccess();
+        trackEvent('purchase_succeeded', { period });
+        await services.subscriptionAnalytics.track('purchase_succeeded', { productId: outcome.productId });
         await refreshProfile();
-        navigation.goBack();
+        Alert.alert('Welcome to Voxa Pro', 'Your subscription is active. Enjoy the deeper companion experience.', [
+          { text: 'Continue', onPress: () => navigation.goBack() },
+        ]);
         return;
       }
       if (outcome.cancelled) {
         billingStateMachine.purchaseCancelled();
+        trackEvent('purchase_cancelled');
         await services.subscriptionAnalytics.track('purchase_cancelled');
         return;
       }
       if (outcome.pending) {
         billingStateMachine.purchasePending();
-        Alert.alert('Purchase pending', outcome.errorMessage ?? 'Your purchase is pending store approval.');
+        Alert.alert(
+          'Purchase pending',
+          sanitizeBillingMessage(
+            outcome.errorMessage ?? 'Your purchase is pending store approval.',
+            'purchase',
+          ),
+        );
         return;
       }
       billingStateMachine.purchaseFailed();
+      void hapticWarning();
+      trackEvent('purchase_failed');
       await services.subscriptionAnalytics.track('purchase_failed');
-      setErrorMessage(outcome.errorMessage ?? 'Purchase failed. Please try again.');
+      setErrorMessage(sanitizeBillingMessage(outcome.errorMessage, 'purchase'));
     } catch (err) {
       billingStateMachine.purchaseFailed();
-      setErrorMessage(err instanceof Error ? err.message : 'Purchase failed.');
+      void hapticWarning();
+      trackEvent('purchase_failed');
+      setErrorMessage(toFriendlyBillingError(err, 'purchase'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleContinueFree = async () => {
+    trackEvent('paywall_dismissed', { source: route.params?.source });
     navigation.goBack();
   };
 
@@ -472,21 +606,23 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
     setIsLoading(true);
     setErrorMessage(null);
     try {
+      trackEvent('restore_started');
       await services.subscriptionAnalytics.track('restore_started');
-      await services.subscription.restorePurchases(profile.id);
+      await services.billingService.restorePurchases(profile.id);
       await refreshProfile();
-      const status = await services.subscription.getPlanStatus(profile.id);
-      await services.subscriptionAnalytics.track('restore_completed', {
-        productId: status.productId,
-      });
-      Alert.alert(
-        status.isPro ? 'Restore complete' : 'No subscription found',
-        status.isPro
-          ? 'Your Voxa Pro subscription is active on this account.'
-          : 'No active Voxa Pro subscription was found for this account.',
-      );
+      const status = await services.billingService.getPlanStatus(profile.id);
+      if (status.isPro) {
+        trackEvent('restore_succeeded');
+        await services.subscriptionAnalytics.track('restore_succeeded', { productId: status.productId });
+      } else {
+        trackEvent('restore_no_entitlement');
+        await services.subscriptionAnalytics.track('restore_no_entitlement');
+      }
+      Alert.alert(restoreAlertTitle(status.isPro), restoreAlertMessage(status.isPro));
     } catch (err) {
-      Alert.alert('Restore failed', err instanceof Error ? err.message : 'Please try again.');
+      trackEvent('restore_failed');
+      await services.subscriptionAnalytics.track('restore_failed');
+      Alert.alert('Restore failed', toFriendlyBillingError(err, 'restore') || RESTORE_FAILURE_MESSAGE);
     } finally {
       billingStateMachine.restoreFinished();
       setIsLoading(false);
@@ -503,8 +639,12 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
       onContinueFree={handleContinueFree}
       onRestorePurchases={handleRestore}
       onClose={() => navigation.goBack()}
-      onOpenTerms={() => navigation.navigate('TermsOfService')}
-      onOpenPrivacy={() => navigation.navigate('PrivacyPolicy')}
+      onOpenTerms={() =>
+        void openLegalUrl(LEGAL_URLS.termsOfService, () => navigation.navigate('TermsOfService'))
+      }
+      onOpenPrivacy={() =>
+        void openLegalUrl(LEGAL_URLS.privacyPolicy, () => navigation.navigate('PrivacyPolicy'))
+      }
       isLoading={isLoading || billingUiState === 'purchasing' || billingUiState === 'restoring'}
       purchaseDisabled={
         !billingStateMachine.canPurchase() ||
@@ -512,7 +652,8 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
         isLoading ||
         billingUiState === 'purchasing' ||
         billingUiState === 'restoring' ||
-        selectedPackageValid === false
+        selectedPackageValid === false ||
+        offerings?.source === 'fallback'
       }
       setupMessage={offerings?.setupMessage ?? null}
       offerings={offerings}
@@ -520,7 +661,11 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
       offline={offerings?.source === 'fallback'}
       errorMessage={errorMessage}
       selectedPeriod={selectedPeriod}
-      onSelectPeriod={setSelectedPeriod}
+      onSelectPeriod={(period) => {
+        trackEvent('package_selected', { period });
+        void services.subscriptionAnalytics.track('package_selected', { productId: period });
+        setSelectedPeriod(period);
+      }}
     />
   );
 }

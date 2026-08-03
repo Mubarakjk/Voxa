@@ -6,13 +6,14 @@ import {
   nowIso,
   UpdateConversationInput,
 } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IConversationRepository, IStorageService } from '../contracts';
 
 export class LocalConversationRepository implements IConversationRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<Conversation[]> {
-    return (await this.storage.getItem<Conversation[]>(STORAGE_KEYS.conversations)) ?? [];
+    return asArray(await this.storage.getItem<Conversation[]>(STORAGE_KEYS.conversations));
   }
 
   private async writeAll(conversations: Conversation[]): Promise<void> {

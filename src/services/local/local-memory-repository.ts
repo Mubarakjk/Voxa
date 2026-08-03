@@ -7,13 +7,14 @@ import {
   nowIso,
   UpdateMemoryInput,
 } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IMemoryRepository, IStorageService } from '../contracts';
 
 export class LocalMemoryRepository implements IMemoryRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<Memory[]> {
-    return (await this.storage.getItem<Memory[]>(STORAGE_KEYS.memories)) ?? [];
+    return asArray(await this.storage.getItem<Memory[]>(STORAGE_KEYS.memories));
   }
 
   private async writeAll(memories: Memory[]): Promise<void> {

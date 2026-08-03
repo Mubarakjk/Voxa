@@ -1,7 +1,7 @@
 import { getCompanionMode } from '../../constants/companion-modes';
 import { isFeatureVisible } from '../../config/feature-status';
 import { CompanionModeId, CreateMemoryInput, CreateReminderInput, Reminder } from '../../types';
-import { liveVoiceUnavailableMessage } from '../../utils/voice-navigation';
+import { canStartLiveVoice, liveVoiceUnavailableMessage } from '../../utils/voice-navigation';
 import { IStorageService, VoxaRepositories } from '../contracts';
 import { formatReminderTime } from '../../utils/reminders';
 import { notificationService } from '../notifications/notification-service';
@@ -153,18 +153,17 @@ export class ChatActionExecutor {
     };
   }
 
-  private async executeStartVoiceCall(context: ExecuteContext): Promise<ChatActionExecutionResult> {
-    if (!isFeatureVisible('voiceCall')) {
+  private async executeStartVoiceCall(_context: ExecuteContext): Promise<ChatActionExecutionResult> {
+    if (!canStartLiveVoice()) {
       return {
         success: true,
         confirmationMessage: liveVoiceUnavailableMessage(false),
       };
     }
-    await this.deps.startVoiceSession(context.userId, context.mode);
 
     return {
       success: true,
-      confirmationMessage: 'Connecting you now — opening voice.',
+      confirmationMessage: 'Connecting you now — opening a live call.',
       sideEffect: { type: 'open_voice_conversation', autoStart: true },
     };
   }

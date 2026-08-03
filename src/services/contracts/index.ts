@@ -199,10 +199,13 @@ export type VoxaServices = {
   usageTracking: import('../billing/usage-tracking-service').UsageTrackingService;
   subscriptionRepo: import('../billing/billing-contracts').ISubscriptionRepository;
   billing: import('../billing/billing-contracts').IBillingService;
+  /** Canonical RevenueCat billing facade — prefer over `billing` / raw SDK. */
+  billingService: import('../billing/billing-service').BillingService;
   purchaseManager: import('../billing/billing-contracts').IPurchaseManager;
   subscription: import('../billing/subscription-service').SubscriptionService;
   featureGate: import('../billing/feature-gate-service').FeatureGateService;
   entitlementService: import('../billing/subscription-entitlement-service').SubscriptionEntitlementService;
+  entitlementAccess: import('../billing/entitlement-access-service').EntitlementAccessService;
   subscriptionAnalytics: import('../billing/subscription-analytics-service').SubscriptionAnalyticsService;
   paywallImpressions: import('../billing/paywall-impression-service').PaywallImpressionService;
   modelRouting: import('../billing/model-routing-service').ModelRoutingService;

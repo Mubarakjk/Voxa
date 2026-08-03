@@ -23,6 +23,13 @@ export type RootStackParamList = {
   Paywall: { source?: string } | undefined;
   VoiceCall: undefined;
   SafeCall: undefined;
+  RealtimeCall:
+    | {
+        autoStart?: boolean;
+        scheduledCallId?: string;
+        fromScheduledCall?: boolean;
+      }
+    | undefined;
   ConversationHistory: undefined;
   RoutineCoach: undefined;
   DailyCheckIn: { period?: 'morning' | 'evening' } | undefined;
@@ -31,6 +38,7 @@ export type RootStackParamList = {
   HealthCheck: undefined;
   BillingQA: undefined;
   LifeOSHub: undefined;
+  LifeTimeline: undefined;
   GoalDetail: { goalId?: string } | undefined;
   FutureSelf: undefined;
   VisionBoard: undefined;
@@ -71,6 +79,7 @@ export type RootStackParamList = {
   CoachingHub: undefined;
   ConversationWorlds: undefined;
   RelationshipTimeline: undefined;
+  MyCompanion: undefined;
   CompanionChallenges: undefined;
   GiftsCollection: undefined;
   DailyNews: undefined;
@@ -82,6 +91,11 @@ export type RootStackParamList = {
   NutritionAddMeal: { dateKey?: string } | undefined;
   NutritionHistory: undefined;
   NutritionSettings: undefined;
+  NotesHub: undefined;
+  NoteEditor: { noteId: string };
+  VoicePicker: undefined;
+  ScheduledCalls: undefined;
+  ScheduleCompanionCall: { callId?: string } | undefined;
 };
 
 export type MainTabParamList = {

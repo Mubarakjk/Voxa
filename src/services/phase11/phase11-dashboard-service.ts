@@ -32,12 +32,15 @@ export type BuildPhase11Input = {
 
 export async function buildPhase11Dashboard(input: BuildPhase11Input): Promise<Phase11DashboardData> {
   const rel = input.bundle.relationship;
-  const daysTogether = Math.max(1, Math.floor((Date.now() - new Date(rel.relationshipStartedAt).getTime()) / 86400000));
+  const daysTogether = Math.max(
+    1,
+    Math.floor((Date.now() - new Date(rel.relationshipStartedAt || Date.now()).getTime()) / 86400000) || 1,
+  );
   const stage = resolveRelationshipStage({
     daysTogether,
     conversationCount: rel.conversationCount,
     sharedMemories: rel.sharedMemoryCount,
-    goalsCompleted: rel.goalsAchievedTogether,
+    goalsCompleted: rel.goalsAchievedTogether ?? 0,
   });
 
   const presence = buildDynamicPresence({
@@ -76,8 +79,10 @@ export async function buildPhase11Dashboard(input: BuildPhase11Input): Promise<P
     stage,
   });
 
+  const firstName = (input.profile.displayName ?? 'friend').trim().split(/\s+/)[0] || 'friend';
+
   const rhythm = buildDailyLifeRhythm({
-    firstName: input.profile.displayName.split(' ')[0] || input.profile.displayName,
+    firstName,
     todayFocus: input.todayFocus,
     routineNext: input.routine.nextBlock?.title ?? null,
     routineDone: input.routine.completedCount,
@@ -104,7 +109,7 @@ export async function buildPhase11Dashboard(input: BuildPhase11Input): Promise<P
     followUp?.prompt ??
     personality.insideJokeLine ??
     rhythm.reflectionLine ??
-    stageGreeting(stage, input.profile.displayName.split(' ')[0]);
+    stageGreeting(stage, firstName);
 
   const talkStarter = followUp?.prompt ?? recall?.line ?? wowMoment?.actionPrompt ?? null;
 

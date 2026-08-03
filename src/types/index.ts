@@ -26,3 +26,4 @@ export * from './phase8-retention';
 export * from './phase9-intelligence';
 export * from './phase10-play';
 export * from './phase11-living-companion';
+export * from './notes';

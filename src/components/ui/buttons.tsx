@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, radius } from '../../constants/theme';
+import { colors, layout, radius } from '../../constants/theme';
 import { VoxaText } from './voxa-text';
 
 type PrimaryButtonProps = {
@@ -103,7 +103,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
+    minHeight: layout.minTapTarget,
+    paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: radius.full,
     borderWidth: 1,
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
   },
   iconActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(139, 124, 246, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   iconDanger: {
     borderColor: 'rgba(248, 113, 113, 0.4)',

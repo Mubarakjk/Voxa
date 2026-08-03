@@ -1,3 +1,5 @@
+import { isPaywallEnabled } from '../../config/launch-mode';
+import { LIMIT_REACHED_COPY } from '../../constants/free-pro-access';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '../ui/buttons';
@@ -18,29 +20,24 @@ export function LimitReachedModal({
   onUpgrade,
   onContinueFree,
 }: LimitReachedModalProps) {
+  if (!isPaywallEnabled()) return null;
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <Pressable style={styles.backdrop} onPress={onContinueFree}>
         <Pressable style={styles.cardWrap} onPress={(event) => event.stopPropagation()}>
           <GlassCard style={styles.card}>
-            <VoxaText variant="subtitle">You have reached today&apos;s limit</VoxaText>
+            <VoxaText variant="subtitle">{LIMIT_REACHED_COPY.title}</VoxaText>
             <VoxaText variant="body" color="textSecondary">
               {message}
             </VoxaText>
             <VoxaText variant="caption" color="textMuted">
-              Free limits reset daily. Voxa Pro includes generous fair use — upgrade only if you want to continue now.
+              {LIMIT_REACHED_COPY.footer}
             </VoxaText>
             <View style={styles.actions}>
-              <PrimaryButton label="See Voxa Pro" onPress={onUpgrade} />
-              <PrimaryButton
-                label="Continue with Free"
-                variant="ghost"
-                onPress={onContinueFree}
-              />
+              <PrimaryButton label={LIMIT_REACHED_COPY.upgrade} onPress={onUpgrade} />
+              <PrimaryButton label={LIMIT_REACHED_COPY.notNow} variant="ghost" onPress={onContinueFree} />
             </View>
-            <VoxaText variant="caption" color="textMuted" style={styles.trialHint}>
-              Free trial availability depends on App Store or Google Play eligibility.
-            </VoxaText>
           </GlassCard>
         </Pressable>
       </Pressable>
@@ -58,5 +55,4 @@ const styles = StyleSheet.create({
   cardWrap: { width: '100%' },
   card: { gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg },
   actions: { gap: spacing.sm, marginTop: spacing.sm },
-  trialHint: { textAlign: 'center' },
 });

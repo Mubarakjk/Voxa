@@ -16,7 +16,9 @@ import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { useVoiceCallController } from '../hooks/use-voice-call-controller';
 import { RootStackParamList } from '../navigation/types';
+import { isPaywallEnabled } from '../config/launch-mode';
 import { FeatureLimitError } from '../services/billing/subscription-service';
+import { navigateToPaywall } from '../utils/paywall-navigation';
 import { createSafeCallEscalationService } from '../services/safe-call/safe-call-escalation-service';
 import { formatDuration } from '../utils/interactions';
 import { getVoxaDisplayName } from '../utils/companion-display';
@@ -76,10 +78,14 @@ export function SafeCallScreen() {
       lastSpokenPrompt.current = null;
     } catch (err) {
       if (err instanceof FeatureLimitError) {
-        Alert.alert('Voice limit reached', err.message, [
-          { text: 'Continue Free', style: 'cancel' },
-          { text: 'Upgrade to Pro', onPress: () => navigation.navigate('Paywall', { source: 'safe-call-limit' }) },
-        ]);
+        if (isPaywallEnabled()) {
+          Alert.alert('Voice limit reached', err.message, [
+            { text: 'Continue Free', style: 'cancel' },
+            { text: 'Upgrade to Pro', onPress: () => navigateToPaywall(navigation, 'safe-call-limit') },
+          ]);
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to start Safe Call.');
+        }
       } else {
         setError(err instanceof Error ? err.message : 'Failed to start Safe Call.');
       }

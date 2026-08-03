@@ -7,13 +7,14 @@ import {
   VoiceCallState,
   VoiceSession,
 } from '../../types';
+import { asArray } from '../../utils/as-array';
 import { IStorageService, IVoiceSessionRepository } from '../contracts';
 
 export class LocalVoiceSessionRepository implements IVoiceSessionRepository {
   constructor(private readonly storage: IStorageService) {}
 
   private async readAll(): Promise<VoiceSession[]> {
-    return (await this.storage.getItem<VoiceSession[]>(STORAGE_KEYS.voiceSessions)) ?? [];
+    return asArray(await this.storage.getItem<VoiceSession[]>(STORAGE_KEYS.voiceSessions));
   }
 
   private async writeAll(sessions: VoiceSession[]): Promise<void> {

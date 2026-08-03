@@ -2,6 +2,7 @@ import { STORAGE_KEYS } from '../../constants/storage-keys';
 import { CompanionIntelligenceBundle } from '../../types/companion-intelligence';
 import { Goal, Memory, nowIso } from '../../types';
 import { DelightMoment, DelightMomentKind } from '../../types/phase4-intelligence';
+import { asStringArray } from '../../utils/as-array';
 import { IStorageService } from '../contracts';
 
 export class DelightMomentsService {
@@ -18,7 +19,7 @@ export class DelightMomentsService {
     dreamAchieved?: boolean;
   }): DelightMoment | null {
     const now = input.now ?? new Date();
-    const shown = new Set(input.shownIds ?? []);
+    const shown = new Set(asStringArray(input.shownIds));
     const rel = input.bundle.relationship;
     const candidates: DelightMoment[] = [];
 
@@ -59,7 +60,8 @@ export class DelightMomentsService {
       candidates.push(this.moment('birthday', 'Birthday', 'Happy birthday — I am glad I get to be here for it.', true, 99, birthdayMemory.title));
     }
 
-    if (rel.milestones.some((m) => m.id === 'hundred_chats') && !shown.has('hundred_chats_delight')) {
+    const milestones = Array.isArray(rel.milestones) ? rel.milestones : [];
+    if (milestones.some((m) => m.id === 'hundred_chats') && !shown.has('hundred_chats_delight')) {
       candidates.push(this.moment('milestone', 'A real bond', 'This friendship is becoming something special.', true, 85));
     }
 
@@ -69,7 +71,7 @@ export class DelightMomentsService {
 
   async markShown(moment: DelightMoment): Promise<void> {
     if (!this.storage) return;
-    const shown = (await this.storage.getItem<string[]>(STORAGE_KEYS.delightShown)) ?? [];
+    const shown = await this.loadShownIds();
     if (!shown.includes(moment.id)) {
       await this.storage.setItem(STORAGE_KEYS.delightShown, [...shown, moment.id]);
     }
@@ -77,7 +79,16 @@ export class DelightMomentsService {
 
   async loadShownIds(): Promise<string[]> {
     if (!this.storage) return [];
-    return (await this.storage.getItem<string[]>(STORAGE_KEYS.delightShown)) ?? [];
+    const raw = await this.storage.getItem<unknown>(STORAGE_KEYS.delightShown);
+    const shown = asStringArray(raw);
+    // Migrate corrupted persisted shape (object/map) without wiping other user data.
+    if (raw != null && !Array.isArray(raw)) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[DelightMoments] Migrating corrupted @voxa/delight_shown to string[]');
+      }
+      await this.storage.setItem(STORAGE_KEYS.delightShown, shown);
+    }
+    return shown;
   }
 
   private moment(
