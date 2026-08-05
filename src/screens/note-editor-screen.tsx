@@ -343,8 +343,8 @@ export function NoteEditorScreen({ navigation, route }: Props) {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
           keyboardShouldPersistTaps="handled">
           <ScreenHeader
-            title="Note"
-            subtitle={`${saveLabel} · Edited ${new Date(note.updatedAt).toLocaleString()}`}
+            title={title.trim() || 'Untitled'}
+            subtitle={saveLabel}
             right={
               <Pressable
                 onPress={() => {

@@ -334,7 +334,7 @@ export function NotesHubScreen({ navigation }: Props) {
           <EmptyState
             icon="create-outline"
             title="No notes yet"
-            message="Capture ideas, reminders and plans for Voxa to help with."
+            message="No notes yet. Capture an idea, plan or reminder."
             actionLabel={showArchived ? undefined : 'Create note'}
             onAction={showArchived ? undefined : () => void createNote()}
           />

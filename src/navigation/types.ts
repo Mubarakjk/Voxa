@@ -93,6 +93,13 @@ export type RootStackParamList = {
   NutritionSettings: undefined;
   NotesHub: undefined;
   NoteEditor: { noteId: string };
+  FaithValuesHub: undefined;
+  FaithValuesSetup: undefined;
+  FaithReflection: { prompt?: string } | undefined;
+  FaithValuesIntention: undefined;
+  SavedDuas: undefined;
+  DuaEditor: { duaId?: string } | undefined;
+  PrayerRoutine: undefined;
   VoicePicker: undefined;
   ScheduledCalls: undefined;
   ScheduleCompanionCall: { callId?: string } | undefined;

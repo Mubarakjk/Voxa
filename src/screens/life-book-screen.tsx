@@ -107,7 +107,7 @@ export function LifeBookScreen() {
           />
         </FadeIn>
 
-        {!isPro ? (
+        {!isPro && !areAllFeaturesUnlocked() ? (
           <GlassCard style={styles.previewCard}>
             <VoxaText variant="subtitle">Free preview</VoxaText>
             <VoxaText variant="body" color="textSecondary">

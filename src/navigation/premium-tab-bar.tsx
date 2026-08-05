@@ -3,7 +3,7 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, layout, radius } from '../constants/theme';
+import { colors, layout, radius, spacing } from '../constants/theme';
 import { VoxaText } from '../components/ui/voxa-text';
 
 type TabConfig = { icon: keyof typeof Ionicons.glyphMap; label: string; center?: boolean };
@@ -36,7 +36,10 @@ export function PremiumTabBar({ state, navigation }: Props) {
             <Pressable
               key={route.key}
               onPress={() => navigation.navigate(route.name)}
-              style={[styles.tab, focused && styles.tabFocused, isCenter && styles.tabCenter]}>
+              style={[styles.tab, focused && styles.tabFocused, isCenter && styles.tabCenter]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={config.label}>
               <View style={[styles.iconWrap, isCenter && styles.iconWrapCenter, focused && isCenter && styles.iconWrapCenterFocused]}>
                 <Ionicons
                   name={config.icon}
@@ -76,8 +79,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    minHeight: layout.minTapTarget,
+    paddingVertical: spacing.xs,
     borderRadius: radius.md,
+    minWidth: layout.minTapTarget,
     gap: 4,
   },
   tabCenter: { marginTop: -10 },

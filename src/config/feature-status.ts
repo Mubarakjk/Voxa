@@ -33,7 +33,8 @@ export type FeatureKey =
   | 'socialGames'
   | 'notes'
   | 'notesAdvancedAI'
-  | 'premiumVoices';
+  | 'premiumVoices'
+  | 'faithValues';
 
 export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   chat: 'stable',
@@ -63,6 +64,7 @@ export const FEATURE_STATUS: Record<FeatureKey, FeatureStatus> = {
   notes: 'stable',
   notesAdvancedAI: 'stable',
   premiumVoices: 'stable',
+  faithValues: 'stable',
 };
 
 export function isExperimentalFeaturesEnabled(): boolean {

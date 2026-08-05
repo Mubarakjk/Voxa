@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isFeatureVisible } from '../../config/feature-status';
 import { isMicrophoneChatEnabled, isVoiceNotesEnabled } from '../../config/release-voice';
@@ -41,6 +42,7 @@ export function ChatInputBar({
   onOpenTools,
   onVoiceNoteLimit,
 }: ChatInputBarProps) {
+  const insets = useSafeAreaInsets();
   const { profile, services } = useVoxa();
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachmentInput[]>([]);
   const [recordingMode, setRecordingMode] = useState(false);
@@ -149,7 +151,7 @@ export function ChatInputBar({
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
       <AttachmentPreviewTray
         attachments={pendingAttachments}
         onRemove={(index) =>
@@ -221,8 +223,14 @@ export function ChatInputBar({
               onPress={handleSend}
               disabled={!canSend}
               style={[styles.sendBtn, !canSend && styles.sendDisabled]}
-              accessibilityLabel="Send message">
-              <Ionicons name="arrow-up" size={16} color={colors.background} />
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              accessibilityState={{ disabled: !canSend }}>
+              <Ionicons
+                name="arrow-up"
+                size={18}
+                color={canSend ? colors.background : colors.textMuted}
+              />
             </Pressable>
           </>
         )}
@@ -245,7 +253,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
     gap: spacing.sm,
   },
   secondaryRow: {
@@ -274,9 +282,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    minHeight: 48,
+    minHeight: layout.composerMinHeight,
     borderRadius: radius.xl,
   },
   input: {
@@ -288,12 +296,16 @@ const styles = StyleSheet.create({
     maxHeight: 140,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: layout.minTapTarget,
+    height: layout.minTapTarget,
+    borderRadius: layout.minTapTarget / 2,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendDisabled: { opacity: 0.45 },
+  sendDisabled: {
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
 });

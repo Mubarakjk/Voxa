@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
+import { isFeatureVisible } from '../../config/feature-status';
 import { colors, spacing } from '../../constants/theme';
 import { Phase12DashboardData } from '../../types/phase12-experiences';
 import { StaggerFade } from '../premium/premium-ui';
@@ -10,23 +11,33 @@ import { StaggerFade } from '../premium/premium-ui';
 type Props = {
   data: Phase12DashboardData;
   onNavigate: (screen: string, params?: object) => void;
+  faithValuesEnabled?: boolean;
 };
 
 type HubItem = { icon: keyof typeof Ionicons.glyphMap; label: string; screen: string; badge?: string };
 
-export function Phase12JourneyHub({ data, onNavigate }: Props) {
-  const groups: Array<{ title: string; items: HubItem[] }> = [
-    {
-      title: 'Today',
-      items: [
-        { icon: 'document-text-outline', label: 'Notes', screen: 'NotesHub' },
-        { icon: 'moon-outline', label: 'Daily reflection', screen: 'DailyReflection' },
+export function Phase12JourneyHub({ data, onNavigate, faithValuesEnabled }: Props) {
+  const todayItems: HubItem[] = [
+    { icon: 'document-text-outline', label: 'Notes', screen: 'NotesHub' },
+    ...(isFeatureVisible('faithValues')
+      ? [{
+          icon: 'leaf-outline' as const,
+          label: faithValuesEnabled ? 'Faith & Values' : 'Set up Faith & Values',
+          screen: faithValuesEnabled ? 'FaithValuesHub' : 'FaithValuesSetup',
+        }]
+      : []),
+    { icon: 'moon-outline', label: 'Daily reflection', screen: 'DailyReflection' },
         { icon: 'newspaper-outline', label: 'Daily updates', screen: 'DailyNews', badge: data.dailyNews ? 'New' : undefined },
         { icon: 'happy-outline', label: 'Mood journal', screen: 'MoodJournal', badge: data.moodLoggedToday ? undefined : 'Log' },
         { icon: 'pulse-outline', label: 'Mood timeline', screen: 'MoodTimeline' },
         { icon: 'notifications-outline', label: 'Scheduled check-ins', screen: 'ScheduledCheckIns' },
         { icon: 'chatbubble-ellipses-outline', label: 'Proactive check-ins', screen: 'ProactiveCheckIns' },
-      ],
+  ];
+
+  const groups: Array<{ title: string; items: HubItem[] }> = [
+    {
+      title: 'Today',
+      items: todayItems,
     },
     {
       title: 'Our Story',

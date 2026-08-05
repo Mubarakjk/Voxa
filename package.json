@@ -7,7 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "npx --yes tsx --test tests/milestone-qa.test.ts tests/billing-entitlement.test.ts tests/billing-release.test.ts tests/billing-service.test.ts tests/free-launch.test.ts tests/realtime-voice.test.ts tests/auth-storage.test.ts tests/hydrate-intelligence-bundle.test.ts tests/delight-moments.test.ts tests/scheduled-calls.test.ts tests/experience-milestone.test.ts tests/signature-experience.test.ts tests/release-voice-gates.test.ts tests/restore-messages.test.ts tests/final-billing-gate.test.ts",
+    "test": "npx --yes tsx --test tests/milestone-qa.test.ts tests/billing-entitlement.test.ts tests/billing-release.test.ts tests/billing-service.test.ts tests/free-launch.test.ts tests/faith-values.test.ts tests/realtime-voice.test.ts tests/auth-storage.test.ts tests/hydrate-intelligence-bundle.test.ts tests/delight-moments.test.ts tests/scheduled-calls.test.ts tests/experience-milestone.test.ts tests/signature-experience.test.ts tests/release-voice-gates.test.ts tests/restore-messages.test.ts tests/final-billing-gate.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

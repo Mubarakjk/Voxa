@@ -51,6 +51,7 @@ import { getDailyReflectionService } from '../services/reflection/daily-reflecti
 import { getScheduledCallService } from '../services/scheduled-calls/scheduled-call-service';
 import { ScheduledCompanionCall } from '../types/scheduled-companion-call';
 import { navigateToRoutine } from '../utils/home-navigation';
+import { FRIENDLY_ERRORS, friendlyErrorMessage } from '../utils/friendly-error';
 import { RitualHomeState } from '../types/ritual';
 import { WeatherBundle } from '../types/weather';
 import { recordTiming } from '../utils/performance-metrics';
@@ -59,9 +60,12 @@ import {
   CompanionStudioExtendedPrefs,
   createDefaultStudioExtendedPrefs,
 } from '../constants/companion-studio-extended';
+import { FaithValuesHomeCard } from '../components/faith/faith-values-home-card';
 import { CommandBarSheet } from '../components/life-os/command-bar-sheet';
 import { handleCommandBarResult } from '../utils/command-bar-navigation';
+import { getFaithValuesService } from '../services/faith/faith-values-service';
 import { getRoutineCoachService } from '../services/routine/routine-coach-service';
+import { FaithValuesMode } from '../types/faith-values';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -86,6 +90,10 @@ export function HomeScreen({ navigation }: Props) {
   const [presence, setPresence] = useState<CompanionGreeting | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [upcomingCall, setUpcomingCall] = useState<ScheduledCompanionCall | null>(null);
+  const [faithHome, setFaithHome] = useState<{
+    mode: FaithValuesMode;
+    hasIntention: boolean;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -98,13 +106,12 @@ export function HomeScreen({ navigation }: Props) {
         try {
           dash = await load();
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Failed to load home.';
           console.error(
             '[Home] Dashboard load failed',
             err,
             err instanceof Error ? err.stack : undefined,
           );
-          setLoadError(message);
+          setLoadError(friendlyErrorMessage(err, FRIENDLY_ERRORS.home));
           recordTiming('home.warm', Date.now() - started);
           return;
         }
@@ -154,6 +161,19 @@ export function HomeScreen({ navigation }: Props) {
               ? (secondary[7].value as ScheduledCompanionCall | null)
               : null,
           );
+
+          if (isFeatureVisible('faithValues')) {
+            void getFaithValuesService(services.storage)
+              .getHomeSummary(profile.id)
+              .then((summary) => {
+                if (summary?.enabled) {
+                  setFaithHome({ mode: summary.mode, hasIntention: summary.hasIntention });
+                } else {
+                  setFaithHome(null);
+                }
+              })
+              .catch(() => setFaithHome(null));
+          }
 
           const activeGoal = dash?.dailyBriefing?.activeGoals?.[0] ?? null;
           const nextRoutine = schedule?.nextBlock?.title ?? null;
@@ -267,17 +287,13 @@ export function HomeScreen({ navigation }: Props) {
         <EmptyState
           icon="cloud-offline-outline"
           title="Couldn't load Home"
-          message={
-            __DEV__ && loadError
-              ? 'Check your connection and try again. See Metro for details.'
-              : 'Check your connection and try again. Your data is safe.'
-          }
+          message={loadError ?? FRIENDLY_ERRORS.home}
           actionLabel="Retry"
           onAction={() => {
             setLoadError(null);
             void load(true).catch((err) => {
               console.error('[Home] Retry failed:', err);
-              setLoadError(err instanceof Error ? err.message : 'Failed to load home.');
+              setLoadError(friendlyErrorMessage(err, FRIENDLY_ERRORS.home));
             });
           }}
         />
@@ -471,6 +487,14 @@ export function HomeScreen({ navigation }: Props) {
           <StaggerFade index={2}>
             <NutritionHomeSummary onPress={() => navigation.navigate('NutritionDashboard')} />
           </StaggerFade>
+        ) : null}
+
+        {faithHome && isFeatureVisible('faithValues') ? (
+          <FaithValuesHomeCard
+            mode={faithHome.mode}
+            hasIntention={faithHome.hasIntention}
+            onPress={() => navigation.navigate('FaithValuesHub')}
+          />
         ) : null}
 
         {isFeatureVisible('notes') ? (

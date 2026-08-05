@@ -42,6 +42,8 @@ import { getVoxaDisplayName } from '../utils/companion-display';
 import { requestAccountDeletion } from '../services/privacy/account-deletion-service';
 import { getWeatherService } from '../services/weather/weather-service';
 import { getNutritionService } from '../services/nutrition/nutrition-service';
+import { getFaithValuesService } from '../services/faith/faith-values-service';
+import { faithModeLabel } from '../types/faith-values';
 import { NutritionMode } from '../types/nutrition';
 import Constants from 'expo-constants';
 
@@ -54,6 +56,7 @@ export function YouScreen() {
   const [showDebug, setShowDebug] = useState(false);
   const [weatherLocationLabel, setWeatherLocationLabel] = useState('Not set');
   const [nutritionMode, setNutritionMode] = useState<NutritionMode>('off');
+  const [faithValuesLabel, setFaithValuesLabel] = useState('Not enabled');
 
   const loadExtras = useCallback(async () => {
     if (!profile) return;
@@ -62,6 +65,12 @@ export function YouScreen() {
     if (isFeatureVisible('calorieTracking')) {
       const nutritionPrefs = await getNutritionService(services.storage).getPreferences(profile.id);
       setNutritionMode(nutritionPrefs.mode);
+    }
+    if (isFeatureVisible('faithValues')) {
+      const faithPrefs = await getFaithValuesService(services.storage).getPreferences(profile.id);
+      setFaithValuesLabel(
+        faithPrefs.enabled ? faithModeLabel(faithPrefs.mode) : 'Not enabled',
+      );
     }
   }, [profile, services.storage]);
 
@@ -81,14 +90,21 @@ export function YouScreen() {
 
   const exportData = async () => {
     if (!profile) return;
-    const [memories, goals, reminders, conversations] = await Promise.all([
+    const [memories, goals, reminders, conversations, faithExport] = await Promise.all([
       services.repositories.memories.listMemories(profile.id),
       services.repositories.goals.listGoals(profile.id),
       services.repositories.reminders.listReminders(profile.id),
       services.repositories.conversations.listConversations(profile.id),
+      isFeatureVisible('faithValues')
+        ? getFaithValuesService(services.storage).buildExport(profile.id)
+        : Promise.resolve(null),
     ]);
     await Share.share({
-      message: JSON.stringify({ profile, memories, goals, reminders, conversations }, null, 2),
+      message: JSON.stringify(
+        { profile, memories, goals, reminders, conversations, faithAndValues: faithExport },
+        null,
+        2,
+      ),
       title: 'Voxa export',
     });
   };
@@ -122,6 +138,14 @@ export function YouScreen() {
         return navigation.navigate('NutritionOnboarding');
       }
       return navigation.navigate('NutritionSettings');
+    }
+    if (itemId === 'faith-values') {
+      if (!isFeatureVisible('faithValues') || !profile) return;
+      const prefs = await getFaithValuesService(services.storage).getPreferences(profile.id);
+      if (!prefs.enabled || prefs.mode === 'off') {
+        return navigation.navigate('FaithValuesSetup');
+      }
+      return navigation.navigate('FaithValuesHub');
     }
     if (itemId === 'privacy-policy') return navigation.navigate('PrivacyPolicy');
     if (itemId === 'terms') return navigation.navigate('TermsOfService');
@@ -316,11 +340,13 @@ export function YouScreen() {
     weatherLocationLabel,
     nutritionMode,
     appVersion,
+    faithValuesLabel,
   );
   const subscription = sections.find((s) => s.title === 'Subscription');
   const companion = sections.find((s) => s.title === 'Companion');
   const personalisation = sections.find((s) => s.title === 'Personalisation');
   const preferences = sections.find((s) => s.title === 'Preferences');
+  const faithValues = sections.find((s) => s.title === 'Faith & Values');
   const notifications = sections.find((s) => s.title === 'Notifications & check-ins');
   const privacy = sections.find((s) => s.title === 'Privacy & data');
   const support = sections.find((s) => s.title === 'Support');
@@ -377,6 +403,7 @@ export function YouScreen() {
           <>
             {companion ? renderSection(companion) : null}
             {preferences ? renderSection(preferences) : null}
+            {faithValues?.items.length ? renderSection(faithValues) : null}
             {privacy ? renderSection(privacy) : null}
             {support ? renderSection(support) : null}
             {about ? renderSection(about) : null}

@@ -10,6 +10,7 @@ import { ErrorState, LoadingState } from '../components/ui/screen-state';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
+import { FRIENDLY_ERRORS, friendlyErrorMessage } from '../utils/friendly-error';
 import { MEMORY_CATEGORY_LABELS } from '../constants/memory-categories';
 import { isFeatureVisible } from '../config/feature-status';
 import { colors, layout, radius, spacing } from '../constants/theme';
@@ -49,7 +50,8 @@ export function MemoryScreen({ navigation }: Props) {
         }),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load memories.');
+      console.error('[Memory] Load failed', err);
+      setError(friendlyErrorMessage(err, FRIENDLY_ERRORS.memories));
     } finally {
       setIsLoading(false);
     }
@@ -332,8 +334,8 @@ export function MemoryScreen({ navigation }: Props) {
         {memories.length === 0 ? (
           <EmptyState
             icon="heart-outline"
-            title="No memories yet"
-            message="Chat with Voxa about what matters — or save something from a note. You stay in control."
+            title="No saved moments yet"
+            message="Save the advice, ideas and moments you want to return to — from Talk or Notes."
             actionLabel="Open Talk"
             onAction={() => navigation.navigate('MainTabs', { screen: 'Talk' })}
           />

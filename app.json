@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.voxa.companion",
+      "buildNumber": "1",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Voxa may use the microphone if you enable optional audio features in a future update. Spoken replies do not require microphone access.",
         "UIBackgroundModes": ["audio"],
