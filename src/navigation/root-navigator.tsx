@@ -1,6 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { isExperimentalFeaturesEnabled } from '../config/feature-status';
+import { isExperimentalFeaturesEnabled, isFeatureVisible } from '../config/feature-status';
 import {
   isLiveCallingUiEnabled,
   isScheduledCallsEnabled,
@@ -75,6 +75,13 @@ import { NutritionOnboardingScreen } from '../screens/nutrition-onboarding-scree
 import { NutritionAddMealScreen } from '../screens/nutrition-add-meal-screen';
 import { NutritionHistoryScreen } from '../screens/nutrition-history-screen';
 import { NutritionSettingsScreen } from '../screens/nutrition-settings-screen';
+import { FaithValuesHubScreen } from '../screens/faith-values-hub-screen';
+import { FaithValuesSetupScreen } from '../screens/faith-values-setup-screen';
+import { FaithReflectionScreen } from '../screens/faith-reflection-screen';
+import { FaithValuesIntentionScreen } from '../screens/faith-values-intention-screen';
+import { SavedDuasScreen } from '../screens/saved-duas-screen';
+import { DuaEditorScreen } from '../screens/dua-editor-screen';
+import { PrayerRoutineScreen } from '../screens/prayer-routine-screen';
 import { NotesHubScreen } from '../screens/notes-hub-screen';
 import { VoicePickerScreen } from '../screens/voice-picker-screen';
 import { MainTabNavigator } from './main-tabs';
@@ -291,6 +298,17 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
       <Stack.Screen name="NutritionHistory" component={NutritionHistoryScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="NutritionSettings" component={NutritionSettingsScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="NotesHub" component={NotesHubScreen} options={{ animation: 'slide_from_right' }} />
+      {isFeatureVisible('faithValues') ? (
+        <>
+          <Stack.Screen name="FaithValuesHub" component={FaithValuesHubScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="FaithValuesSetup" component={FaithValuesSetupScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="FaithReflection" component={FaithReflectionScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="FaithValuesIntention" component={FaithValuesIntentionScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="SavedDuas" component={SavedDuasScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="DuaEditor" component={DuaEditorScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="PrayerRoutine" component={PrayerRoutineScreen} options={{ animation: 'slide_from_right' }} />
+        </>
+      ) : null}
       <Stack.Screen
         name="NoteEditor"
         getComponent={() => require('../screens/note-editor-screen').NoteEditorScreen}

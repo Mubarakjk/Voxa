@@ -116,6 +116,11 @@ export const STORAGE_KEYS = {
   companionFocusState: '@voxa/companion_focus_state',
   scheduledCompanionCalls: '@voxa/scheduled_companion_calls',
   scheduledCallsPreferences: '@voxa/scheduled_calls_preferences',
+  faithValuesPreferences: '@voxa/faith_values_preferences',
+  faithValuesIntentions: '@voxa/faith_values_intentions',
+  faithValuesReflections: '@voxa/faith_values_reflections',
+  faithValuesDuas: '@voxa/faith_values_duas',
+  faithValuesPrayerRoutine: '@voxa/faith_values_prayer_routine',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

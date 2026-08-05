@@ -18,7 +18,7 @@ import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
 import { getGoalCategoryLabel } from '../constants/goal-options';
-import { isExperimentalFeaturesEnabled } from '../config/feature-status';
+import { isExperimentalFeaturesEnabled, isFeatureVisible } from '../config/feature-status';
 import { isMemoryPinned, sortMemoriesWithPinnedFirst, VOICE_MEMORY_TAG } from '../utils/memory-pinned';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
@@ -45,6 +45,7 @@ import { CommandBarSheet } from '../components/life-os/command-bar-sheet';
 import { recordTiming } from '../utils/performance-metrics';
 import { canStartLiveVoice, openVoiceConversation } from '../utils/voice-navigation';
 import { hapticSuccess } from '../utils/haptics';
+import { getFaithValuesService } from '../services/faith/faith-values-service';
 import { handleCommandBarResult } from '../utils/command-bar-navigation';
 
 type Props = CompositeScreenProps<
@@ -77,6 +78,7 @@ export function JourneyScreen({ navigation }: Props) {
   const [mounted, setMounted] = useState({ timeline: false, memories: false, goals: false, extras: false });
   const [refreshing, setRefreshing] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [faithValuesEnabled, setFaithValuesEnabled] = useState(false);
 
   useEffect(() => {
     const t1 = setTimeout(() => setMounted((m) => ({ ...m, timeline: true })), 80);
@@ -101,7 +103,13 @@ export function JourneyScreen({ navigation }: Props) {
     setJournalEntry(entry);
     setDailyNudge(nudge);
     setTodaySchedule(schedule);
-  }, [profile, journalService, routineCoach]);
+    if (isFeatureVisible('faithValues')) {
+      const prefs = await getFaithValuesService(services.storage).getPreferences(profile.id);
+      setFaithValuesEnabled(prefs.enabled && prefs.mode !== 'off');
+    } else {
+      setFaithValuesEnabled(false);
+    }
+  }, [profile, journalService, routineCoach, services.storage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -264,6 +272,7 @@ export function JourneyScreen({ navigation }: Props) {
         <StaggerFade index={2}>
           <Phase12JourneyHub
             data={dashboard.phase12}
+            faithValuesEnabled={faithValuesEnabled}
             onNavigate={(screen) => {
               if (screen === 'ScheduledCheckIns') stackNav.navigate('ScheduledCheckIns');
               else if (screen === 'ProactiveCheckIns') stackNav.navigate('ProactiveCheckIns');
@@ -280,6 +289,8 @@ export function JourneyScreen({ navigation }: Props) {
               else if (screen === 'GiftsCollection') stackNav.navigate('GiftsCollection');
               else if (screen === 'DailyNews') stackNav.navigate('DailyNews');
               else if (screen === 'NotesHub') stackNav.navigate('NotesHub');
+              else if (screen === 'FaithValuesHub') stackNav.navigate('FaithValuesHub');
+              else if (screen === 'FaithValuesSetup') stackNav.navigate('FaithValuesSetup');
             }}
           />
         </StaggerFade>

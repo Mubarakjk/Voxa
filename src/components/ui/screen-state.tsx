@@ -9,14 +9,28 @@ export function LoadingState({ label = 'Loading...' }: { label?: string }) {
   return <LoadingPulse label={label} />;
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({
+  message,
+  onRetry,
+  title = 'Something went wrong',
+}: {
+  message: string;
+  onRetry?: () => void;
+  title?: string;
+}) {
+  const displayMessage =
+    __DEV__ ||
+    (!message.includes('Error') && !message.includes('TypeError') && !message.includes('undefined'))
+      ? message
+      : 'Please check your connection and try again.';
+
   return (
-    <View style={styles.center}>
+    <View style={styles.center} accessibilityRole="alert">
       <VoxaText variant="subtitle" style={styles.errorTitle}>
-        Something went wrong
+        {title}
       </VoxaText>
       <VoxaText variant="body" color="textSecondary" style={styles.errorMessage}>
-        {message}
+        {displayMessage}
       </VoxaText>
       {onRetry ? <PrimaryButton label="Try again" variant="ghost" onPress={onRetry} /> : null}
     </View>

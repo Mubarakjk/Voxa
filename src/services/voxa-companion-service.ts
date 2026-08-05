@@ -1347,7 +1347,19 @@ export class VoxaCompanionService {
       notesBlock = formatNotesForPrompt(permitted);
     }
 
-    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${checkInBlock ? `\n\n${checkInBlock}` : ''}${challengeBlock ? `\n\n${challengeBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}${notesBlock ? `\n\n${notesBlock}` : ''}`;
+    let faithBlock = '';
+    if (this.storage) {
+      const { buildFaithValuesPromptBlockFromService } = await import(
+        './faith/faith-values-context-service'
+      );
+      const { getFaithValuesService } = await import('./faith/faith-values-service');
+      faithBlock = await buildFaithValuesPromptBlockFromService(
+        getFaithValuesService(this.storage),
+        input.userId,
+      );
+    }
+
+    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${checkInBlock ? `\n\n${checkInBlock}` : ''}${challengeBlock ? `\n\n${challengeBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}${notesBlock ? `\n\n${notesBlock}` : ''}${faithBlock ? `\n\n${faithBlock}` : ''}`;
     const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const aiInput = {

@@ -6,7 +6,7 @@
 type AnalyticsProps = Record<string, string | number | boolean | undefined>;
 
 const SENSITIVE_KEY =
-  /(token|receipt|apple.?id|memory|message|chat|food|calorie|location|lat|lng|password|secret|note_body|content|customer.?info)/i;
+  /(token|receipt|apple.?id|memory|message|chat|food|calorie|location|lat|lng|password|secret|note_body|content|customer.?info|faith|dua|prayer|reflection)/i;
 
 function sanitize(props?: AnalyticsProps): AnalyticsProps | undefined {
   if (!props) return undefined;
@@ -56,7 +56,9 @@ export type AnalyticsEventName =
   | 'restore_completed'
   | 'pro_feature_used'
   | 'free_limit_reached'
-  | 'error_state_reached';
+  | 'error_state_reached'
+  | 'faith_values_mode_set'
+  | 'faith_values_disabled';
 
 /** In-memory ring for tests / debug — never stores content or receipts. */
 const recentBillingEvents: Array<{ name: AnalyticsEventName; props?: AnalyticsProps }> = [];

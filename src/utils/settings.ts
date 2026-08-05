@@ -91,9 +91,16 @@ export function buildSettingsSections(
   weatherLocationLabel = 'Not set',
   nutritionMode: NutritionMode = 'off',
   appVersion = '1.0.0',
+  faithValuesLabel = 'Not enabled',
 ) {
   if (isFreeLaunchMode()) {
-    return buildFreeLaunchSettingsSections(profile, appVersion, weatherLocationLabel, nutritionMode);
+    return buildFreeLaunchSettingsSections(
+      profile,
+      appVersion,
+      weatherLocationLabel,
+      nutritionMode,
+      faithValuesLabel,
+    );
   }
   const c = controls(profile);
   const planLabel = formatPlanLabel(planStatus);
@@ -360,6 +367,7 @@ export function buildFreeLaunchSettingsSections(
   appVersion: string,
   weatherLocationLabel = 'Not set',
   nutritionMode: NutritionMode = 'off',
+  faithValuesLabel = 'Not enabled',
 ) {
   const c = controls(profile);
 
@@ -392,6 +400,14 @@ export function buildFreeLaunchSettingsSections(
               label: 'Calories & nutrition',
               value: NUTRITION_MODE_LABELS[nutritionMode],
             }]
+          : []),
+      ],
+    },
+    {
+      title: 'Faith & Values',
+      items: [
+        ...(isFeatureVisible('faithValues')
+          ? [{ id: 'faith-values', label: 'Faith & Values', value: faithValuesLabel }]
           : []),
       ],
     },

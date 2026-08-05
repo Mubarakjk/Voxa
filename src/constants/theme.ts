@@ -65,7 +65,7 @@ export const semantic = {
   journey: colors.primary,
 } as const;
 
-/** Spacing scale: 4 · 8 · 12 · 16 · 20 · 24 · 32 */
+/** Spacing scale: 4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 */
 export const spacing = {
   xs: 4,
   sm: 8,
@@ -74,6 +74,7 @@ export const spacing = {
   lg: 20,
   xl: 24,
   xxl: 32,
+  xxxl: 40,
   section: 24,
 };
 
@@ -82,6 +83,7 @@ export const layout = {
   cardGap: 12,
   tabBarHeight: 84,
   minTapTarget: 44,
+  composerMinHeight: 52,
   iconSm: 18,
   iconMd: 22,
   iconLg: 28,
@@ -136,10 +138,16 @@ export const motion = {
 
 export const typography = {
   hero: { fontSize: 44, fontWeight: '300' as const, letterSpacing: 3, lineHeight: 52 },
+  screenTitle: { fontSize: 28, fontWeight: '600' as const, letterSpacing: -0.5, lineHeight: 34 },
   title: { fontSize: 26, fontWeight: '600' as const, letterSpacing: -0.4, lineHeight: 32 },
+  sectionTitle: { fontSize: 20, fontWeight: '600' as const, letterSpacing: -0.3, lineHeight: 26 },
   subtitle: { fontSize: 17, fontWeight: '600' as const, letterSpacing: -0.2, lineHeight: 24 },
+  cardTitle: { fontSize: 16, fontWeight: '600' as const, letterSpacing: -0.1, lineHeight: 22 },
   body: { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
+  supporting: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
   caption: { fontSize: 13, fontWeight: '500' as const, lineHeight: 18 },
+  buttonLabel: { fontSize: 16, fontWeight: '600' as const, letterSpacing: -0.1, lineHeight: 20 },
+  stat: { fontSize: 28, fontWeight: '600' as const, letterSpacing: -0.5, lineHeight: 32 },
   label: {
     fontSize: 11,
     fontWeight: '600' as const,

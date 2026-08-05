@@ -43,6 +43,9 @@ import {
 } from '../services/voice/voice-options-service';
 import { getVoiceOption } from '../constants/voice-options';
 import { trackEvent } from '../services/analytics/analytics-service';
+import { isFeatureVisible } from '../config/feature-status';
+import { getFaithValuesService } from '../services/faith/faith-values-service';
+import { FaithValuesMode } from '../types/faith-values';
 
 const STEPS = [
   'welcome',
@@ -59,6 +62,7 @@ const STEPS = [
   'notifications',
   'memory',
   'coaching',
+  'faithValues',
   'preview',
   'complete',
 ] as const;
@@ -104,6 +108,7 @@ type OnboardingDraft = {
   notificationPref: NotificationPreference;
   checkInStyle: CheckInStyle;
   memoryLevel: 'minimal' | 'balanced' | 'deep';
+  faithValuesMode?: FaithValuesMode;
   subscriptionChoice?: 'explore_pro' | 'free' | null;
 };
 
@@ -129,6 +134,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [notificationPref, setNotificationPref] = useState<NotificationPreference>('gentle');
   const [checkInStyle, setCheckInStyle] = useState<CheckInStyle>('gentle');
   const [memoryLevel, setMemoryLevel] = useState<'minimal' | 'balanced' | 'deep'>('balanced');
+  const [faithValuesMode, setFaithValuesMode] = useState<FaithValuesMode>('off');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftReady, setDraftReady] = useState(false);
@@ -160,6 +166,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           if (draft.notificationPref) setNotificationPref(draft.notificationPref);
           if (draft.checkInStyle) setCheckInStyle(draft.checkInStyle);
           if (draft.memoryLevel) setMemoryLevel(draft.memoryLevel);
+          if (draft.faithValuesMode) setFaithValuesMode(draft.faithValuesMode);
         }
       } catch {
         await services.storage.removeItem(STORAGE_KEYS.onboardingDraft);
@@ -192,6 +199,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       notificationPref,
       checkInStyle,
       memoryLevel,
+      faithValuesMode,
     };
     void services.storage.setItem(STORAGE_KEYS.onboardingDraft, draft);
   }, [
@@ -214,6 +222,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     notificationPref,
     checkInStyle,
     memoryLevel,
+    faithValuesMode,
     services.storage,
   ]);
 
@@ -272,7 +281,15 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     trackEvent('onboarding_step_completed', { step });
 
     if (stepIndex < STEPS.length - 1) {
-      setStepIndex((value) => value + 1);
+      let nextIndex = stepIndex + 1;
+      while (
+        nextIndex < STEPS.length - 1 &&
+        STEPS[nextIndex] === 'faithValues' &&
+        !isFeatureVisible('faithValues')
+      ) {
+        nextIndex += 1;
+      }
+      setStepIndex(nextIndex);
       setError(null);
       return;
     }
@@ -294,6 +311,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const skipScheduleStep = () => {
     setSkipSchedule(true);
+    setError(null);
+    if (stepIndex < STEPS.length - 1) setStepIndex((v) => v + 1);
+  };
+
+  const skipFaithValuesStep = () => {
+    setFaithValuesMode('off');
     setError(null);
     if (stepIndex < STEPS.length - 1) setStepIndex((v) => v + 1);
   };
@@ -369,6 +392,16 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           morningEnabled: true,
           eveningEnabled: notificationPref === 'proactive',
         });
+      }
+
+      if (isFeatureVisible('faithValues') && faithValuesMode !== 'off') {
+        const faithService = getFaithValuesService(services.storage);
+        await faithService.setMode(profile.id, faithValuesMode);
+        await faithService.updatePreferences(profile.id, {
+          faithAwareLanguage: true,
+          onboardingCompleted: true,
+        });
+        trackEvent('faith_values_mode_set', { mode: faithValuesMode, enabled: true });
       }
 
       await refreshProfile();
@@ -766,6 +799,40 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   </VoxaText>
                 </Pressable>
               ))}
+            </GlassCard>
+          ) : null}
+
+          {step === 'faithValues' && isFeatureVisible('faithValues') ? (
+            <GlassCard style={styles.card}>
+              <VoxaText variant="subtitle">Faith & Values (optional)</VoxaText>
+              <VoxaText variant="body" color="textSecondary">
+                A private space for gratitude, intentions, and reflection. You can turn this off anytime.
+              </VoxaText>
+              {(
+                [
+                  { id: 'off' as const, label: 'Not now', detail: 'Skip for now' },
+                  { id: 'general' as const, label: 'General values & gratitude', detail: 'Intentions and reflection' },
+                  { id: 'islam' as const, label: 'Islam', detail: 'Private duas, prayer routine & faith reflection' },
+                  { id: 'personal' as const, label: 'Other / Personal spirituality', detail: 'Your own spiritual path' },
+                ] as const
+              ).map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={[styles.option, faithValuesMode === item.id && styles.optionActive]}
+                  onPress={() => setFaithValuesMode(item.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: faithValuesMode === item.id }}>
+                  <VoxaText variant="body">{item.label}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted">
+                    {item.detail}
+                  </VoxaText>
+                </Pressable>
+              ))}
+              <Pressable onPress={skipFaithValuesStep} hitSlop={8}>
+                <VoxaText variant="caption" color="primarySoft" style={styles.skipLink}>
+                  Skip Faith & Values
+                </VoxaText>
+              </Pressable>
             </GlassCard>
           ) : null}
 

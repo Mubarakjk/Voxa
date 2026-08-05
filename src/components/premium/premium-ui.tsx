@@ -6,6 +6,7 @@ import { colors, layout, radius, spacing, typography } from '../../constants/the
 import { PREMIUM_MOTION, staggerDelay } from '../../utils/premium-motion';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
 import { VoxaText } from '../ui/voxa-text';
+import { VoiceOrb } from '../ui/voice-orb';
 import {
   CompanionOrbMood,
   CompanionOrbState,
@@ -274,25 +275,34 @@ export function SkeletonBlock({ height = 72, style }: { height?: number; style?:
 }
 
 export function LoadingPulse({ label = 'Loading...' }: { label?: string }) {
-  const opacity = useRef(new Animated.Value(0.4)).current;
+  const reduceMotion = useReduceMotion();
+  const opacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
+    if (reduceMotion) return;
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.5, duration: 900, useNativeDriver: true }),
       ]),
     );
     anim.start();
     return () => anim.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   return (
-    <Animated.View style={[styles.loadingPulse, { opacity }]}>
-      <VoxaText variant="caption" color="textMuted">
-        {label}
-      </VoxaText>
-    </Animated.View>
+    <View
+      style={styles.loadingPulse}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityState={{ busy: true }}>
+      <VoiceOrb size={56} active={!reduceMotion} tint={colors.primarySoft} />
+      <Animated.View style={{ opacity: reduceMotion ? 1 : opacity }}>
+        <VoxaText variant="caption" color="textMuted" style={styles.loadingLabel}>
+          {label}
+        </VoxaText>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -315,13 +325,25 @@ export function PremiumButton({
       style={({ pressed }) => [
         styles.premiumButton,
         isPrimary ? styles.premiumButtonPrimary : styles.premiumButtonGhost,
-        pressed && styles.pressed,
+        pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
       ]}
       onPress={onPress}
-      disabled={disabled}>
-      {icon ? <Ionicons name={icon} size={18} color={isPrimary ? colors.background : colors.primarySoft} /> : null}
-      <VoxaText variant="caption" style={{ color: isPrimary ? colors.background : colors.primarySoft, fontWeight: '700' }}>
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}>
+      {icon ? (
+        <Ionicons
+          name={icon}
+          size={18}
+          color={disabled ? colors.textMuted : isPrimary ? colors.background : colors.primarySoft}
+        />
+      ) : null}
+      <VoxaText
+        variant="buttonLabel"
+        style={{
+          color: disabled ? colors.textMuted : isPrimary ? colors.background : colors.primarySoft,
+        }}>
         {label}
       </VoxaText>
     </Pressable>
@@ -522,14 +544,16 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { textAlign: 'center', maxWidth: 300 },
   emptyMessage: { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
-  loadingPulse: { alignItems: 'center', paddingVertical: spacing.xl },
+  loadingPulse: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.md },
+  loadingLabel: { textAlign: 'center' },
   premiumButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    minHeight: layout.minTapTarget,
+    paddingVertical: 12,
     borderRadius: radius.full,
   },
   premiumButtonPrimary: { backgroundColor: colors.primary },
@@ -539,7 +563,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(45, 212, 191, 0.28)',
   },
   pressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
-  disabled: { opacity: 0.45 },
+  disabled: {
+    backgroundColor: colors.surfaceStrong,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
   typingDots: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   waveRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.md },
