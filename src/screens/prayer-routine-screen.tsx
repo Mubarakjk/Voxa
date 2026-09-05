@@ -55,7 +55,7 @@ export function PrayerRoutineScreen({ navigation }: Props) {
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
-          <ScreenHeader
+          <ScreenHeader showBack
             title="Prayer routine"
             subtitle="Manual tracking only — no prayer times or notifications."
           />

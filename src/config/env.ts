@@ -31,6 +31,11 @@ export function getDataSourceMode(): 'supabase' | 'local' {
   return hasSupabaseConfig() ? 'supabase' : 'local';
 }
 
+/** User-facing label — never expose infrastructure names in production UI. */
+export function getDataSourceModeLabel(): string {
+  return getDataSourceMode() === 'supabase' ? 'Cloud sync' : 'On this device';
+}
+
 export function getAudDApiToken(): string | undefined {
   return process.env.EXPO_PUBLIC_AUDD_API_TOKEN?.trim() || undefined;
 }

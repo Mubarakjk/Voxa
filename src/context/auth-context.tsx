@@ -39,18 +39,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       return;
     }
-    const nextSession = await authService.getSession();
-    setSession(nextSession);
-    setAuthUser(await authService.getAuthUser());
-    setIsLoading(false);
+    try {
+      const nextSession = await authService.getSession();
+      setSession(nextSession);
+      setAuthUser(await authService.getAuthUser());
+    } catch {
+      setSession(null);
+      setAuthUser(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [isAuthEnabled]);
 
   useEffect(() => {
-    refreshAuth();
+    void refreshAuth();
     if (!isAuthEnabled) return;
     const subscription = authService.onAuthStateChange((nextSession) => {
       setSession(nextSession);
-      void authService.getAuthUser().then(setAuthUser);
+      void authService.getAuthUser().then(setAuthUser).catch(() => setAuthUser(null));
       setIsLoading(false);
     });
     return () => subscription.unsubscribe();
@@ -58,7 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (input: SignUpInput) => {
     if (signUpInFlightRef.current) {
-      console.warn('[AuthContext] signUp ignored — already in flight');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[AuthContext] signUp ignored — already in flight');
+      }
       return;
     }
 
@@ -67,11 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authService.signUp(input);
       await refreshAuth();
     } catch (error) {
-      if (error instanceof AuthError) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__ && error instanceof AuthError) {
         console.error('[AuthContext] signUp failed', {
           status: error.status,
           code: error.code ?? error.name,
-          message: error.message,
         });
       }
       throw error;

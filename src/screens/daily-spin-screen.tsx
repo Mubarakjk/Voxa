@@ -79,7 +79,7 @@ export function DailySpinScreen() {
   return (
     <ScreenShell padded={false}>
       <View style={styles.wrap}>
-        <ScreenHeader title="Daily Spin" subtitle={state?.spun ? `Next spin in ${countdown}` : 'One spin every day'} />
+        <ScreenHeader showBack title="Daily Spin" subtitle={state?.spun ? `Next spin in ${countdown}` : 'One spin every day'} />
         <FadeIn>
           <GlassCard style={styles.card}>
             <SpinWheel spinning={spinning} onSpinEnd={() => void onSpinEnd()} />

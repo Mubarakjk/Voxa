@@ -1,7 +1,9 @@
 import { MEMORY_MODE_AFFINITY } from '../../constants/memory-categories';
 import { CompanionModeId, Memory } from '../../types';
+import { TalkIntent } from '../ai/companion-intent';
 import { inferMemoryTheme, themeOverlapScore } from './memory-theme-service';
 import { memoryAgingEngine } from '../personality/memory-aging-engine';
+import { isSupersededMemory, memoryConfidenceKind, TAG_EXPLICIT } from './memory-taxonomy';
 
 export type MemoryRetrievalContext = {
   userMessage: string;
@@ -117,9 +119,12 @@ function modeAffinityScore(memory: Memory, mode: CompanionModeId): number {
 }
 
 export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalContext): number {
-  if (isExpired(memory)) return -1;
+  if (isExpired(memory) || isSupersededMemory(memory)) return -1;
 
   const pinnedBoost = memory.pinned === true || memory.tags.includes('pinned') ? 6 : 0;
+  const explicitBoost = memory.tags.includes(TAG_EXPLICIT) ? 2.5 : 0;
+  const confidenceKind = memoryConfidenceKind(memory);
+  const inferredPenalty = confidenceKind === 'inferred' ? -1.25 : 0;
 
   const queryText = [context.userMessage, ...(context.recentMessageTexts ?? [])].join(' ');
   const queryTokens = tokenize(queryText);
@@ -138,6 +143,8 @@ export function scoreMemoryRelevance(memory: Memory, context: MemoryRetrievalCon
 
   return (
     pinnedBoost +
+    explicitBoost +
+    inferredPenalty +
     keywordScore * 4 +
     semanticThemeScore +
     importanceScore * 1.5 +
@@ -158,7 +165,7 @@ export function rankMemories(
   const effectiveLimit = MEMORY_LEVEL_LIMIT[context.memoryLevel ?? 'balanced'] ?? limit;
 
   return memories
-    .filter((memory) => !isExpired(memory))
+    .filter((memory) => !isExpired(memory) && !isSupersededMemory(memory))
     .map((memory) => ({
       memory,
       score: scoreMemoryRelevance(memory, context),
@@ -166,6 +173,53 @@ export function rankMemories(
     .filter((item) => item.score >= 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, effectiveLimit);
+}
+
+const MIN_SCORE_BY_INTENT: Partial<Record<TalkIntent, number>> = {
+  factual_question: 4,
+  casual_conversation: 2.75,
+  celebration: 2.5,
+  app_action_request: 999,
+};
+
+export function filterMemoriesForIntent(
+  scored: ScoredMemory[],
+  intent: TalkIntent,
+  userMessage?: string,
+): Memory[] {
+  if (scored.length === 0) return [];
+  if (intent === 'factual_question') return [];
+  if (intent === 'memory_recall') {
+    return scored.map((item) => item.memory);
+  }
+
+  const topScore = scored[0]?.score ?? 0;
+  const minScore = MIN_SCORE_BY_INTENT[intent] ?? 2;
+  const relativeFloor = topScore > 0 ? topScore * 0.55 : minScore;
+  const threshold = Math.max(minScore, relativeFloor);
+  let filtered = scored.filter((item) => item.score >= threshold);
+
+  if (
+    userMessage &&
+    ['decision_support', 'planning', 'goal_progress', 'productivity', 'routine'].includes(intent)
+  ) {
+    const keywordHits = filtered.filter(
+      (item) => overlapScore(tokenize(userMessage), `${item.memory.title} ${item.memory.content}`) > 0,
+    );
+    if (keywordHits.length > 0) {
+      filtered = keywordHits;
+    }
+  }
+
+  if (filtered.length > 0) {
+    return filtered.map((item) => item.memory);
+  }
+
+  if (intent === 'casual_conversation') {
+    return [];
+  }
+
+  return scored.slice(0, 1).map((item) => item.memory);
 }
 
 const TOP_MEMORY_LIMIT = 5;

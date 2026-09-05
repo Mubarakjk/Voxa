@@ -1,6 +1,6 @@
 # App Store Metadata Draft
 
-Draft only — verify all claims against the **release build** (calling features disabled).
+Draft only. Do not invent live URLs, Apple IDs, or review credentials. Verify claims against the **V1 free-launch binary**.
 
 ---
 
@@ -8,81 +8,90 @@ Draft only — verify all claims against the **release build** (calling features
 
 **Voxa**
 
-## Subtitle (30 chars max)
+## Subtitle (30 characters max)
 
-**Your AI life companion**
+**Your AI life companion**  
+(22 characters)
 
-## Promotional text (170 chars, updatable without review)
+Alternate if needed: **AI companion for daily life** (28)
 
-Talk through your day, capture notes, build rituals, and grow with a companion that remembers what matters — on your terms.
+## Promotional text (170 characters, updatable without a full review)
 
----
+Talk through your day, keep notes and memories, and build gentle routines with an AI companion that stays on your terms — private, optional, and free in version 1.
 
-## Description (draft)
+## Description
 
-Voxa is a personal AI companion for everyday life — not a replacement for professional care, therapy, or emergency services.
+Voxa is a personal AI life companion for everyday conversation, reflection, and light organisation. It is not a replacement for professional medical, legal, or financial advice, and it is not an emergency service.
 
-**Talk & reflect**  
-Chat with Voxa by text. Hear replies spoken aloud when you want a more natural back-and-forth. Daily check-ins, Challenge Me, and Journey help you stay grounded.
+**Talk**  
+Chat with Voxa by text. Hear replies spoken aloud when you want. Daily check-ins and Journey tools help you stay grounded.
 
-**Notes & memory**  
-Capture thoughts, summarise ideas, and let Voxa remember what you choose to keep. Edit or delete memories anytime.
+**Notes and memory**  
+Capture thoughts and let Voxa remember what you choose to keep. Review, edit, or delete memories anytime. You can turn memory off in Settings.
 
-**Life OS**  
-Goals, reminders, routines, Life Book, and My Companion bring structure without feeling like a spreadsheet.
+**Life tools**  
+Goals, reminders, routines, notes, optional weather, optional nutrition logging, and optional faith or values tools — use only what you want.
 
-**Free & Pro**  
-Voxa Free includes generous daily chat, notes, and core Journey features. Voxa Pro unlocks deeper memory, premium voices, advanced note tools, exports, and extended fair-use limits.
+**Your data**  
+Create an account to sync chat and memories. Delete your account in Settings. Voxa does not show ads in this version.
 
-Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage in Apple ID settings.
+Talk requires an internet connection. AI replies can be wrong or incomplete — check important facts yourself.
 
----
+This version of Voxa is free. There are no in-app purchases in this release.
 
-## Keywords (100 chars, comma-separated, no spaces after commas)
+## Keywords (100 characters, comma-separated, no spaces after commas)
 
 AI companion,journal,notes,goals,reminders,wellbeing,memory,planner,routine,chat
 
----
+(Count before pasting; Apple rejects over-limit strings.)
 
-## URLs (required)
+## Categories
 
-| Field | Draft |
-|-------|-------|
-| Support URL | `https://voxa.app/support` *(must be live before submission)* |
-| Marketing URL | `https://voxa.app` *(optional)* |
-| Privacy Policy URL | `https://voxa.app/privacy` *(P0 — must be live)* |
+- **Primary:** Lifestyle  
+- **Secondary:** Productivity (optional; Lifestyle alone is also defensible)
 
----
+Health & Fitness is a weaker fit: nutrition is optional and not clinical.
 
-## Review notes (for Apple)
+## URLs
 
-- Sign in: email/password via Supabase auth (or describe test account).
-- Voxa Pro: sandbox subscription `voxa_pro_monthly` / annual — restore available under You → Restore purchases.
-- **Live voice calling is not included in this version.**
-- Microphone permission strings remain for future features; release build does not request mic for chat.
-- No medical, diagnostic, or emergency features.
+| Field | Value | Status |
+|-------|-------|--------|
+| Support URL | Pending GitHub Pages publish of `/site/support/` | **OWNER ACTION** — enable Pages, then paste the live HTTPS URL |
+| Marketing URL | Optional — leave blank unless you control a real marketing site | Do **not** use `voxa.app` |
+| Privacy Policy URL | Pending GitHub Pages publish of `/site/privacy/` | **OWNER ACTION** — required for App Store Connect |
+| Custom EULA / Terms URL | Optional for free V1 | Apple’s **standard EULA** may be used; public Terms still hosted at `/site/terms/` for transparency + in-app |
 
----
+Do not submit until Privacy and Support URLs load real pages over HTTPS.
 
-## Subscription explanation (App Store)
+Canonical static site source: `site/` (GitHub Pages). Legacy drafts in `docs/public/` point at `site/` and are not the publish root.
 
-Voxa Pro is an auto-renewable subscription (monthly or annual) that unlocks premium features listed in the app paywall. Payment charged to Apple ID. Renewal unless cancelled 24h before period end.
+## Age rating (questionnaire guidance — do not fabricate)
 
----
+Recommend completing Apple’s form from **actual V1 content**:
 
-## Age rating considerations
+- Not made for kids / not a Kids Category app
+- User-generated content: **Yes** (chat, notes, photos the user attaches)
+- Unrestricted web browsing: **No** in the core app
+- Medical/treatment claims: **No**
+- Real-money gambling: **No** (local daily spin is cosmetic, no IAP)
+- Frequent realistic violence / horror: **No**
+- Mature themes: possible **infrequent** via user chat, not as app-directed content
+- Suggested rating band: **12+** (AI companion + UGC chat). Confirm in App Store Connect; do not ship as 4+ without counsel review
 
-- Infrequent/mild mature themes possible in user-generated chat
-- No unrestricted web access in core flow
-- Account creation required for cloud sync
-- Recommend completing Apple's questionnaire honestly; not directed at children under 13
+## Copyright
 
----
+OWNER ACTION — legal entity name as it should appear on the store listing.
 
-## Do NOT claim
+## Review notes
 
-- Live phone/voice calling (disabled)
-- Scheduled calls (disabled)
-- Voice notes / mic recording in chat (disabled)
+See `docs/APP_REVIEW_NOTES.md`. Supply reviewer credentials only in App Store Connect.
+
+## Do not claim in metadata
+
+- Live phone or voice calling
+- Scheduled calls
+- Microphone chat / voice notes
+- Subscriptions or Voxa Pro IAP (this V1 binary is free)
 - Medical, therapeutic, or emergency response
-- End-to-end encryption (unless implemented)
+- End-to-end encryption
+- Consciousness, sentience, or that Voxa is human

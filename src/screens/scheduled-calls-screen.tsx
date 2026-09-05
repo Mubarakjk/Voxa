@@ -60,7 +60,7 @@ export function ScheduledCallsScreen({ navigation }: Props) {
   if (!isScheduledCallsEnabled()) {
     return (
       <ScreenShell>
-        <ScreenHeader title="Scheduled calls" />
+        <ScreenHeader showBack title="Scheduled calls" />
         <EmptyState icon="call-outline" title="Feature disabled" message="Scheduled companion calls are turned off." />
       </ScreenShell>
     );
@@ -88,7 +88,7 @@ export function ScheduledCallsScreen({ navigation }: Props) {
 
   return (
     <ScreenShell padded={false}>
-      <ScreenHeader title="Scheduled calls" />
+      <ScreenHeader showBack title="Scheduled calls" />
       <ScrollView contentContainerStyle={styles.content}>
         <GlassCard style={styles.card}>
           <View style={styles.switchRow}>

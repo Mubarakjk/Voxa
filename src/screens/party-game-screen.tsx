@@ -31,14 +31,23 @@ import {
   submitTwoTruthsStatements,
   updateTwoTruths,
 } from '../services/games/party-games-service';
-import { getSocialGameDefinition, PartyGameSession } from '../types/social-games';
+import { getSocialGameDefinition, PartyGameId, PartyGameSession } from '../types/social-games';
 import { hapticLight, hapticSuccess } from '../utils/haptics';
+
+function isPartyGameId(id: string | undefined): id is PartyGameId {
+  return (
+    id === 'wouldYouRather' ||
+    id === 'truthOrChallenge' ||
+    id === 'twoTruthsAndALie' ||
+    id === 'conversationCards'
+  );
+}
 
 export function PartyGameScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'PartyGame'>>();
-  const gameId = route.params.gameId;
-  const def = getSocialGameDefinition(gameId);
+  const gameId = isPartyGameId(route.params?.gameId) ? route.params.gameId : undefined;
+  const def = gameId ? getSocialGameDefinition(gameId) : undefined;
   const { profile, services } = useVoxa();
   const store = getGameSessionStore(services.storage);
 
@@ -63,7 +72,7 @@ export function PartyGameScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!profile) {
+      if (!profile || !gameId) {
         setLoading(false);
         return;
       }
@@ -83,7 +92,7 @@ export function PartyGameScreen() {
   }, [gameId, profile, store]);
 
   const startNew = async () => {
-    if (!profile) return;
+    if (!profile || !gameId) return;
     const payload = createPartySession(gameId, names);
     const created = await store.create(profile.id, gameId, payload);
     setSessionId(created.id);
@@ -99,7 +108,7 @@ export function PartyGameScreen() {
   };
 
   const restart = async () => {
-    if (!profile) return;
+    if (!profile || !gameId) return;
     const payload = startPartyPlay(createPartySession(gameId, session?.playerNames ?? names));
     const created = await store.create(profile.id, gameId, payload);
     setSessionId(created.id);
@@ -107,9 +116,21 @@ export function PartyGameScreen() {
     setPaused(false);
   };
 
+  if (!gameId || !def) {
+    return (
+      <ScreenShell padded>
+        <BackButton onPress={() => navigation.goBack()} />
+        <VoxaText variant="body" color="textSecondary">
+          This game isn't available.
+        </VoxaText>
+      </ScreenShell>
+    );
+  }
+
   if (loading) {
     return (
       <ScreenShell padded>
+        <BackButton onPress={() => navigation.goBack()} />
         <VoxaText variant="body" color="textMuted">
           Loading…
         </VoxaText>

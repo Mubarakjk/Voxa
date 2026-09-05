@@ -78,7 +78,7 @@ export function NutritionOnboardingScreen({ navigation }: Props) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ScreenHeader
+          <ScreenHeader showBack
             eyebrow="Optional"
             title="Calorie tracking"
             subtitle="Opt in only when it feels useful. You can turn it off any time."

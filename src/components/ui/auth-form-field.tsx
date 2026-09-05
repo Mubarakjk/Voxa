@@ -1,6 +1,6 @@
 import { StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 
-import { colors, radius, spacing } from '../../constants/theme';
+import { colors, layout, radius, spacing } from '../../constants/theme';
 import { VoxaText } from './voxa-text';
 
 type AuthFormFieldProps = TextInputProps & {
@@ -11,7 +11,7 @@ type AuthFormFieldProps = TextInputProps & {
 export function AuthFormField({ label, error, style, ...props }: AuthFormFieldProps) {
   return (
     <View style={styles.wrap}>
-      <VoxaText variant="caption" color="textSecondary">
+      <VoxaText variant="caption" color="textSecondary" style={styles.label}>
         {label}
       </VoxaText>
       <TextInput
@@ -29,16 +29,29 @@ export function AuthFormField({ label, error, style, ...props }: AuthFormFieldPr
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
+  wrap: {
+    width: '100%',
+    alignSelf: 'stretch',
+    minWidth: 0,
+    gap: spacing.sm,
+  },
+  label: {
+    alignSelf: 'stretch',
+  },
   input: {
-    backgroundColor: colors.surface,
+    width: '100%',
+    alignSelf: 'stretch',
+    minWidth: 0,
+    backgroundColor: colors.surfaceQuiet,
     borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md12,
+    minHeight: layout.minTapTarget + 4,
     color: colors.text,
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 22,
   },
   inputError: { borderColor: colors.danger },
 });

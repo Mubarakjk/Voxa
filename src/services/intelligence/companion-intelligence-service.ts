@@ -8,6 +8,7 @@ import { VoxaRepositories } from '../contracts';
 import { IStorageService } from '../contracts/storage-service';
 import { MemoryIntelligenceService } from '../memory/memory-intelligence-service';
 import { CompanionModeId, Message, UserProfile } from '../../types';
+import { TalkIntent } from '../ai/companion-intent';
 import { getUpcomingReminders } from '../../utils/reminders';
 import { companionProfileEngine } from './companion-profile-engine';
 import { CompanionIntelligenceStore, createCompanionIntelligenceStore } from './companion-intelligence-store';
@@ -25,6 +26,7 @@ import { sportsIntelligenceEngine } from './sports-intelligence-engine';
 import { memoryAgingEngine } from '../personality/memory-aging-engine';
 import { nowIso } from '../../types';
 import { MoodHistoryEntry } from '../check-in/daily-check-in-service';
+import { logMemoryRetrieveDiagnostic } from '../memory/memory-diagnostics';
 
 export type AfterConversationInput = {
   userId: string;
@@ -57,8 +59,34 @@ export class CompanionIntelligenceService {
     userMessage: string;
     moodHistory?: MoodHistoryEntry[];
     online?: boolean;
+    talkIntent?: TalkIntent;
+    /** Skip remote memory/list fan-out when the deterministic intent cannot use memories. */
+    skipMemoryRetrieval?: boolean;
   }): Promise<UnifiedCompanionContext> {
     const bundle = await this.getBundle(input.userId, input.userProfile.displayName);
+
+    if (input.skipMemoryRetrieval) {
+      logMemoryRetrieveDiagnostic({
+        intent: input.talkIntent ?? 'factual_question',
+        candidates: 0,
+        active: 0,
+        selected: [],
+      });
+      const base = contextEngine.build({
+        userProfile: input.userProfile,
+        bundle,
+        mode: input.mode,
+        topMemories: [],
+        activeGoals: [],
+        upcomingReminders: [],
+        recentMessages: [],
+        recentConversations: [],
+      });
+      return {
+        ...base,
+        mode: input.mode,
+      };
+    }
 
     const [memories, goals, reminders, conversations, messages] = await Promise.all([
       this.repositories.memories.listMemories(input.userId),
@@ -84,7 +112,7 @@ export class CompanionIntelligenceService {
       mode: effectiveMode,
       recentMessageTexts: messages.slice(-6).map((m) => m.content),
       memoryLevel: input.userProfile.preferences.companionControls?.memoryLevel ?? 'balanced',
-    });
+    }, { intent: input.talkIntent });
 
     const base = contextEngine.build({
       userProfile: input.userProfile,
@@ -275,8 +303,8 @@ export class CompanionIntelligenceService {
     });
   }
 
-  getPromptExtension(context: UnifiedCompanionContext): string {
-    return contextEngine.toPromptExtension(context);
+  getPromptExtension(context: UnifiedCompanionContext, options?: { includeMemories?: boolean }): string {
+    return contextEngine.toPromptExtension(context, options);
   }
 }
 

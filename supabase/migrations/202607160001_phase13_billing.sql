@@ -26,9 +26,11 @@ create index if not exists subscriptions_last_event_id_idx on public.subscriptio
 
 alter table public.subscriptions enable row level security;
 
-create policy if not exists "Users can read own subscription"
-  on public.subscriptions for select
-  using (auth.uid() = user_id);
+do $$ begin
+  create policy "Users can read own subscription"
+    on public.subscriptions for select
+    using (auth.uid() = user_id);
+exception when duplicate_object then null; end $$;
 
 -- Webhook/service role writes only — no direct client insert/update policies
 
@@ -100,14 +102,22 @@ alter table public.daily_usage enable row level security;
 alter table public.usage_events enable row level security;
 alter table public.entitlement_limits enable row level security;
 
-create policy if not exists "Users can read own monthly usage"
-  on public.monthly_usage for select using (auth.uid() = user_id);
+do $$ begin
+  create policy "Users can read own monthly usage"
+    on public.monthly_usage for select using (auth.uid() = user_id);
+exception when duplicate_object then null; end $$;
 
-create policy if not exists "Users can read own daily usage"
-  on public.daily_usage for select using (auth.uid() = user_id);
+do $$ begin
+  create policy "Users can read own daily usage"
+    on public.daily_usage for select using (auth.uid() = user_id);
+exception when duplicate_object then null; end $$;
 
-create policy if not exists "Users can read own usage events"
-  on public.usage_events for select using (auth.uid() = user_id);
+do $$ begin
+  create policy "Users can read own usage events"
+    on public.usage_events for select using (auth.uid() = user_id);
+exception when duplicate_object then null; end $$;
 
-create policy if not exists "Anyone can read entitlement limits"
-  on public.entitlement_limits for select using (true);
+do $$ begin
+  create policy "Anyone can read entitlement limits"
+    on public.entitlement_limits for select using (true);
+exception when duplicate_object then null; end $$;

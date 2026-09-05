@@ -33,6 +33,9 @@ export class MemoryAgingEngine {
     const confidence = input.confidence ?? 0.72;
 
     let expiresAt = input.expiresAt;
+    if (!expiresAt) {
+      expiresAt = inferExpiryFromContent(input.category, input.content);
+    }
     if (!expiresAt && TRANSIENT_CATEGORIES.includes(input.category)) {
       const expiry = new Date();
       expiry.setDate(expiry.getDate() + 90);
@@ -131,3 +134,34 @@ export class MemoryAgingEngine {
 }
 
 export const memoryAgingEngine = new MemoryAgingEngine();
+
+function inferExpiryFromContent(category: MemoryCategory, content: string): string | undefined {
+  const lower = content.toLowerCase();
+  const now = new Date();
+
+  if (/\b(tomorrow|due tomorrow|interview is tomorrow|exam is tomorrow)\b/.test(lower)) {
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 3);
+    return expiry.toISOString();
+  }
+
+  if (/\b(today|tonight|this evening)\b/.test(lower)) {
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 2);
+    return expiry.toISOString();
+  }
+
+  if (/\b(next week|this week)\b/.test(lower)) {
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 14);
+    return expiry.toISOString();
+  }
+
+  if (category === 'moments' && /\b(interview|deadline|exam|assignment)\b/.test(lower)) {
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 21);
+    return expiry.toISOString();
+  }
+
+  return undefined;
+}

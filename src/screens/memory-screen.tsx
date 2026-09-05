@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 
 import { EmptyState, FadeIn, StaggerFade } from '../components/premium/premium-ui';
+import { BackButton } from '../components/ui/back-button';
 import { PrimaryButton } from '../components/ui/buttons';
 import { ErrorState, LoadingState } from '../components/ui/screen-state';
 import { GlassCard } from '../components/ui/glass-card';
@@ -21,6 +22,7 @@ import { isMemoryPinned, withMemoryPinned } from '../utils/memory-pinned';
 import { MemoryConfidenceBadge } from '../components/phase4/memory-confidence-badge';
 import { memoryConfidenceService } from '../services/memory/memory-confidence-service';
 import { findNearDuplicatePairs, mergeMemoryContent, mergeTags, resolveImportance } from '../services/memory/memory-deduplication';
+import { isSupersededMemory } from '../services/memory/memory-taxonomy';
 import { explainWhyRemembered } from '../utils/memory-why';
 import { hapticLight, hapticSelection, hapticWarning } from '../utils/haptics';
 
@@ -43,7 +45,9 @@ export function MemoryScreen({ navigation }: Props) {
     try {
       const items = await companion.listMemories(profile.id);
       setMemories(
-        items.sort((a, b) => {
+        items
+          .filter((memory) => !isSupersededMemory(memory))
+          .sort((a, b) => {
           const pin = Number(isMemoryPinned(b)) - Number(isMemoryPinned(a));
           if (pin !== 0) return pin;
           return (b.importance ?? 3) - (a.importance ?? 3);
@@ -90,8 +94,7 @@ export function MemoryScreen({ navigation }: Props) {
 
   const exportSummary = () => {
     const lines = visibleMemories.slice(0, 40).map((m, i) => {
-      const tags = m.tags.length ? ` [${m.tags.slice(0, 4).join(', ')}]` : '';
-      return `${i + 1}. ${m.title}${tags}\n${m.content.slice(0, 180)}`;
+      return `${i + 1}. ${m.title}\n${m.content.slice(0, 180)}`;
     });
     void Share.share({
       message: `Voxa Saved Moments\n\n${lines.join('\n\n') || 'No moments in this view.'}`,
@@ -110,7 +113,7 @@ export function MemoryScreen({ navigation }: Props) {
       });
       await loadMemories();
     } catch (err) {
-      Alert.alert('Could not update', err instanceof Error ? err.message : 'Try again.');
+      Alert.alert('Could not update', 'Something went wrong. Please try again.');
     }
   };
 
@@ -121,7 +124,7 @@ export function MemoryScreen({ navigation }: Props) {
       await services.repositories.memories.updateMemory(memory.id, { importance: next });
       await loadMemories();
     } catch (err) {
-      Alert.alert('Could not update', err instanceof Error ? err.message : 'Try again.');
+      Alert.alert('Could not update', 'Something went wrong. Please try again.');
     }
   };
 
@@ -143,7 +146,7 @@ export function MemoryScreen({ navigation }: Props) {
               });
               await loadMemories();
             } catch (err) {
-              Alert.alert('Update failed', err instanceof Error ? err.message : 'Try again.');
+              Alert.alert('Update failed', friendlyErrorMessage(err, 'Could not update that memory. Try again.'));
             }
           },
         },
@@ -175,7 +178,7 @@ export function MemoryScreen({ navigation }: Props) {
               await loadMemories();
               await refreshProfile();
             } catch (err) {
-              Alert.alert('Merge failed', err instanceof Error ? err.message : 'Try again.');
+              Alert.alert('Merge failed', friendlyErrorMessage(err, 'Could not merge those memories. Try again.'));
             }
           },
         },
@@ -196,7 +199,7 @@ export function MemoryScreen({ navigation }: Props) {
             await loadMemories();
             await refreshProfile();
           } catch (err) {
-            Alert.alert('Delete failed', err instanceof Error ? err.message : 'Try again.');
+            Alert.alert('Delete failed', friendlyErrorMessage(err, 'Could not delete that memory. Try again.'));
           }
         },
       },
@@ -217,7 +220,7 @@ export function MemoryScreen({ navigation }: Props) {
             await loadMemories();
             await refreshProfile();
           } catch (err) {
-            Alert.alert('Clear failed', err instanceof Error ? err.message : 'Try again.');
+            Alert.alert('Clear failed', friendlyErrorMessage(err, 'Could not clear memories. Try again.'));
           }
         },
       },
@@ -227,6 +230,9 @@ export function MemoryScreen({ navigation }: Props) {
   if (isLoading) {
     return (
       <ScreenShell padded={false}>
+        <View style={styles.padTop}>
+          <BackButton onPress={() => navigation.goBack()} />
+        </View>
         <LoadingState label="Loading memories..." />
       </ScreenShell>
     );
@@ -235,6 +241,9 @@ export function MemoryScreen({ navigation }: Props) {
   if (error) {
     return (
       <ScreenShell padded={false}>
+        <View style={styles.padTop}>
+          <BackButton onPress={() => navigation.goBack()} />
+        </View>
         <ErrorState message={error} onRetry={loadMemories} />
       </ScreenShell>
     );
@@ -248,12 +257,18 @@ export function MemoryScreen({ navigation }: Props) {
             <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button">
               <Ionicons name="chevron-back" size={20} color={colors.text} />
             </Pressable>
-            <VoxaText variant="title">Saved Moments</VoxaText>
+            <VoxaText variant="title">What Voxa remembers</VoxaText>
             <VoxaText variant="caption" color="textSecondary">
-              Search, pin, favourite, and export — you stay in control.
+              Private to you. Voxa uses these to be more helpful — never shared with other users.
             </VoxaText>
           </View>
         </FadeIn>
+
+        <GlassCard variant="quiet" style={styles.privacyCard}>
+          <VoxaText variant="caption" color="textMuted">
+            Pin what matters, forget what does not. You can turn memory off anytime in Settings.
+          </VoxaText>
+        </GlassCard>
 
         <TextInput
           value={query}
@@ -353,9 +368,6 @@ export function MemoryScreen({ navigation }: Props) {
         ) : (
           visibleMemories.map((memory, index) => {
             const confidence = memoryConfidenceService.level(memory);
-            const confidencePct = Math.round(
-              (memory.confidence ?? memoryConfidenceService.inferConfidence(memory)) * 100,
-            );
             const whyOpen = expandedWhy === memory.id;
             const important = memory.importance >= 4;
 
@@ -366,7 +378,7 @@ export function MemoryScreen({ navigation }: Props) {
                     <VoxaText variant="label" color="primarySoft">
                       {MEMORY_CATEGORY_LABELS[memory.category] ?? memory.category}
                     </VoxaText>
-                    <MemoryConfidenceBadge level={confidence} percent={confidencePct} />
+                    <MemoryConfidenceBadge level={confidence} />
                   </View>
                   <View style={styles.titleRow}>
                     {isMemoryPinned(memory) ? (
@@ -459,7 +471,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
   },
+  padTop: { paddingHorizontal: layout.screenPadding, paddingTop: spacing.sm },
   header: { gap: spacing.sm, marginBottom: spacing.md },
+  privacyCard: { marginBottom: spacing.sm },
   back: { marginBottom: spacing.sm, alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   search: {
     backgroundColor: colors.surfaceStrong,

@@ -8,13 +8,16 @@ type BackButtonProps = {
   onPress: () => void;
   label?: string;
   compact?: boolean;
+  accessibilityLabel?: string;
 };
 
-export function BackButton({ onPress, label = 'Back', compact }: BackButtonProps) {
+export function BackButton({ onPress, label = 'Back', compact, accessibilityLabel = 'Go back' }: BackButtonProps) {
   return (
     <Pressable
       onPress={onPress}
       hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.wrap, compact && styles.compact, pressed && styles.pressed]}>
       <Ionicons name="chevron-back" size={compact ? 16 : 20} color={colors.textSecondary} />
       {!compact ? (

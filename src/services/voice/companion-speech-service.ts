@@ -16,6 +16,8 @@ export function textForSpeech(raw: string): string {
 }
 
 let speakingMessageId: string | null = null;
+let speakInFlight: Promise<void> | null = null;
+let speakInFlightMessageId: string | null = null;
 
 export function getSpeakingMessageId() {
   return speakingMessageId;
@@ -27,6 +29,8 @@ export function isCompanionSpeaking() {
 
 export async function stopCompanionSpeech() {
   speakingMessageId = null;
+  speakInFlight = null;
+  speakInFlightMessageId = null;
   await stopAllSpeech();
   await voiceNotePlayerService.stop();
 }
@@ -44,12 +48,36 @@ export async function speakCompanionReply(
   const cleaned = textForSpeech(text);
   if (!cleaned || !profile) return;
 
-  speakingMessageId = options?.messageId ?? null;
+  const messageId = options?.messageId ?? null;
+  if (
+    speakInFlight &&
+    speakInFlightMessageId === messageId &&
+    messageId !== null
+  ) {
+    return speakInFlight;
+  }
+
+  speakingMessageId = messageId;
   const speech = resolveSpeechConfigForProfile(profile);
+  const owner = options?.owner ?? 'companion';
+
+  const task = (async () => {
+    try {
+      await speakExclusive(owner, cleaned, speech);
+    } finally {
+      speakingMessageId = null;
+    }
+  })();
+
+  speakInFlight = task;
+  speakInFlightMessageId = messageId;
   try {
-    await speakExclusive(options?.owner ?? 'companion', cleaned, speech);
+    await task;
   } finally {
-    speakingMessageId = null;
+    if (speakInFlight === task) {
+      speakInFlight = null;
+      speakInFlightMessageId = null;
+    }
   }
 }
 

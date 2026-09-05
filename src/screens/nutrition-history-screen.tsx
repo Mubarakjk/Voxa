@@ -59,7 +59,7 @@ export function NutritionHistoryScreen({ navigation }: Props) {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Past days"
           title="Nutrition history"
           subtitle="Days you’ve logged — tap a meal to remove it."

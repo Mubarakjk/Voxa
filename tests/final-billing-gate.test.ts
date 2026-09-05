@@ -98,10 +98,23 @@ describe('canonical Free / Pro access', () => {
 });
 
 describe('legal URLs', () => {
-  it('uses https public URLs', () => {
-    assert.ok(LEGAL_URLS.privacyPolicy.startsWith('https://'));
-    assert.ok(LEGAL_URLS.termsOfService.startsWith('https://'));
-    assert.equal(legalUrlsConfigured(), true);
+  it('does not fall back to dead voxa.app domains', () => {
+    assert.ok(!LEGAL_URLS.privacyPolicy.toLowerCase().includes('voxa.app'));
+    assert.ok(!LEGAL_URLS.termsOfService.toLowerCase().includes('voxa.app'));
+    assert.ok(!LEGAL_URLS.supportEmail.toLowerCase().includes('voxa.app'));
+  });
+
+  it('requires real HTTPS env URLs before legalUrlsConfigured is true', () => {
+    // Without EXPO_PUBLIC_* legal URL env vars, release must fail closed (not invent hosts).
+    if (!process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL && !process.env.EXPO_PUBLIC_TERMS_OF_SERVICE_URL) {
+      assert.equal(legalUrlsConfigured(), false);
+      assert.equal(LEGAL_URLS.privacyPolicy, '');
+      assert.equal(LEGAL_URLS.termsOfService, '');
+    } else {
+      assert.equal(legalUrlsConfigured(), true);
+      assert.ok(LEGAL_URLS.privacyPolicy.startsWith('https://'));
+      assert.ok(LEGAL_URLS.termsOfService.startsWith('https://'));
+    }
   });
 });
 

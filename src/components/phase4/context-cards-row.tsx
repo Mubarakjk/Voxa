@@ -11,7 +11,8 @@ type ContextCardsRowProps = {
 };
 
 export function ContextCardsRow({ cards, thinkingAbout, onSelect }: ContextCardsRowProps) {
-  if (cards.length === 0) return null;
+  const visible = cards.filter((card) => card.label.trim().length > 0);
+  if (visible.length === 0) return null;
 
   return (
     <View style={styles.wrap}>
@@ -19,7 +20,7 @@ export function ContextCardsRow({ cards, thinkingAbout, onSelect }: ContextCards
         {thinkingAbout ? `I'm thinking about ${thinkingAbout}` : "I'm thinking about..."}
       </VoxaText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {cards.map((card) => (
+        {visible.map((card) => (
           <Pressable key={card.id} onPress={() => onSelect(card)} style={styles.chip}>
             <VoxaText variant="caption">{card.emoji}</VoxaText>
             <VoxaText variant="caption" color="textSecondary" numberOfLines={1}>
@@ -42,10 +43,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+    borderRadius: radius.chip,
     backgroundColor: `${colors.primarySoft}18`,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: `${colors.primarySoft}30`,
     maxWidth: 180,
+    minHeight: 36,
   },
 });

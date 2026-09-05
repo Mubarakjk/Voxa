@@ -103,7 +103,7 @@ export function ScheduledCheckInsScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Not a phone call"
           title="Scheduled check-ins"
           subtitle="Local notifications that open Talk with context — labelled clearly as Scheduled Voxa check-in."

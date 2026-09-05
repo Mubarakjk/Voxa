@@ -111,7 +111,7 @@ export function DuaEditorScreen({ navigation, route }: Props) {
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxxl }]}
           keyboardShouldPersistTaps="handled">
-          <ScreenHeader title={duaId ? 'Edit dua' : 'New dua'} subtitle="Write your own text — kept private." />
+          <ScreenHeader showBack title={duaId ? 'Edit dua' : 'New dua'} subtitle="Write your own text — kept private." />
 
           <TextInput
             value={title}

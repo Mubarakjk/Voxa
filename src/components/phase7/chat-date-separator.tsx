@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { VoxaText } from '../ui/voxa-text';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 export function formatChatDateLabel(iso: string): string {
   const date = new Date(iso);
@@ -17,14 +17,22 @@ export function formatChatDateLabel(iso: string): string {
 export function ChatDateSeparator({ label }: { label: string }) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.line} />
-      <VoxaText variant="caption" color="textMuted">{label}</VoxaText>
-      <View style={styles.line} />
+      <VoxaText variant="caption" color="textMuted" style={styles.label}>
+        {label}
+      </VoxaText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.md },
-  line: { flex: 1, height: 1, backgroundColor: colors.glassBorder },
+  wrap: {
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  label: {
+    fontSize: 11,
+    letterSpacing: 0.4,
+    opacity: 0.75,
+  },
 });

@@ -7,19 +7,43 @@ type Props = {
   children: ReactNode;
   style?: ViewStyle | ViewStyle[];
   onPress?: () => void;
-  variant?: 'default' | 'highlight' | 'safe' | 'elevated';
+  variant?: 'default' | 'highlight' | 'safe' | 'elevated' | 'flat' | 'quiet';
 };
 
 export function GlassCard({ children, style, onPress, variant = 'default' }: Props) {
   const bg =
-    variant === 'highlight' || variant === 'elevated'
-      ? colors.surfaceStrong
-      : variant === 'safe'
-        ? colors.safeGlow
-        : colors.surface;
+    variant === 'flat' || variant === 'quiet'
+      ? 'transparent'
+      : variant === 'highlight' || variant === 'elevated'
+        ? colors.surfaceStrong
+        : variant === 'safe'
+          ? colors.safeGlow
+          : colors.surface;
 
-  const borderColor = variant === 'safe' ? 'rgba(52, 211, 153, 0.25)' : colors.glassBorder;
-  const cardStyle = [styles.card, { backgroundColor: bg, borderColor }, style];
+  const borderWidth = variant === 'flat' || variant === 'quiet' ? 0 : 1;
+  const borderColor =
+    variant === 'safe'
+      ? 'rgba(52, 211, 153, 0.25)'
+      : variant === 'elevated'
+        ? 'rgba(45, 212, 191, 0.14)'
+        : variant === 'flat' || variant === 'quiet'
+          ? 'transparent'
+          : colors.borderSubtle;
+
+  const overflowStyle =
+    variant === 'flat' || variant === 'quiet' ? ('visible' as const) : ('hidden' as const);
+
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: bg,
+      borderColor,
+      borderWidth,
+      padding: variant === 'flat' ? 0 : undefined,
+      overflow: overflowStyle,
+    },
+    style,
+  ];
   if (variant === 'elevated') cardStyle.push(styles.elevated);
 
   if (onPress) {

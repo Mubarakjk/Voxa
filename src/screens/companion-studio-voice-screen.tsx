@@ -6,7 +6,6 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AccentCard } from '../components/companion-studio/studio-components';
 import { PrimaryButton } from '../components/ui/buttons';
-import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
 import { ACCENT_REGIONS } from '../constants/voice-accents';
@@ -75,6 +74,9 @@ export function CompanionStudioVoiceScreen() {
         },
       };
       await previewVoxaVoice(previewProfile);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Voice preview could not play.';
+      Alert.alert('Preview unavailable', message);
     } finally {
       setIsPreviewing(false);
       setPreviewAccent(null);
@@ -124,37 +126,37 @@ export function CompanionStudioVoiceScreen() {
         </VoxaText>
 
         <SectionHeader title="Gender" />
-        <GlassCard style={styles.card}>
+        <View style={styles.chipSection}>
           <ChipRow options={VOICE_GENDER_OPTIONS} selected={gender} onSelect={(id) => setGender(id as VoiceIdentity['gender'])} />
-        </GlassCard>
+        </View>
 
         <SectionHeader title="Age style" />
-        <GlassCard style={styles.card}>
+        <View style={styles.chipSection}>
           <ChipRow options={VOICE_AGE_OPTIONS} selected={ageStyle} onSelect={(id) => setAgeStyle(id as VoiceIdentity['ageStyle'])} />
-        </GlassCard>
+        </View>
 
         <SectionHeader title="Speaking style" />
-        <GlassCard style={styles.card}>
+        <View style={styles.chipSection}>
           <ChipRow
             options={SPEAKING_STYLES}
             selected={speakingStyle}
             onSelect={(id) => setSpeakingStyle(id as VoiceIdentity['speakingStyle'])}
           />
-        </GlassCard>
+        </View>
 
         <SectionHeader title="Speech speed" />
-        <GlassCard style={styles.card}>
+        <View style={styles.chipSection}>
           <ChipRow
             options={SPEECH_SPEED_OPTIONS}
             selected={speechSpeed}
             onSelect={(id) => setSpeechSpeed(id as VoiceIdentity['speechSpeed'])}
           />
-        </GlassCard>
+        </View>
 
         <SectionHeader title="Warmth" />
-        <GlassCard style={styles.card}>
+        <View style={styles.chipSection}>
           <ChipRow options={WARMTH_OPTIONS} selected={warmth} onSelect={(id) => setWarmth(id as VoiceIdentity['warmth'])} />
-        </GlassCard>
+        </View>
 
         <SectionHeader title="Accents" />
         {ACCENT_REGIONS.map((region) => (
@@ -198,18 +200,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm },
-  card: { gap: spacing.md },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md12,
+    paddingVertical: 8,
     borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    gap: 2,
+    backgroundColor: colors.surfaceQuiet,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    gap: 1,
+    minHeight: 36,
+    justifyContent: 'center',
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(45, 212, 191, 0.12)' },
-  chipFuture: { opacity: 0.5 },
-  regionLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
+  chipActive: { borderColor: `${colors.primarySoft}88`, backgroundColor: 'rgba(45, 212, 191, 0.12)' },
+  chipFuture: { opacity: 0.45 },
+  chipSection: { gap: spacing.xs },
+  regionLabel: { marginTop: spacing.sm, marginBottom: spacing.xs },
 });

@@ -41,6 +41,8 @@ export type CreateMessageInput = {
   status?: MessageDeliveryStatus;
   metadata?: Message['metadata'];
   attachments?: MessageAttachment[];
+  /** Client-generated id so local persist and remote insert stay the same row. */
+  id?: EntityId;
 };
 
 export type ChatMessageView = {

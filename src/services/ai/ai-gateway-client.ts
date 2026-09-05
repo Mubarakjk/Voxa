@@ -1,5 +1,17 @@
+import { getAiGatewayUrlFromEnv } from '../../config/ai-gateway-env';
+import { getSupabaseAnonKey, hasSupabaseConfig } from '../../config/env';
 import { getSupabaseClient } from '../supabase/client';
-import { shouldPreferAiGateway, isAiGatewayConfigured } from '../billing/billing-validation';
+import { talkPerf, talkPerfNow } from '../../utils/talk-perf';
+import {
+  classifyGatewayErrorMessage,
+  TalkAIError,
+} from './talk-ai-errors';
+import {
+  logGatewayDiagnostic,
+  resolveGatewayUrl,
+  sanitizeGatewayFailure,
+  getGatewayProviderLabel,
+} from './gateway-diagnostics';
 
 export type GatewayChatRequest = {
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
@@ -12,24 +24,71 @@ export type GatewayChatRequest = {
 
 export type GatewayChatResponse =
   | { ok: true; content: string }
-  | { ok: false; code?: string; message: string };
+  | { ok: false; code?: string; message: string; httpStatus?: number };
 
-export async function invokeAiGatewayChat(request: GatewayChatRequest): Promise<GatewayChatResponse> {
-  const baseUrl = process.env.EXPO_PUBLIC_AI_GATEWAY_URL?.trim();
-  if (!baseUrl) {
-    return { ok: false, message: 'AI gateway URL not configured' };
+type GatewayErrorPayload = {
+  ok?: boolean;
+  duplicate?: boolean;
+  content?: string;
+  code?: string;
+  message?: string;
+  error?: string;
+};
+
+type CachedAccessToken = { token: string; expiresAtSec: number };
+
+let cachedAccessToken: CachedAccessToken | null = null;
+
+async function resolveAccessToken(): Promise<string | null> {
+  if (cachedAccessToken && cachedAccessToken.expiresAtSec * 1000 > Date.now() + 60_000) {
+    return cachedAccessToken.token;
   }
 
-  const { data } = await getSupabaseClient().auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) {
-    return { ok: false, message: 'Not authenticated' };
+  const client = getSupabaseClient();
+  const { data: sessionData } = await client.auth.getSession();
+  let token = sessionData.session?.access_token ?? null;
+  let expiresAt = sessionData.session?.expires_at;
+
+  if (!token) return null;
+
+  const expiresSoon =
+    typeof expiresAt === 'number' && expiresAt * 1000 <= Date.now() + 60_000;
+
+  if (expiresSoon) {
+    const { data: refreshed, error } = await client.auth.refreshSession();
+    if (!error && refreshed.session?.access_token) {
+      token = refreshed.session.access_token;
+      expiresAt = refreshed.session.expires_at;
+    }
   }
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}`, {
+  if (token && typeof expiresAt === 'number') {
+    cachedAccessToken = { token, expiresAtSec: expiresAt };
+  }
+
+  return token;
+}
+
+function parseGatewayPayload(raw: unknown): GatewayErrorPayload {
+  if (!raw || typeof raw !== 'object') return {};
+  return raw as GatewayErrorPayload;
+}
+
+async function postToGateway(
+  request: GatewayChatRequest,
+  token: string,
+): Promise<{ payload: GatewayErrorPayload; httpStatus: number }> {
+  const gatewayUrl = getAiGatewayUrlFromEnv();
+  const anonKey = getSupabaseAnonKey();
+  if (!gatewayUrl || !anonKey) {
+    throw new TalkAIError('gateway_not_configured');
+  }
+
+  const response = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
+      apikey: anonKey,
       'Content-Type': 'application/json',
       'x-idempotency-key': request.idempotencyKey,
     },
@@ -42,22 +101,115 @@ export async function invokeAiGatewayChat(request: GatewayChatRequest): Promise<
     }),
   });
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return {
-      ok: false,
-      code: payload.code,
-      message: payload.message ?? `Gateway error (${response.status})`,
-    };
+  const payload = parseGatewayPayload(await response.json().catch(() => ({})));
+  return { payload, httpStatus: response.status };
+}
+
+function mapGatewayFailure(
+  payload: GatewayErrorPayload,
+  httpStatus: number,
+  fallbackMessage: string,
+): Extract<GatewayChatResponse, { ok: false }> {
+  if (payload.duplicate) {
+    return { ok: false, code: 'duplicate', message: 'Duplicate AI request', httpStatus };
   }
 
-  return { ok: true, content: payload.content ?? '' };
+  const message = payload.message ?? payload.error ?? fallbackMessage;
+  const code = classifyGatewayErrorMessage(message, payload.code);
+  return { ok: false, code, message, httpStatus };
 }
 
-export function isProductionGatewayPreferred(): boolean {
-  return shouldPreferAiGateway();
+export async function invokeAiGatewayChat(request: GatewayChatRequest): Promise<GatewayChatResponse> {
+  if (!hasSupabaseConfig()) {
+    return { ok: false, code: 'gateway_not_configured', message: 'AI gateway URL not configured' };
+  }
+
+  const authStarted = talkPerfNow();
+  const token = await resolveAccessToken();
+  talkPerf('auth-session', talkPerfNow() - authStarted);
+  if (!token) {
+    return { ok: false, code: 'not_authenticated', message: 'Not authenticated' };
+  }
+
+  try {
+    const httpStarted = talkPerfNow();
+    const { payload, httpStatus } = await postToGateway(request, token);
+    talkPerf('gateway-http', talkPerfNow() - httpStarted);
+
+    if (httpStatus >= 200 && httpStatus < 300) {
+      if (typeof payload.content === 'string' && payload.content.trim()) {
+        return { ok: true, content: payload.content };
+      }
+      return mapGatewayFailure(payload, httpStatus, 'AI gateway returned an empty response.');
+    }
+
+    const failure = mapGatewayFailure(
+      payload,
+      httpStatus,
+      httpStatus === 404 ? 'Requested function was not found' : 'Gateway error',
+    );
+
+    if (!failure.ok) {
+      logGatewayDiagnostic({
+        provider: getGatewayProviderLabel(),
+        gatewayUrl: resolveGatewayUrl(),
+        hasSession: true,
+        httpStatus,
+        gatewayCode: failure.code,
+        sanitizedMessage: sanitizeGatewayFailure({
+          httpStatus,
+          message: failure.message,
+          code: failure.code,
+        }).code,
+      });
+    }
+
+    return failure;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Network error';
+    logGatewayDiagnostic({
+      provider: getGatewayProviderLabel(),
+      gatewayUrl: resolveGatewayUrl(),
+      hasSession: true,
+      gatewayCode: classifyGatewayErrorMessage(message),
+      sanitizedMessage: classifyGatewayErrorMessage(message),
+    });
+    return {
+      ok: false,
+      code: classifyGatewayErrorMessage(message),
+      message,
+    };
+  }
 }
 
-export function isGatewayConfigured(): boolean {
-  return isAiGatewayConfigured();
+let gatewayWarmAttempted = false;
+
+/**
+ * Wake the Edge Function isolate without generating a model reply or sending chat content.
+ * Safe to fire-and-forget once per JS session.
+ */
+export function warmAiGateway(): void {
+  if (gatewayWarmAttempted) return;
+  const gatewayUrl = getAiGatewayUrlFromEnv();
+  const anonKey = getSupabaseAnonKey();
+  if (!gatewayUrl || !anonKey) return;
+  gatewayWarmAttempted = true;
+  void (async () => {
+    const warmStarted = talkPerfNow();
+    await resolveAccessToken().catch(() => null);
+    await fetch(gatewayUrl, {
+      method: 'OPTIONS',
+      headers: { apikey: anonKey },
+    }).catch(() => undefined);
+    talkPerf('gateway-warm', talkPerfNow() - warmStarted);
+  })();
+}
+
+/** Throws TalkAIError for gateway failures — used by GatewayAIService. */
+export async function invokeAiGatewayChatOrThrow(request: GatewayChatRequest): Promise<string> {
+  const result = await invokeAiGatewayChat(request);
+  if (result.ok) return result.content;
+
+  const code = classifyGatewayErrorMessage(result.message, result.code);
+  throw new TalkAIError(code, result.message);
 }

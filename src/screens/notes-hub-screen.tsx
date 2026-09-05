@@ -12,10 +12,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState, PremiumButton, ScreenHeader, SkeletonBlock, StaggerFade } from '../components/premium/premium-ui';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
-import { EmptyState, PremiumButton, ScreenHeader, SkeletonBlock, StaggerFade } from '../components/premium/premium-ui';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
@@ -71,8 +70,12 @@ function NoteRow({
         <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
           {preview}
         </VoxaText>
-        <VoxaText variant="caption" color="textMuted">
-          {NOTE_TYPE_LABELS[note.type]} · {new Date(note.updatedAt).toLocaleDateString()}
+        <VoxaText variant="caption" color="textMuted" numberOfLines={1}>
+          {NOTE_TYPE_LABELS[note.type]}
+          {note.pinned || note.favourite ? ' · ' : ''}
+          {note.pinned ? 'Pinned' : ''}
+          {note.pinned && note.favourite ? ', ' : ''}
+          {note.favourite ? 'Favourite' : ''}
         </VoxaText>
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -232,8 +235,9 @@ export function NotesHubScreen({ navigation }: Props) {
     <ScreenShell>
       <View style={styles.pad}>
         <ScreenHeader
+          onBack={() => navigation.goBack()}
           title="Notes"
-          subtitle="Private by default. Share with Voxa only when you choose."
+          subtitle="Private by default."
           right={<PremiumButton label="New" onPress={() => void createNote()} />}
         />
         <TextInput
@@ -346,8 +350,8 @@ export function NotesHubScreen({ navigation }: Props) {
           contentContainerStyle={styles.list}
           renderItem={({ item: section, index }) => (
             <StaggerFade index={index}>
-              <GlassCard style={styles.section}>
-                <VoxaText variant="caption" color="primarySoft" style={styles.sectionTitle}>
+              <View style={styles.section}>
+                <VoxaText variant="label" color="textMuted" style={styles.sectionTitle}>
                   {section.title}
                 </VoxaText>
                 {section.data.map((note, noteIndex) => (
@@ -363,7 +367,7 @@ export function NotesHubScreen({ navigation }: Props) {
                     {noteIndex < section.data.length - 1 ? <View style={styles.divider} /> : null}
                   </View>
                 ))}
-              </GlassCard>
+              </View>
             </StaggerFade>
           )}
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
@@ -380,12 +384,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   search: {
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    backgroundColor: colors.surfaceQuiet,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md12,
     color: colors.text,
     fontSize: 16,
     minHeight: 48,
@@ -400,10 +402,8 @@ const styles = StyleSheet.create({
     minHeight: layout.minTapTarget,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radius.chip,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceQuiet,
   },
   folderChipActive: { borderColor: colors.primarySoft },
   folderDot: { width: 8, height: 8, borderRadius: 4 },
@@ -412,23 +412,28 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
     paddingTop: spacing.sm,
   },
-  section: { padding: 0, overflow: 'hidden' },
+  section: {
+    backgroundColor: colors.surfaceQuiet,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
   sectionTitle: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    padding: spacing.md,
-    minHeight: 76,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md12,
+    minHeight: 72,
   },
   typeDot: { width: 8, height: 8, borderRadius: 4 },
   rowBody: { flex: 1, gap: 4 },
   rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rowTitle: { flex: 1 },
-  divider: { height: 1, backgroundColor: colors.glassBorder, marginLeft: spacing.xl },
+  divider: { height: 1, backgroundColor: colors.borderSubtle, marginLeft: spacing.xxl },
 });

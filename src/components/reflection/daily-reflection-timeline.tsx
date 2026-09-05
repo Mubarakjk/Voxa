@@ -31,7 +31,9 @@ export function DailyReflectionTimeline({ entries, onEdit }: Props) {
           </View>
           <Pressable style={styles.card} onPress={() => onEdit?.(entry)}>
             <View style={styles.cardHeader}>
-              <VoxaText variant="subtitle">{formatDate(entry.date)}</VoxaText>
+              <VoxaText variant="subtitle" style={styles.cardTitle}>
+                {formatDate(entry.date)}
+              </VoxaText>
               {onEdit ? <Ionicons name="create-outline" size={16} color={colors.textMuted} /> : null}
             </View>
             <ReflectionLine emoji="🙂" label="Smile" value={entry.answers.smiled} />
@@ -48,8 +50,12 @@ function ReflectionLine({ emoji, label, value }: { emoji: string; label: string;
   if (!value.trim()) return null;
   return (
     <View style={styles.answer}>
-      <VoxaText variant="caption" color="primarySoft">{emoji} {label}</VoxaText>
-      <VoxaText variant="body" color="textSecondary">{value}</VoxaText>
+      <VoxaText variant="caption" color="primarySoft">
+        {emoji} {label}
+      </VoxaText>
+      <VoxaText variant="body" color="textSecondary" style={styles.answerBody}>
+        {value}
+      </VoxaText>
     </View>
   );
 }
@@ -68,24 +74,33 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: colors.primarySoft,
-    marginTop: 8,
+    marginTop: 10,
   },
   line: {
     flex: 1,
     width: 2,
-    backgroundColor: colors.glassBorder,
+    backgroundColor: colors.borderSubtle,
     marginTop: spacing.xs,
   },
   card: {
     flex: 1,
-    gap: spacing.sm,
-    padding: spacing.md,
+    minWidth: 0,
+    gap: spacing.md12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  answer: { gap: 2 },
-  empty: { padding: spacing.lg },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  cardTitle: { flex: 1, minWidth: 0 },
+  answer: { gap: spacing.xs },
+  answerBody: { lineHeight: 22 },
+  empty: { paddingVertical: spacing.lg, paddingHorizontal: spacing.sm },
 });

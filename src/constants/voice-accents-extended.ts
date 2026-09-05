@@ -38,16 +38,21 @@ function buildExtendedAccents(): VoiceAccent[] {
     STYLE_SUFFIXES.forEach((style, styleIndex) => {
       const id = `${region.prefix}_${style}`;
       if (VOICE_ACCENTS.some((a) => a.id === id)) return;
+      // Only the first style per region is selectable. The engines cannot produce
+      // authentic regional accents — remaining variants stay visible as Coming soon.
+      const selectable = styleIndex === 0;
       extras.push({
         id,
-        label: `${region.label} (${style})`,
+        label: selectable ? region.label : `${region.label} (${style})`,
         region: region.region,
         regionLabel: region.regionLabel,
         flag: region.flag,
-        description: `${region.label} English with a ${style} delivery — expressive and natural.`,
-        available: styleIndex < 3,
-        isPremium: styleIndex > 0,
-        futureSupport: styleIndex >= 4,
+        description: selectable
+          ? `${region.label}-inspired voice colour via TTS — not a recorded regional accent.`
+          : `${region.label} (${style}) voice colour is not available in V1 TTS.`,
+        available: selectable,
+        isPremium: true,
+        futureSupport: !selectable,
         openAiVoiceHint: hints[(index + styleIndex) % hints.length],
       });
     });

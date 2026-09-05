@@ -8,8 +8,9 @@ import {
   type RecorderState,
   type RecordingStatus,
 } from 'expo-audio';
-import type { EventSubscription } from 'expo-modules-core';
 import { Alert, AppState, Linking, type AppStateStatus } from 'react-native';
+
+type EventSubscription = { remove: () => void };
 
 import { patchVoiceNoteDebug, recordVoiceNoteError, type VoiceNoteRecorderState } from './voice-note-debug-state';
 import { deleteVoiceNoteFile, validateVoiceNoteFile } from './voice-note-file-service';

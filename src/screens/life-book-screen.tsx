@@ -100,7 +100,7 @@ export function LifeBookScreen() {
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
-          <ScreenHeader
+          <ScreenHeader showBack
             eyebrow="Your story"
             title="Life Book"
             subtitle="Chapters organised from real moments — never invented."

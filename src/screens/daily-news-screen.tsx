@@ -49,7 +49,7 @@ export function DailyNewsScreen(_props: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow={digest.date}
           title="Your Digest"
           subtitle="Personal companion notes from your goals and routines — not external world headlines."

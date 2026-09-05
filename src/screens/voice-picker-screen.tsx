@@ -189,7 +189,7 @@ export function VoicePickerScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           title="Companion voice"
           subtitle="Choose how Voxa sounds. Speech playback only — not recording."
         />

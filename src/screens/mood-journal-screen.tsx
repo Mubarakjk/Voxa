@@ -94,7 +94,7 @@ export function MoodJournalScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Mood journal" subtitle="Quick check-in — insights need enough data. Not medical advice." />
+        <ScreenHeader showBack title="Mood journal" subtitle="Quick check-in — insights need enough data. Not medical advice." />
         <PremiumButton label="View mood timeline" variant="ghost" onPress={() => navigation.navigate('MoodTimeline')} />
         <GlassCard style={styles.card}>
           <MoodPicker label="Mood" value={mood} onChange={setMood} />

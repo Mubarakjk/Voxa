@@ -44,5 +44,5 @@ export function SectionHeader({ title, style }: { title: string; style?: ViewSty
 }
 
 const headerStyles = StyleSheet.create({
-  row: { marginBottom: spacing.md12, marginTop: spacing.xs },
+  row: { marginBottom: spacing.md12, marginTop: spacing.sm },
 });

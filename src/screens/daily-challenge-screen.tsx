@@ -99,7 +99,7 @@ export function DailyChallengeScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Daily challenge" subtitle="One personalised challenge for today" />
+        <ScreenHeader showBack title="Daily challenge" subtitle="One personalised challenge for today" />
 
         {loadError ? (
           <GlassCard style={styles.errorCard}>

@@ -66,11 +66,11 @@ export function CompanionStudioScreen() {
 
         <FadeInView delay={80}>
           <GlassCard variant="highlight" style={styles.hero}>
-            <LiveCompanionOrb size={120} tint={tint} active state="idle" mood="calm" />
+            <LiveCompanionOrb size={88} tint={tint} active state="idle" mood="calm" />
             <VoxaText variant="subtitle" style={styles.heroName}>
               {voxaName}
             </VoxaText>
-            <VoxaText variant="caption" color="textMuted">
+            <VoxaText variant="caption" color="textMuted" numberOfLines={1}>
               {snapshot?.speakingStyleLabel} · {snapshot?.accentLabel}
             </VoxaText>
             <PrimaryButton
@@ -138,9 +138,9 @@ const styles = StyleSheet.create({
   back: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm },
   title: { marginTop: spacing.sm },
   subtitle: { marginBottom: spacing.sm },
-  hero: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl },
-  heroName: { marginTop: spacing.sm },
-  relationship: { gap: spacing.sm },
+  hero: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
+  heroName: { marginTop: 0 },
+  relationship: { gap: spacing.sm, paddingVertical: spacing.md },
 });
 
 // Stop preview when leaving

@@ -45,7 +45,7 @@ export function WeeklyMissionScreen() {
     return (
       <ScreenShell padded={false}>
         <ScrollView contentContainerStyle={styles.scroll} onLayout={() => void refresh()}>
-          <ScreenHeader title="Weekly mission" subtitle="Loading..." />
+          <ScreenHeader showBack title="Weekly mission" subtitle="Loading..." />
         </ScrollView>
       </ScreenShell>
     );
@@ -58,7 +58,7 @@ export function WeeklyMissionScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} onLayout={() => void refresh()}>
-        <ScreenHeader title="Weekly mission" subtitle={`${daysLeft} days remaining · +${mission.xpReward} XP`} />
+        <ScreenHeader showBack title="Weekly mission" subtitle={`${daysLeft} days remaining · +${mission.xpReward} XP`} />
 
         <GlassCard style={styles.card}>
           <VoxaText variant="subtitle">{mission.title}</VoxaText>

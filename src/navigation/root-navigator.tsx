@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { isExperimentalFeaturesEnabled, isFeatureVisible } from '../config/feature-status';
+import { isPaywallEnabled } from '../config/launch-mode';
 import {
   isLiveCallingUiEnabled,
   isScheduledCallsEnabled,
@@ -16,16 +17,9 @@ import { CreateGoalScreen } from '../screens/create-goal-screen';
 import { CreateReminderScreen } from '../screens/create-reminder-screen';
 import { FeaturesScreen } from '../screens/features-screen';
 import { MemoryScreen } from '../screens/memory-screen';
-import { MusicScreen } from '../screens/music-screen';
 import { PaywallScreenRoute } from '../screens/paywall-screen';
-import { SafeCallScreen } from '../screens/safe-call-screen';
-import { VoiceCallScreen } from '../screens/voice-call-screen';
-import { RealtimeCallScreen } from '../screens/realtime-call-screen';
 import { WelcomeScreen } from '../screens/welcome-screen';
 import { WeeklyRecapScreen } from '../screens/weekly-recap-screen';
-import { HealthCheckScreen } from '../screens/health-check-screen';
-import { VoiceNoteRecorderDiagnosticScreen } from '../screens/voice-note-recorder-diagnostic-screen';
-import { BillingQAScreen } from '../screens/billing-qa-screen';
 import { LifeOSHubScreen } from '../screens/life-os-hub-screen';
 import { LifeTimelineScreen } from '../screens/life-timeline-screen';
 import { GoalDetailScreen } from '../screens/goal-detail-screen';
@@ -58,7 +52,6 @@ import { WeeklyLetterScreen } from '../screens/weekly-letter-screen';
 import { PhotoMemoriesScreen } from '../screens/photo-memories-screen';
 import { MoodJournalScreen } from '../screens/mood-journal-screen';
 import { MoodTimelineScreen } from '../screens/mood-timeline-screen';
-import { VoiceConversationScreen } from '../screens/voice-conversation-screen';
 import { DailyReflectionScreen } from '../screens/daily-reflection-screen';
 import { RelationshipGrowthScreen } from '../screens/relationship-growth-screen';
 import { RoutineCoachScreen } from '../screens/routine-coach-screen';
@@ -163,34 +156,48 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
       />
       {experimental ? (
         <>
-          <Stack.Screen name="Music" component={MusicScreen} options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="VoiceCall" component={VoiceCallScreen} options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="SafeCall" component={SafeCallScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen
+            name="Music"
+            getComponent={() => require('../screens/music-screen').MusicScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="VoiceCall"
+            getComponent={() => require('../screens/voice-call-screen').VoiceCallScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="SafeCall"
+            getComponent={() => require('../screens/safe-call-screen').SafeCallScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
         </>
       ) : null}
       {liveCalling ? (
         <Stack.Screen
           name="RealtimeCall"
-          component={RealtimeCallScreen}
+          getComponent={() => require('../screens/realtime-call-screen').RealtimeCallScreen}
           options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
       ) : null}
-      <Stack.Screen
-        name="HealthCheck"
-        component={HealthCheckScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
+      {__DEV__ ? (
+        <Stack.Screen
+          name="HealthCheck"
+          getComponent={() => require('../screens/health-check-screen').HealthCheckScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+      ) : null}
       {__DEV__ ? (
         <Stack.Screen
           name="VoiceNoteRecorderDiagnostic"
-          component={VoiceNoteRecorderDiagnosticScreen}
+          getComponent={() => require('../screens/voice-note-recorder-diagnostic-screen').VoiceNoteRecorderDiagnosticScreen}
           options={{ animation: 'slide_from_right' }}
         />
       ) : null}
       {__DEV__ ? (
         <Stack.Screen
           name="BillingQA"
-          component={BillingQAScreen}
+          getComponent={() => require('../screens/billing-qa-screen').BillingQAScreen}
           options={{ animation: 'slide_from_right' }}
         />
       ) : null}
@@ -275,7 +282,7 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
       {(liveCalling || experimental) ? (
         <Stack.Screen
           name="VoiceConversation"
-          component={VoiceConversationScreen}
+          getComponent={() => require('../screens/voice-conversation-screen').VoiceConversationScreen}
           options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
         />
       ) : null}
@@ -315,11 +322,13 @@ export function RootNavigator({ initialRouteName = 'Welcome' }: Props) {
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen name="VoicePicker" component={VoicePickerScreen} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen
-        name="Paywall"
-        component={PaywallScreenRoute}
-        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-      />
+      {isPaywallEnabled() ? (
+        <Stack.Screen
+          name="Paywall"
+          component={PaywallScreenRoute}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+      ) : null}
     </Stack.Navigator>
   );
 }

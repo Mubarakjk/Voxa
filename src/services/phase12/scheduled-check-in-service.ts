@@ -61,7 +61,7 @@ export class ScheduledCheckInService {
   }
 
   async getPermissionState(): Promise<NotificationPermissionState> {
-    const granted = await notificationService.requestPermissions();
+    const granted = await notificationService.getPermissionsGranted();
     return granted ? 'granted' : 'denied';
   }
 
@@ -135,11 +135,20 @@ export class ScheduledCheckInService {
   }
 
   private async scheduleNotification(checkIn: ScheduledCheckIn): Promise<void> {
+    const granted = await notificationService.requestPermissions();
+    if (!granted) return;
     const when = nextOccurrence(checkIn);
     const body = this.buildOpeningMessage(checkIn);
-    const recurrence = checkIn.recurrence === 'once' ? undefined : checkIn.recurrence === 'weekdays' ? 'daily' : checkIn.recurrence === 'custom_days' ? 'weekly' : checkIn.recurrence;
+    const recurrence =
+      checkIn.recurrence === 'once'
+        ? undefined
+        : checkIn.recurrence === 'weekdays'
+          ? 'daily'
+          : checkIn.recurrence === 'custom_days'
+            ? 'weekly'
+            : checkIn.recurrence;
     const id = await notificationService.scheduleReminder({
-      title: 'Scheduled Voxa check-in',
+      title: 'Time for a check-in',
       body,
       scheduledAt: when,
       recurrence: recurrence as 'daily' | 'weekly' | undefined,

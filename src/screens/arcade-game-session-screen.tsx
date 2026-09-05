@@ -19,7 +19,8 @@ export function ArcadeGameSessionScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ArcadeGameSession'>>();
   const { profile, services } = useVoxa();
-  const game = getArcadeGame(route.params.gameId);
+  const gameId = route.params?.gameId;
+  const game = gameId ? getArcadeGame(gameId) : undefined;
   const arcade = getArcadeService(services.storage);
 
   const [session, setSession] = useState<ArcadeGameSession | null>(null);
@@ -27,10 +28,10 @@ export function ArcadeGameSessionScreen() {
   const [busy, setBusy] = useState(false);
 
   const ensureSession = useCallback(async () => {
-    if (!profile || session) return;
-    const s = await arcade.startSession(profile.id, route.params.gameId);
+    if (!profile || session || !gameId) return;
+    const s = await arcade.startSession(profile.id, gameId);
     setSession(s);
-  }, [arcade, profile, route.params.gameId, session]);
+  }, [arcade, profile, gameId, session]);
 
   const startTalk = async () => {
     if (!profile || !game) return;
@@ -58,8 +59,8 @@ export function ArcadeGameSessionScreen() {
 
   if (!game) {
     return (
-      <ScreenShell padded={false}>
-        <VoxaText variant="body">Game not found.</VoxaText>
+      <ScreenShell padded>
+        <ScreenHeader showBack title="Arcade" subtitle="This game isn't available." />
       </ScreenShell>
     );
   }
@@ -67,7 +68,7 @@ export function ArcadeGameSessionScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} onLayout={() => void ensureSession()}>
-        <ScreenHeader title={`${game.emoji} ${game.title}`} subtitle={game.description} />
+        <ScreenHeader showBack title={`${game.emoji} ${game.title}`} subtitle={game.description} />
 
         <GlassCard style={styles.card}>
           <VoxaText variant="body" color="textSecondary">

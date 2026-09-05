@@ -52,7 +52,7 @@ export function GiftsCollectionScreen(_props: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Gifts & collection" subtitle="Cosmetic rewards from real milestones — no pay-to-win." />
+        <ScreenHeader showBack title="Gifts & collection" subtitle="Cosmetic rewards from real milestones — no pay-to-win." />
         <VoxaText variant="caption" color="primarySoft">Unlocked</VoxaText>
         {unlocked.map((r) => (
           <Pressable key={r.id} onPress={() => void equip(r)}>

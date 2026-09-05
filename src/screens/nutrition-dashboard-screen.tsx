@@ -73,7 +73,7 @@ export function NutritionDashboardScreen({ navigation }: Props) {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Today"
           title="Nutrition"
           subtitle={`${nutrition.formatCalories(summary.caloriesLogged)} of ${nutrition.formatCalories(summary.calorieGoal)} kcal logged`}

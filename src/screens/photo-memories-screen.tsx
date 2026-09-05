@@ -48,7 +48,7 @@ export function PhotoMemoriesScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Photo memories" subtitle="Shared visual moments — Voxa only references stored photos." />
+        <ScreenHeader showBack title="Photo memories" subtitle="Shared visual moments — Voxa only references stored photos." />
         {photos.length === 0 ? (
           <>
             <EmptyState

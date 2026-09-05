@@ -7,12 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { isFeatureVisible } from '../config/feature-status';
 import { FadeIn, EmptyState, LoadingPulse, SkeletonBlock, StaggerFade } from '../components/premium/premium-ui';
-import { RitualProgressRing } from '../components/ritual/ritual-progress-ring';
-import { ScreenShell } from '../components/ui/screen-shell';
-import { VoxaText } from '../components/ui/voxa-text';
 import { HomeHeroSection } from '../components/phase6/home-hero-section';
 import { HomeMorningBriefCard } from '../components/home/home-morning-brief-card';
-import { HomeWeatherCard } from '../components/home/home-weather-card';
+import { ScreenShell } from '../components/ui/screen-shell';
+import { VoxaText } from '../components/ui/voxa-text';
 import { TodayQuickActions } from '../components/home/today-quick-actions';
 import { UpcomingScheduledCallCard } from '../components/home/upcoming-scheduled-call-card';
 import { NutritionHomeSummary } from '../components/nutrition/nutrition-home-summary';
@@ -45,6 +43,7 @@ import { getLivingWowService } from '../services/phase11/living-wow-service';
 import { getWeatherService } from '../services/weather/weather-service';
 import { trackEvent } from '../services/analytics/analytics-service';
 import { getVoxaAvatarTint, getVoxaDisplayName } from '../utils/companion-display';
+import { formatHomeHeroSublineFromRaw } from '../utils/home-hero-copy';
 import { hapticCelebrate, hapticLight } from '../utils/haptics';
 import { getRitualService } from '../services/ritual/ritual-service';
 import { getDailyReflectionService } from '../services/reflection/daily-reflection-service';
@@ -270,7 +269,7 @@ export function HomeScreen({ navigation }: Props) {
 
   if (isLoading && !dashboard) {
     return (
-      <ScreenShell padded={false}>
+      <ScreenShell padded={false} safeBottom={false}>
         <View style={styles.skeletonWrap}>
           <LoadingPulse label="Waking up Voxa..." />
           <SkeletonBlock height={220} style={styles.skeletonCard} />
@@ -283,7 +282,7 @@ export function HomeScreen({ navigation }: Props) {
 
   if (loadError && !dashboard) {
     return (
-      <ScreenShell padded={false}>
+      <ScreenShell padded={false} safeBottom={false}>
         <EmptyState
           icon="cloud-offline-outline"
           title="Couldn't load Home"
@@ -328,7 +327,7 @@ export function HomeScreen({ navigation }: Props) {
   };
 
   return (
-    <ScreenShell padded={false}>
+    <ScreenShell padded={false} safeBottom={false}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -340,7 +339,7 @@ export function HomeScreen({ navigation }: Props) {
             headline={presence?.headline ?? phase11.emotionalMessage}
             subline={
               presence?.subline ??
-              (phase11.rhythm.focusLine || phase11.todayFocus || phase11.emotionalMessage || '')
+              formatHomeHeroSublineFromRaw(phase11.rhythm.focusLine || phase11.todayFocus || '')
             }
             tint={voxaTint}
             orbMood={
@@ -356,16 +355,6 @@ export function HomeScreen({ navigation }: Props) {
             }
             orbState={phase7.livingCompanion.state}
             orbIntensity={phase7.livingCompanion.intensity}
-            moodReason={phase11.moodReason}
-            ritualRing={
-              ritualState && isFeatureVisible('dailyCheckIn') ? (
-                <RitualProgressRing
-                  percent={ritualState.progressPercent}
-                  morningDone={ritualState.morningDone}
-                  eveningDone={ritualState.eveningDone}
-                />
-              ) : undefined
-            }
             primaryLabel={`Talk to ${voxaName}`}
             onPrimary={() => openTalk(phase11.talkStarter ?? undefined)}
             onOrbPress={() => openTalk(phase11.talkStarter ?? undefined)}
@@ -405,6 +394,27 @@ export function HomeScreen({ navigation }: Props) {
         ) : null}
 
         <StaggerFade index={0}>
+          <HomeMorningBriefCard
+            dailyBriefing={dashboard.dailyBriefing}
+            phase11={phase11}
+            phase12={phase12}
+            upcomingReminder={dashboard.upcomingReminders[0] ?? null}
+            routineSummary={dashboard.routineSummary}
+            reflectionPending={reflectionPending}
+            weatherBundle={weatherBundle}
+            showRelationship={
+              (profile.preferences.companionControls?.showRelationshipInsights ?? true) !== false
+            }
+            onFollowUp={respondFollowUp}
+            onReflection={() => navigation.navigate('DailyReflection')}
+            onNews={() => navigation.navigate('DailyNews')}
+            onRelationship={() => navigation.navigate('MyCompanion')}
+            onRoutine={() => navigateToRoutine(navigation)}
+            onReminder={() => navigation.navigate('CreateReminder')}
+          />
+        </StaggerFade>
+
+        <StaggerFade index={1}>
           <TodayQuickActions
             onAction={(starter, id) => {
               void hapticLight();
@@ -416,18 +426,6 @@ export function HomeScreen({ navigation }: Props) {
             }}
           />
         </StaggerFade>
-
-        {weatherBundle ? (
-          <StaggerFade index={0}>
-            <HomeWeatherCard
-              bundle={weatherBundle}
-              onPress={() => {
-                void hapticLight();
-                navigation.navigate('WeatherLocationSetup');
-              }}
-            />
-          </StaggerFade>
-        ) : null}
 
         {isScheduledCallsEnabled() ? (
           <StaggerFade index={0}>
@@ -462,26 +460,6 @@ export function HomeScreen({ navigation }: Props) {
             />
           </StaggerFade>
         ) : null}
-
-        <StaggerFade index={1}>
-          <HomeMorningBriefCard
-            dailyBriefing={dashboard.dailyBriefing}
-            phase11={phase11}
-            phase12={phase12}
-            upcomingReminder={dashboard.upcomingReminders[0] ?? null}
-            routineSummary={dashboard.routineSummary}
-            reflectionPending={reflectionPending}
-            showRelationship={
-              (profile.preferences.companionControls?.showRelationshipInsights ?? true) !== false
-            }
-            onFollowUp={respondFollowUp}
-            onReflection={() => navigation.navigate('DailyReflection')}
-            onNews={() => navigation.navigate('DailyNews')}
-            onRelationship={() => navigation.navigate('MyCompanion')}
-            onRoutine={() => navigateToRoutine(navigation)}
-            onReminder={() => navigation.navigate('CreateReminder')}
-          />
-        </StaggerFade>
 
         {isFeatureVisible('calorieTracking') ? (
           <StaggerFade index={2}>
@@ -579,7 +557,7 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
-    paddingBottom: layout.tabBarHeight + spacing.xxl,
+    paddingBottom: layout.tabBarHeight + spacing.xxxl,
     gap: spacing.xl,
   },
   skeletonWrap: {

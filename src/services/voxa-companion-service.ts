@@ -19,6 +19,7 @@ import {
   TrustedContact,
   UserProfile,
   VoiceSession,
+  createId,
   nowIso,
 } from '../types';
 import { GenerateReplyResult, VoxaRepositories } from './contracts';
@@ -37,6 +38,9 @@ import { FeatureLimitError, SubscriptionService } from './billing/subscription-s
 import { UsageTrackingService } from './billing/usage-tracking-service';
 import { GateResult } from '../types/subscription';
 import { asArray } from '../utils/as-array';
+import { talkPerf, talkPerfNow } from '../utils/talk-perf';
+import { buildLocalTalkMessage, talkIntentSkipsMemoryRetrieval } from './chat/talk-critical-path';
+import { isBillingDormant } from '../config/launch-mode';
 import { buildWowExperience, WowExperienceData } from './wow/wow-experience-service';
 import { buildPhase2Dashboard } from './intelligence/phase2-dashboard-service';
 import { buildPhase3Dashboard } from './intelligence/phase3-dashboard-service';
@@ -75,7 +79,7 @@ import { buildPhase12Dashboard } from './phase12/phase12-dashboard-service';
 import { buildPhase9PromptExtension } from './phase9/phase9-prompt-service';
 import { planResponse, polishResponse, scoreResponseQuality } from './phase9/response-planner-service';
 import { getConversationStyleMemoryService } from './phase9/conversation-style-memory-service';
-import { buildSmartSuggestions } from './phase9/smart-suggestions-v2-service';
+import { buildContextualSuggestions } from './chat/contextual-suggestions-service';
 import { buildPhase8PromptExtension } from './phase8/phase8-prompt-service';
 import { buildFocusedContextBlock } from './phase8/companion-context-filter';
 import { getFutureConversationsService } from './phase8/future-conversations-service';
@@ -109,6 +113,13 @@ import { getRoutineCoachService } from './routine/routine-coach-service';
 import { routineProactiveService } from './proactive/routine-proactive-service';
 import { TodayRoutineSummary } from '../types/routine';
 import { IStorageService } from './contracts';
+import { classifyTalkIntent } from './ai/companion-intent';
+import { buildCompanionStrategy, logCompanionStrategyDiagnostic } from './ai/companion-strategy';
+import {
+  assembleRoutedContextExtension,
+  ContextModule,
+  selectContextModules,
+} from './ai/companion-context-router';
 
 export type CompanionBillingDeps = {
   subscription: SubscriptionService;
@@ -122,10 +133,16 @@ export type SendChatMessageInput = {
   content: string;
   mode: CompanionModeId;
   attachments?: PendingAttachmentInput[];
+  /** Already-loaded Talk profile — skips a remote profile refetch on the send path. */
+  loadedProfile?: UserProfile;
+  /** Already-visible conversation turns — skips a remote history refetch when present. */
+  recentHistory?: Message[];
 };
 
 export type SendChatMessageOptions = {
   onStreamChunk?: (chunk: string) => void;
+  /** Fired after the assistant text exists and is saved locally, before remote persist. */
+  onAssistantReady?: (ready: { userMessage: Message; voxaMessage: Message }) => void;
 };
 
 export type SendChatMessageResult = {
@@ -928,6 +945,16 @@ export class VoxaCompanionService {
         goalId: goal.id,
       });
 
+      try {
+        const { notificationService } = await import('./notifications/notification-service');
+        const notificationId = await notificationService.scheduleReminderFromEntity(linkedReminder);
+        linkedReminder = await this.repositories.reminders.updateReminder(linkedReminder.id, {
+          notificationId,
+        });
+      } catch {
+        // Reminder persists without OS notification if permission denied.
+      }
+
       goal = await this.repositories.goals.updateGoal(goal.id, {
         linkedReminderId: linkedReminder.id,
       });
@@ -979,33 +1006,43 @@ export class VoxaCompanionService {
     input: SendChatMessageInput,
     options?: SendChatMessageOptions,
   ): Promise<SendChatMessageResult> {
-    const profile = await this.repositories.userProfile.getProfile();
+    const sendStarted = talkPerfNow();
+    const profileStarted = talkPerfNow();
+    const profile =
+      input.loadedProfile && input.loadedProfile.id === input.userId
+        ? input.loadedProfile
+        : await this.repositories.userProfile.getProfile();
     if (!profile) throw new Error('User profile required before sending messages.');
+    talkPerf('profile', talkPerfNow() - profileStarted);
 
     const hasAttachments = Boolean(input.attachments?.length);
     if (!input.content.trim() && !hasAttachments) {
       throw new Error('Message cannot be empty.');
     }
 
-    const billingCtx = await this.getBillingContext(input.userId, profile);
-    if (billingCtx && this.billing) {
-      if (hasAttachments) {
-        for (const attachment of input.attachments!) {
-          if (attachment.type === 'image') {
-            await this.assertGate(this.billing.featureGate.canUploadImage(billingCtx.planStatus, billingCtx.usage));
-          }
-          if (attachment.type === 'video') {
-            await this.assertGate(this.billing.featureGate.canUploadVideo(billingCtx.planStatus, billingCtx.usage));
-          }
-          if (attachment.type === 'audio') {
-            await this.assertGate(this.billing.featureGate.canUseVoiceNote(billingCtx.planStatus, billingCtx.usage));
-          }
-          if (attachment.type === 'file') {
-            await this.assertGate(this.billing.featureGate.canUploadDocument(billingCtx.planStatus, billingCtx.usage));
+    if (!isBillingDormant() && this.billing) {
+      const billingStarted = talkPerfNow();
+      const billingCtx = await this.getBillingContext(input.userId, profile);
+      if (billingCtx) {
+        if (hasAttachments) {
+          for (const attachment of input.attachments!) {
+            if (attachment.type === 'image') {
+              await this.assertGate(this.billing.featureGate.canUploadImage(billingCtx.planStatus, billingCtx.usage));
+            }
+            if (attachment.type === 'video') {
+              await this.assertGate(this.billing.featureGate.canUploadVideo(billingCtx.planStatus, billingCtx.usage));
+            }
+            if (attachment.type === 'audio') {
+              await this.assertGate(this.billing.featureGate.canUseVoiceNote(billingCtx.planStatus, billingCtx.usage));
+            }
+            if (attachment.type === 'file') {
+              await this.assertGate(this.billing.featureGate.canUploadDocument(billingCtx.planStatus, billingCtx.usage));
+            }
           }
         }
+        await this.assertGate(this.billing.featureGate.canUseAiChat(billingCtx.planStatus, billingCtx.usage));
       }
-      await this.assertGate(this.billing.featureGate.canUseAiChat(billingCtx.planStatus, billingCtx.usage));
+      talkPerf('billingGate', talkPerfNow() - billingStarted);
     }
 
     let effectiveUserText = input.content.trim();
@@ -1028,13 +1065,30 @@ export class VoxaCompanionService {
       input.content.trim() ||
       (attachments?.length ? attachmentDisplayLabel(attachments[0]) : '');
 
-    let userMessage = await this.repositories.messages.createMessage({
+    const persistUserStarted = talkPerfNow();
+    const seedHistory = input.recentHistory ?? [];
+    const talkIntentEarly = classifyTalkIntent(effectiveUserText, seedHistory);
+    const skipMemory = talkIntentSkipsMemoryRetrieval(talkIntentEarly.intent);
+    const isFactualFastPath = talkIntentEarly.intent === 'factual_question';
+    const goalsPromise = isFactualFastPath
+      ? Promise.resolve([] as Goal[])
+      : this.repositories.goals.listActiveGoals(input.userId);
+    const remindersPromise = isFactualFastPath
+      ? Promise.resolve([] as Reminder[])
+      : this.repositories.reminders.listReminders(input.userId);
+
+    const userDraft = buildLocalTalkMessage({
+      id: createId('msg'),
       conversationId: input.conversationId,
       role: 'user',
       content: displayContent,
       mode: input.mode,
       attachments,
     });
+    await this.repositories.messages.upsertMessage(userDraft);
+    talkPerf('persist-user', talkPerfNow() - persistUserStarted);
+    const persistUserRemote = this.persistTalkMessageRemote(userDraft);
+    let userMessage = userDraft;
 
     if (this.storage) {
       void getProactiveCheckInOrchestrator(this.storage, this.repositories)
@@ -1051,6 +1105,7 @@ export class VoxaCompanionService {
     }
 
     if (attachments?.length) {
+      userMessage = await persistUserRemote;
       const processor = createAttachmentProcessor(this.ai);
       const uploaded = await processor.uploadAll({
         userId: input.userId,
@@ -1061,7 +1116,7 @@ export class VoxaCompanionService {
       userMessage = await this.repositories.messages.updateMessage(userMessage.id, { attachments: uploaded });
     }
 
-    if (!hasAttachments && parseMusicIntent(input.content)) {
+    if (!hasAttachments && !isFactualFastPath && parseMusicIntent(input.content)) {
       const voxaMessage = await this.repositories.messages.createMessage({
         conversationId: input.conversationId,
         role: 'voxa',
@@ -1075,7 +1130,7 @@ export class VoxaCompanionService {
       return { userMessage, voxaMessage };
     }
 
-    if (!hasAttachments && this.storage) {
+    if (!hasAttachments && !isFactualFastPath && this.storage) {
       const phase5 = getPhase5LifeOSService(this.storage, this.repositories);
       const talkResult = await phase5.handleTalkCommand(input.userId, effectiveUserText);
       if (talkResult.handled) {
@@ -1092,14 +1147,10 @@ export class VoxaCompanionService {
       }
     }
 
-    const [activeGoalsForParse, remindersForParse] = await Promise.all([
-      this.repositories.goals.listActiveGoals(input.userId),
-      this.repositories.reminders.listReminders(input.userId),
-    ]);
+    const [activeGoalsForParse, remindersForParse] = await Promise.all([goalsPromise, remindersPromise]);
     const upcomingForParse = getUpcomingReminders(remindersForParse, 5);
 
     const parsedIntent = await this.chatActions.parseMessage(effectiveUserText, {
-      ai: this.ai,
       userProfile: profile,
       mode: input.mode,
       activeGoals: activeGoalsForParse,
@@ -1156,11 +1207,23 @@ export class VoxaCompanionService {
       };
     }
 
-    const history = await this.repositories.messages.listMessages(input.conversationId);
-    const moodHistory = this.storage
-      ? await getMoodIntelligenceService(this.storage).getUnifiedMoodHistory(input.userId)
-      : [];
+    const historyStarted = talkPerfNow();
+    const history =
+      input.recentHistory !== undefined
+        ? [...seedHistory.filter((item) => item.id !== userMessage.id), userMessage]
+        : await this.repositories.messages.listMessages(input.conversationId);
+    const moodHistory =
+      isFactualFastPath || !this.storage
+        ? []
+        : await getMoodIntelligenceService(this.storage).getUnifiedMoodHistory(input.userId);
+    talkPerf('history', talkPerfNow() - historyStarted);
+    const talkIntentResult = classifyTalkIntent(effectiveUserText, history);
 
+    if (profile.preferences.memoryEnabled) {
+      await this.memoryEngine.handleUserMemoryCommand(input.userId, effectiveUserText);
+    }
+
+    const contextStarted = talkPerfNow();
     const unifiedContext = await this.companionIntelligence.buildContext({
       userId: input.userId,
       userProfile: profile,
@@ -1168,12 +1231,124 @@ export class VoxaCompanionService {
       conversationId: input.conversationId,
       userMessage: effectiveUserText,
       moodHistory,
+      talkIntent: talkIntentResult.intent,
+      skipMemoryRetrieval: talkIntentSkipsMemoryRetrieval(talkIntentResult.intent),
     });
+    talkPerf('memory', talkPerfNow() - contextStarted);
     const effectiveMode = unifiedContext.mode;
+    const memories = profile.preferences.memoryEnabled ? unifiedContext.topMemories : [];
+    const activeGoals = activeGoalsForParse;
+    const allReminders = remindersForParse;
+    const selectedContextModules = selectContextModules(talkIntentResult.intent, effectiveUserText);
+    const wants = (module: ContextModule) => selectedContextModules.includes(module);
 
-    const studioPrefs = this.storage
-      ? (await this.storage.getItem<CompanionStudioExtendedPrefs>(STORAGE_KEYS.companionStudioPrefs)) ?? createDefaultStudioExtendedPrefs()
-      : createDefaultStudioExtendedPrefs();
+    const extrasStarted = talkPerfNow();
+    const storage = this.storage;
+    const [
+      studioPrefsStored,
+      growthSnapshot,
+      futureConv,
+      preferenceMemories,
+      challenge,
+      stylePrefs,
+      routineSummary,
+      intelligenceBundle,
+      moodBlock,
+      morningCheckIn,
+      eveningCheckIn,
+      reflectionEntries,
+      weatherBlock,
+      nutritionBlock,
+      notesBlock,
+      faithBlock,
+    ] = storage
+      ? await Promise.all([
+          wants('phase7_personality')
+            ? storage.getItem<CompanionStudioExtendedPrefs>(STORAGE_KEYS.companionStudioPrefs)
+            : Promise.resolve(null),
+          wants('phase7_personality')
+            ? getRelationshipGrowthService(storage, this.repositories).getSnapshot(input.userId)
+            : Promise.resolve(null),
+          wants('phase8_focused')
+            ? getFutureConversationsService(storage).getDueToday(input.userId)
+            : Promise.resolve(null),
+          wants('phase8_focused')
+            ? getPreferenceMemoryService(storage).list(input.userId)
+            : Promise.resolve([]),
+          wants('phase8_focused')
+            ? getSharedChallengesService(storage).getActive(input.userId)
+            : Promise.resolve(null),
+          getConversationStyleMemoryService(storage).get(input.userId),
+          wants('phase11_dashboard')
+            ? getRoutineCoachService(storage, this.repositories).getTodaySchedule(input.userId)
+            : Promise.resolve(null),
+          wants('phase11_dashboard')
+            ? this.companionIntelligence.getBundle(input.userId, profile.displayName)
+            : Promise.resolve(null),
+          wants('mood')
+            ? getMoodIntelligenceService(storage).buildAdaptationBlock(input.userId, effectiveUserText)
+            : Promise.resolve(''),
+          wants('check_in')
+            ? getDailyCheckInService(storage).getTodayEntry('morning')
+            : Promise.resolve(null),
+          wants('check_in')
+            ? getDailyCheckInService(storage).getTodayEntry('evening')
+            : Promise.resolve(null),
+          wants('reflection')
+            ? getDailyReflectionService(storage).list(input.userId, 7)
+            : Promise.resolve([]),
+          wants('weather')
+            ? buildWeatherPromptBlock(getWeatherService(storage), effectiveUserText)
+            : Promise.resolve(''),
+          wants('nutrition')
+            ? (async () => {
+                const nutrition = getNutritionService(storage);
+                const prefs = await nutrition.getPreferences(input.userId);
+                if (prefs.mode === 'off') return '';
+                const todaySummary = await nutrition.getTodaySummary(input.userId);
+                return nutrition.buildNutritionPromptBlock(prefs, todaySummary);
+              })()
+            : Promise.resolve(''),
+          wants('notes')
+            ? (async () => {
+                const { formatNotesForPrompt, listNotesForConversationContext } = await import(
+                  './notes/notes-context-service'
+                );
+                const permitted = await listNotesForConversationContext(storage, input.userId, 3);
+                return formatNotesForPrompt(permitted);
+              })()
+            : Promise.resolve(''),
+          wants('faith')
+            ? (async () => {
+                const { buildFaithValuesPromptBlockFromService } = await import(
+                  './faith/faith-values-context-service'
+                );
+                const { getFaithValuesService } = await import('./faith/faith-values-service');
+                return buildFaithValuesPromptBlockFromService(getFaithValuesService(storage), input.userId);
+              })()
+            : Promise.resolve(''),
+        ])
+      : [
+          null,
+          null,
+          null,
+          [],
+          null,
+          undefined,
+          null,
+          null,
+          '',
+          null,
+          null,
+          [],
+          '',
+          '',
+          '',
+          '',
+        ];
+    talkPerf('context', talkPerfNow() - extrasStarted);
+
+    const studioPrefs = studioPrefsStored ?? createDefaultStudioExtendedPrefs();
     const goalsCompleted = unifiedContext.relationship.goalsAchievedTogether;
     const daysTogether = Math.max(
       1,
@@ -1186,49 +1361,26 @@ export class VoxaCompanionService {
       goalsCompleted,
     });
     let friendshipLine = FRIENDSHIP_LEVEL_LABELS[relStage];
-    if (this.storage) {
-      const growthSnapshot = await getRelationshipGrowthService(this.storage, this.repositories).getSnapshot(
-        input.userId,
-      );
+    if (growthSnapshot) {
       relStage = growthSnapshot.level;
       friendshipLine = `${growthSnapshot.levelLabel} — ${growthSnapshot.familiarityLine}`;
     }
-    const phase7Block = buildPhase7PromptExtension(
-      `${stagePromptBlock(relStage)}\n## Friendship\n${friendshipLine}`,
-      buildStudioExtendedPromptBlock(studioPrefs),
-    );
+    const phase7Block = wants('phase7_personality')
+      ? buildPhase7PromptExtension(
+          `${stagePromptBlock(relStage)}\n## Friendship\n${friendshipLine}`,
+          buildStudioExtendedPromptBlock(studioPrefs),
+        )
+      : '';
 
-    let phase8Block = buildPhase8PromptExtension();
-
-    const memories = profile.preferences.memoryEnabled
-      ? await this.memoryEngine.retrieveForPrompt(input.userId, {
-          userMessage: effectiveUserText,
-          mode: effectiveMode,
-          recentMessageTexts: history
-            .filter((item) => item.role !== 'system')
-            .slice(-6)
-            .map((item) => item.content),
-        })
-      : [];
-
-    const [activeGoals, allReminders] = await Promise.all([
-      this.repositories.goals.listActiveGoals(input.userId),
-      this.repositories.reminders.listReminders(input.userId),
-    ]);
-
-    if (this.storage) {
-      const [futureConv, prefs, challenge] = await Promise.all([
-        getFutureConversationsService(this.storage).getDueToday(input.userId),
-        getPreferenceMemoryService(this.storage).list(input.userId),
-        getSharedChallengesService(this.storage).getActive(input.userId),
-      ]);
+    let phase8Block = wants('phase8_focused') ? buildPhase8PromptExtension() : '';
+    if (wants('phase8_focused') && storage) {
       const calendar = buildLifeCalendar({ reminders: allReminders, memories, goals: activeGoals });
       const focusedBlock = buildFocusedContextBlock({
         context: unifiedContext,
         userMessage: effectiveUserText,
         calendarLine: calendar.todayLine ?? calendar.tomorrowLine,
         futureLine: futureConv?.resumeLine ?? null,
-        preferenceBlock: getPreferenceMemoryService(this.storage).formatForPrompt(prefs),
+        preferenceBlock: getPreferenceMemoryService(storage).formatForPrompt(preferenceMemories),
         challengeTitle: challenge?.title ?? null,
         relationshipStage: relStage,
         todayFocus: calendar.todayLine ?? activeGoals[0]?.title ?? null,
@@ -1237,9 +1389,16 @@ export class VoxaCompanionService {
     }
 
     const recentVoxaTexts = history.filter((m) => m.role === 'voxa').slice(-3).map((m) => m.content);
-    const stylePrefs = this.storage
-      ? await getConversationStyleMemoryService(this.storage).get(input.userId)
-      : undefined;
+
+    const companionStrategy = buildCompanionStrategy({
+      talkIntent: talkIntentResult,
+      userMessage: effectiveUserText,
+      history,
+      memories,
+      stylePrefs,
+      recentVoxaReplies: recentVoxaTexts,
+    });
+
     const responsePlan = planResponse({
       userMessage: effectiveUserText,
       memories,
@@ -1247,24 +1406,23 @@ export class VoxaCompanionService {
       stylePrefs,
       recentVoxaReplies: recentVoxaTexts,
       moodTrend: moodHistory[0]?.label ?? null,
+      strategy: companionStrategy,
     });
 
-    if (this.storage) {
-      void getConversationStyleMemoryService(this.storage).updateFromMessage(input.userId, effectiveUserText);
+    if (storage) {
+      void getConversationStyleMemoryService(storage).updateFromMessage(input.userId, effectiveUserText);
     }
 
-    const phase9Block = buildPhase9PromptExtension(responsePlan.promptBlock);
+    const phase9Block = buildPhase9PromptExtension(
+      [companionStrategy.promptBlock, responsePlan.promptBlock].filter(Boolean).join('\n\n'),
+    );
 
     let phase11Block = '';
-    if (this.storage) {
-      const [routineSummary, bundle] = await Promise.all([
-        getRoutineCoachService(this.storage, this.repositories).getTodaySchedule(input.userId),
-        this.companionIntelligence.getBundle(input.userId, profile.displayName),
-      ]);
+    if (wants('phase11_dashboard') && storage && routineSummary && intelligenceBundle) {
       const phase11Dash = await buildPhase11Dashboard({
         userId: input.userId,
         profile,
-        bundle,
+        bundle: intelligenceBundle,
         memories,
         goals: activeGoals,
         routine: routineSummary,
@@ -1273,7 +1431,7 @@ export class VoxaCompanionService {
         todayFocus: activeGoals[0]?.title ?? 'Today',
         moodLabel: moodHistory[0]?.label ?? null,
         celebrating: /passed|got it|finally|nailed|i did it/i.test(effectiveUserText),
-        storage: this.storage,
+        storage,
       });
       phase11Block = buildPhase11PromptExtension(
         buildPhase11PromptForChat({
@@ -1284,32 +1442,21 @@ export class VoxaCompanionService {
       );
     }
 
-    const moodBlock = this.storage
-      ? await getMoodIntelligenceService(this.storage).buildAdaptationBlock(input.userId, effectiveUserText)
-      : '';
-
     let checkInBlock = '';
-    if (this.storage) {
-      const checkIn = getDailyCheckInService(this.storage);
-      const [morning, evening] = await Promise.all([
-        checkIn.getTodayEntry('morning'),
-        checkIn.getTodayEntry('evening'),
-      ]);
-      const entry =
-        evening && !evening.skipped
-          ? evening
-          : morning && !morning.skipped
-            ? morning
-            : null;
-      if (entry) {
-        checkInBlock = buildTodayCheckInPromptBlock({
-          period: entry.period,
-          moodLabel: entry.answers.mood ?? entry.mood,
-          focus: entry.answers.priority ?? entry.answers.focus,
-          worrying: entry.answers.worrying,
-          smiled: entry.answers.smiled ?? entry.answers.wentWell,
-        });
-      }
+    const entry =
+      eveningCheckIn && !eveningCheckIn.skipped
+        ? eveningCheckIn
+        : morningCheckIn && !morningCheckIn.skipped
+          ? morningCheckIn
+          : null;
+    if (entry) {
+      checkInBlock = buildTodayCheckInPromptBlock({
+        period: entry.period,
+        moodLabel: entry.answers.mood ?? entry.mood,
+        focus: entry.answers.priority ?? entry.answers.focus,
+        worrying: entry.answers.worrying,
+        smiled: entry.answers.smiled ?? entry.answers.wentWell,
+      });
     }
 
     const wantsChallenge =
@@ -1318,48 +1465,26 @@ export class VoxaCompanionService {
       );
     const challengeBlock = wantsChallenge ? buildChallengeMePromptExtension(effectiveUserText) : '';
 
-    const reflectionBlock = this.storage
-      ? getDailyReflectionService(this.storage).formatForPrompt(
-          await getDailyReflectionService(this.storage).list(input.userId, 7),
-        )
+    const reflectionBlock = storage
+      ? getDailyReflectionService(storage).formatForPrompt(reflectionEntries)
       : '';
 
-    const weatherBlock = this.storage
-      ? await buildWeatherPromptBlock(getWeatherService(this.storage), effectiveUserText)
-      : '';
-
-    let nutritionBlock = '';
-    if (this.storage) {
-      const nutrition = getNutritionService(this.storage);
-      const prefs = await nutrition.getPreferences(input.userId);
-      if (prefs.mode !== 'off') {
-        const todaySummary = await nutrition.getTodaySummary(input.userId);
-        nutritionBlock = nutrition.buildNutritionPromptBlock(prefs, todaySummary);
-      }
-    }
-
-    let notesBlock = '';
-    if (this.storage) {
-      const { formatNotesForPrompt, listNotesForConversationContext } = await import(
-        './notes/notes-context-service'
-      );
-      const permitted = await listNotesForConversationContext(this.storage, input.userId, 3);
-      notesBlock = formatNotesForPrompt(permitted);
-    }
-
-    let faithBlock = '';
-    if (this.storage) {
-      const { buildFaithValuesPromptBlockFromService } = await import(
-        './faith/faith-values-context-service'
-      );
-      const { getFaithValuesService } = await import('./faith/faith-values-service');
-      faithBlock = await buildFaithValuesPromptBlockFromService(
-        getFaithValuesService(this.storage),
-        input.userId,
-      );
-    }
-
-    const companionContextExtension = `${this.companionIntelligence.getPromptExtension(unifiedContext)}\n\n${buildPhase4PromptExtension()}\n\n${phase7Block}\n\n${phase8Block}\n\n${phase9Block}${phase11Block}${moodBlock ? `\n\n${moodBlock}` : ''}${checkInBlock ? `\n\n${checkInBlock}` : ''}${challengeBlock ? `\n\n${challengeBlock}` : ''}${reflectionBlock ? `\n\n${reflectionBlock}` : ''}${weatherBlock ? `\n\n${weatherBlock}` : ''}${nutritionBlock ? `\n\n${nutritionBlock}` : ''}${notesBlock ? `\n\n${notesBlock}` : ''}${faithBlock ? `\n\n${faithBlock}` : ''}`;
+    const companionContextExtension = assembleRoutedContextExtension(selectedContextModules, {
+      companion_core: this.companionIntelligence.getPromptExtension(unifiedContext, { includeMemories: false }),
+      phase4_quality: buildPhase4PromptExtension(),
+      phase7_personality: phase7Block,
+      phase8_focused: phase8Block,
+      phase9_plan: phase9Block,
+      phase11_dashboard: phase11Block,
+      mood: moodBlock,
+      check_in: checkInBlock,
+      challenge: challengeBlock,
+      reflection: reflectionBlock,
+      weather: weatherBlock,
+      nutrition: nutritionBlock,
+      notes: notesBlock,
+      faith: faithBlock,
+    });
     const upcomingReminders = getUpcomingReminders(allReminders, 5);
 
     const aiInput = {
@@ -1372,49 +1497,74 @@ export class VoxaCompanionService {
       upcomingReminders,
       currentTime: unifiedContext.currentTime,
       companionContextExtension,
+      talkIntent: talkIntentResult.intent,
+      referencesRecentTurns: talkIntentResult.referencesRecentTurns,
+      conversationState: companionStrategy.state,
+      contextModules: selectedContextModules,
       imageUrlForVision,
       imageAnalysisSummary,
     };
 
+    logCompanionStrategyDiagnostic({
+      strategy: companionStrategy,
+      contextModules: selectedContextModules,
+      memoryCount: memories.length,
+    });
+
     let aiResult: GenerateReplyResult;
+    const gatewayStarted = talkPerfNow();
     if (options?.onStreamChunk && isStreamCapableAI(this.ai)) {
       aiResult = await this.ai.generateReplyStream(aiInput, options.onStreamChunk);
     } else {
       aiResult = await this.ai.generateReply(aiInput);
       if (options?.onStreamChunk) {
-        await simulateStream(aiResult.content, options.onStreamChunk);
+        options.onStreamChunk(aiResult.content);
       }
     }
+    talkPerf('gateway', talkPerfNow() - gatewayStarted);
 
     let replyContent = aiResult.content;
-    const quality = scoreResponseQuality(replyContent, responsePlan, recentVoxaTexts);
+    const quality = scoreResponseQuality(replyContent, responsePlan, recentVoxaTexts, companionStrategy);
     if (!quality.passed) {
       replyContent = polishResponse(replyContent, quality.issues);
     }
 
-    const voxaMessage = await this.repositories.messages.createMessage({
+    const persistReplyStarted = talkPerfNow();
+    const voxaMessage = buildLocalTalkMessage({
+      id: createId('msg'),
       conversationId: input.conversationId,
       role: 'voxa',
       content: replyContent,
       mode: effectiveMode,
     });
+    await this.repositories.messages.upsertMessage(voxaMessage);
+    talkPerf('persist-reply', talkPerfNow() - persistReplyStarted);
+    options?.onAssistantReady?.({ userMessage, voxaMessage });
 
-    await this.repositories.conversations.updateConversation(input.conversationId, {
-      lastMessageAt: voxaMessage.createdAt,
-    });
+    void persistUserRemote.catch(() => undefined);
+    void this.persistTalkMessageRemote(voxaMessage).catch(() => undefined);
+    void this.repositories.conversations
+      .updateConversation(input.conversationId, {
+        lastMessageAt: voxaMessage.createdAt,
+      })
+      .catch(() => undefined);
 
-    await this.repositories.userProfile.updateProfile({
+    void this.repositories.userProfile.updateProfile({
       companion: { ...profile.companion, lastUsedMode: effectiveMode },
-    });
+    }).catch(() => undefined);
 
-    await this.memoryEngine.processAfterReply({
+    void this.memoryEngine.processAfterReply({
       userId: input.userId,
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
       mode: effectiveMode,
       userProfile: profile,
       mediaSource: hasAttachments ? mediaSource : undefined,
-    }).catch((err) => console.warn('[Voxa] Background memory extraction failed.', err));
+    }).catch((err) => {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[Voxa] Background memory extraction failed.', err);
+      }
+    });
 
     void this.companionIntelligence.afterConversation({
       userId: input.userId,
@@ -1422,7 +1572,11 @@ export class VoxaCompanionService {
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
       mode: effectiveMode,
-    }).catch((err) => console.warn('[Voxa] Background personality update failed.', err));
+    }).catch((err) => {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[Voxa] Background personality update failed.', err);
+      }
+    });
 
     if (this.storage) {
       void getFutureConversationsService(this.storage)
@@ -1439,13 +1593,18 @@ export class VoxaCompanionService {
       void getPreferenceMemoryService(this.storage)
         .ingestFromMessage(input.userId, effectiveUserText)
         .catch(() => undefined);
-      const dueFuture = await getFutureConversationsService(this.storage).getDueToday(input.userId);
-      if (dueFuture && dueFuture.conversationId === input.conversationId) {
-        await getFutureConversationsService(this.storage).resolve(input.userId, dueFuture.id);
-      }
+      void getFutureConversationsService(this.storage)
+        .getDueToday(input.userId)
+        .then((dueFuture) => {
+          if (dueFuture && dueFuture.conversationId === input.conversationId) {
+            return getFutureConversationsService(this.storage!).resolve(input.userId, dueFuture.id);
+          }
+          return undefined;
+        })
+        .catch(() => undefined);
     }
 
-    await this.maybeSummarizeConversation({
+    void this.maybeSummarizeConversation({
       conversationId: input.conversationId,
       profile,
       mode: effectiveMode,
@@ -1454,44 +1613,60 @@ export class VoxaCompanionService {
       upcomingReminders,
     });
 
-    if (this.billing) {
-      await this.billing.usageTracking.recordAiMessage(input.userId);
-      if (hasAttachments) {
-        for (const attachment of input.attachments!) {
-          if (attachment.type === 'image') await this.billing.usageTracking.recordImageUpload(input.userId);
-          if (attachment.type === 'video') await this.billing.usageTracking.recordVideoUpload(input.userId);
-          if (attachment.type === 'audio') await this.billing.usageTracking.recordVoiceNote(input.userId);
-          if (attachment.type === 'file') await this.billing.usageTracking.recordDocument(input.userId);
+    if (!isBillingDormant() && this.billing) {
+      void (async () => {
+        await this.billing!.usageTracking.recordAiMessage(input.userId);
+        if (hasAttachments) {
+          for (const attachment of input.attachments!) {
+            if (attachment.type === 'image') await this.billing!.usageTracking.recordImageUpload(input.userId);
+            if (attachment.type === 'video') await this.billing!.usageTracking.recordVideoUpload(input.userId);
+            if (attachment.type === 'audio') await this.billing!.usageTracking.recordVoiceNote(input.userId);
+            if (attachment.type === 'file') await this.billing!.usageTracking.recordDocument(input.userId);
+          }
         }
-      }
-      await this.billing.subscription.refreshUsageCounts(input.userId, this.repositories);
+        await this.billing!.subscription.refreshUsageCounts(input.userId, this.repositories);
+      })().catch(() => undefined);
     }
 
-    const bundle = await this.companionIntelligence.getBundle(input.userId, profile.displayName);
-    const signals = modeInferenceEngine.inferSignals(effectiveUserText, bundle);
-    const personalityMode = personalityV3Service.inferModeFromMessage(effectiveUserText, signals, bundle);
-    const canvas = this.storage
-      ? await getConversationCanvasService(this.storage).updateFromExchange({
+    const bundle = intelligenceBundle;
+    const signals = bundle ? modeInferenceEngine.inferSignals(effectiveUserText, bundle) : null;
+    const personalityMode: ChatExperiencePayload['personalityMode'] =
+      (bundle && signals
+        ? personalityV3Service.inferModeFromMessage(effectiveUserText, signals, bundle)
+        : unifiedContext.adaptiveModeLabel) ?? 'friend';
+    if (this.storage) {
+      void getConversationCanvasService(this.storage)
+        .updateFromExchange({
           conversationId: input.conversationId,
           userMessage: effectiveUserText,
           voxaReply: voxaMessage.content,
         })
-      : null;
+        .catch(() => undefined);
+    }
     const smartActions = smartChatActionsService.suggest({
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
       mode: effectiveMode,
-      isLargeTopic: Boolean(canvas),
-      emotional: signals.needsSupport,
+      isLargeTopic: false,
+      emotional: Boolean(signals?.needsSupport),
       goalMentioned: /goal/i.test(effectiveUserText),
     });
-    const chatExperience = await this.getChatExperience(input.userId, input.conversationId);
-    chatExperience.smartActions = smartActions;
-    chatExperience.canvas = canvas;
-    chatExperience.personalityMode = personalityMode;
-    if (chatExperience.delightMoment && this.storage) {
-      await getDelightMomentsService(this.storage).markShown(chatExperience.delightMoment);
-    }
+    const chatExperience: ChatExperiencePayload = {
+      contextCards: [],
+      smartActions,
+      canvas: null,
+      livingCompanion: {
+        greeting: '',
+        subline: '',
+        mood: 'calm',
+        energy: 'medium',
+        conversationStarter: '',
+        thinkingAbout: null,
+        daySignature: '',
+      },
+      delightMoment: null,
+      personalityMode,
+    };
 
     if (this.storage && effectiveUserText.trim().length >= 12) {
       void getFollowUpEngineService(this.storage)
@@ -1499,12 +1674,11 @@ export class VoxaCompanionService {
         .catch(() => undefined);
     }
 
-    const phase9Suggestions = buildSmartSuggestions({
+    const phase9Suggestions = buildContextualSuggestions({
+      talkIntent: talkIntentResult.intent,
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
-      goalMentioned: /goal/i.test(effectiveUserText),
-      emotional: signals.needsSupport,
-      isLargeTopic: Boolean(canvas),
+      strategy: companionStrategy.state,
     });
 
     if (this.storage && effectiveUserText.trim().length >= 4) {
@@ -1516,6 +1690,8 @@ export class VoxaCompanionService {
       memories.slice(0, 8).map((m) => m.title),
     );
 
+    talkPerf('post-response', 0);
+    talkPerf('total', talkPerfNow() - sendStarted);
     return {
       userMessage,
       voxaMessage,
@@ -1525,6 +1701,24 @@ export class VoxaCompanionService {
       richReply,
       phase9Suggestions,
     };
+  }
+
+  /** Remote insert using the same id as the local row. Failures keep the local copy. */
+  private async persistTalkMessageRemote(message: Message): Promise<Message> {
+    try {
+      return await this.repositories.messages.createMessage({
+        id: message.id,
+        conversationId: message.conversationId,
+        role: message.role,
+        content: message.content,
+        mode: message.mode,
+        status: message.status,
+        metadata: message.metadata,
+        attachments: message.attachments,
+      });
+    } catch {
+      return message;
+    }
   }
 
   async retryMessageAttachmentUpload(input: {
@@ -1841,14 +2035,6 @@ type StreamCapableAI = IAIService & {
 
 function isStreamCapableAI(ai: IAIService): ai is StreamCapableAI {
   return typeof (ai as StreamCapableAI).generateReplyStream === 'function';
-}
-
-async function simulateStream(content: string, onChunk: (chunk: string) => void) {
-  const tokens = content.split(/(\s+)/);
-  for (const token of tokens) {
-    onChunk(token);
-    await new Promise((resolve) => setTimeout(resolve, 18));
-  }
 }
 
 function formatRelativeTime(isoDate: string) {

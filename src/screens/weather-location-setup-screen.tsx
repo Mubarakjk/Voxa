@@ -117,7 +117,7 @@ export function WeatherLocationSetupScreen({ navigation }: Props) {
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-            <ScreenHeader
+            <ScreenHeader showBack
               eyebrow="Weather"
               title="Your location"
               subtitle={PERMISSION_EXPLANATION}

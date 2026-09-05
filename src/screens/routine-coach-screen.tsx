@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { FadeIn, SectionCard } from '../components/premium/premium-ui';
+import { BackButton } from '../components/ui/back-button';
 import { PrimaryButton } from '../components/ui/buttons';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
@@ -143,6 +144,7 @@ export function RoutineCoachScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
           <View style={styles.header}>
+            <BackButton onPress={() => navigation.goBack()} />
             <VoxaText variant="title">Routine Coach</VoxaText>
             <VoxaText variant="body" color="textSecondary">
               Build your day — one block at a time.

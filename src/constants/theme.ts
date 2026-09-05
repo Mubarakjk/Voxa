@@ -75,8 +75,18 @@ export const spacing = {
   xl: 24,
   xxl: 32,
   xxxl: 40,
-  section: 24,
+  section: 28,
+  screenBottom: 48,
 };
+
+/** Vertical rhythm between major screen regions */
+export const rhythm = {
+  screenTitle: spacing.xl,
+  sectionGap: spacing.section,
+  cardGap: spacing.md12,
+  inlineGap: spacing.sm,
+  heroPadding: spacing.xxxl,
+} as const;
 
 export const layout = {
   screenPadding: 20,
@@ -137,27 +147,39 @@ export const motion = {
 };
 
 export const typography = {
-  hero: { fontSize: 44, fontWeight: '300' as const, letterSpacing: 3, lineHeight: 52 },
+  display: { fontSize: 34, fontWeight: '600' as const, letterSpacing: -0.8, lineHeight: 40 },
+  hero: { fontSize: 44, fontWeight: '300' as const, letterSpacing: -0.5, lineHeight: 50 },
   screenTitle: { fontSize: 28, fontWeight: '600' as const, letterSpacing: -0.5, lineHeight: 34 },
-  title: { fontSize: 26, fontWeight: '600' as const, letterSpacing: -0.4, lineHeight: 32 },
-  sectionTitle: { fontSize: 20, fontWeight: '600' as const, letterSpacing: -0.3, lineHeight: 26 },
+  title: { fontSize: 24, fontWeight: '600' as const, letterSpacing: -0.4, lineHeight: 30 },
+  sectionTitle: { fontSize: 18, fontWeight: '600' as const, letterSpacing: -0.2, lineHeight: 24 },
   subtitle: { fontSize: 17, fontWeight: '600' as const, letterSpacing: -0.2, lineHeight: 24 },
   cardTitle: { fontSize: 16, fontWeight: '600' as const, letterSpacing: -0.1, lineHeight: 22 },
-  body: { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
-  supporting: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+  body: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
+  supporting: { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
   caption: { fontSize: 13, fontWeight: '500' as const, lineHeight: 18 },
   buttonLabel: { fontSize: 16, fontWeight: '600' as const, letterSpacing: -0.1, lineHeight: 20 },
   stat: { fontSize: 28, fontWeight: '600' as const, letterSpacing: -0.5, lineHeight: 32 },
   label: {
     fontSize: 11,
     fontWeight: '600' as const,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
     textTransform: 'uppercase' as const,
     lineHeight: 14,
   },
 };
 
 export const surfaces = {
+  page: { backgroundColor: colors.background },
+  elevated: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  quiet: {
+    backgroundColor: colors.surfaceQuiet,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -169,5 +191,10 @@ export const surfaces = {
     backgroundColor: colors.surfaceQuiet,
     borderRadius: radius.lg,
     padding: spacing.lg,
+  },
+  interactive: {
+    backgroundColor: colors.surfaceStrong,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
 };

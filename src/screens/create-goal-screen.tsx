@@ -19,6 +19,7 @@ import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { GoalCategory } from '../types';
+import { friendlyErrorMessage } from '../utils/friendly-error';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateGoal'>;
 
@@ -63,7 +64,7 @@ export function CreateGoalScreen({ navigation }: Props) {
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save goal.');
+      setError(friendlyErrorMessage(err, 'Could not save that goal. Please try again.'));
     } finally {
       setIsSaving(false);
     }

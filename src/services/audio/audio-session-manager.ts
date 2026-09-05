@@ -1,41 +1,31 @@
-import { Audio } from 'expo-av';
+import {
+  AudioModule,
+  RecordingPresets,
+  createAudioPlayer,
+  setAudioModeAsync,
+  type AudioPlayer,
+  type AudioRecorder,
+} from 'expo-audio';
 import * as Speech from 'expo-speech';
 
 export type AudioLockOwner = 'voice' | 'music' | 'tts' | 'idle';
 
 const VOICE_RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  numberOfChannels: 1,
   isMeteringEnabled: true,
-  android: {
-    extension: '.m4a',
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-  },
-  ios: {
-    extension: '.m4a',
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
-  },
-  web: { mimeType: 'audio/webm', bitsPerSecond: 128000 },
 };
 
 function audioLog(event: string, detail?: string) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   console.log(`[Voxa] ${detail ? `${event} · ${detail}` : event}`);
 }
 
 class AudioSessionManager {
   private lockOwner: AudioLockOwner = 'idle';
   private queue: Promise<void> = Promise.resolve();
-  private recording: Audio.Recording | null = null;
-  private playbackSound: Audio.Sound | null = null;
+  private recording: AudioRecorder | null = null;
+  private playbackPlayer: AudioPlayer | null = null;
   voiceCallActive = false;
 
   getLockOwner() {
@@ -61,10 +51,7 @@ class AudioSessionManager {
 
   async acquireLock(owner: AudioLockOwner): Promise<boolean> {
     return this.runExclusive(`AUDIO LOCK ${owner}`, async () => {
-      if (
-        this.voiceCallActive &&
-        owner === 'music'
-      ) {
+      if (this.voiceCallActive && owner === 'music') {
         audioLog('AUDIO LOCK DENIED', `${owner} · voice call active`);
         return false;
       }
@@ -104,12 +91,12 @@ class AudioSessionManager {
       await this.forceReleaseRecorder();
       await this.unloadPlaybackSound();
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          interruptionMode: 'duckOthers',
+          shouldRouteThroughEarpiece: false,
         });
       } catch {
         // ignore
@@ -121,23 +108,23 @@ class AudioSessionManager {
   }
 
   async setPlaybackMode() {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'duckOthers',
+      shouldRouteThroughEarpiece: false,
     });
     audioLog('AUDIO MODE PLAYBACK');
   }
 
   async setRecordingMode() {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'duckOthers',
+      shouldRouteThroughEarpiece: false,
     });
     audioLog('AUDIO MODE RECORDING');
   }
@@ -145,7 +132,8 @@ class AudioSessionManager {
   async prepareForPlayback(owner: AudioLockOwner) {
     const ok = await this.acquireLock(owner);
     if (!ok) throw new Error('Audio session busy');
-    Speech.stop();
+    // Avoid a second Speech.stop() here — acquireLock already stopped speech.
+    // Immediate stop + setAudioMode + speak races iOS and can suppress onStart.
     await this.forceReleaseRecorder();
     await this.setPlaybackMode();
   }
@@ -160,34 +148,32 @@ class AudioSessionManager {
     return options;
   }
 
-  registerPlaybackSound(sound: Audio.Sound) {
-    this.playbackSound = sound;
+  registerPlaybackSound(player: AudioPlayer) {
+    this.playbackPlayer = player;
   }
 
   async unloadPlaybackSound() {
-    if (!this.playbackSound) return;
+    if (!this.playbackPlayer) return;
     try {
-      await this.playbackSound.stopAsync();
-      await this.playbackSound.unloadAsync();
+      this.playbackPlayer.pause();
+      this.playbackPlayer.remove();
     } catch {
       // ignore
     }
-    this.playbackSound = null;
+    this.playbackPlayer = null;
   }
 
   async forceReleaseRecorder() {
     const active = this.recording;
     if (!active) return;
     try {
-      const status = await active.getStatusAsync();
+      const status = active.getStatus();
       if (status.isRecording || status.canRecord) {
-        await active.stopAndUnloadAsync();
-      } else {
-        await active.stopAndUnloadAsync();
+        await active.stop();
       }
     } catch {
       try {
-        await active.stopAndUnloadAsync();
+        await active.stop();
       } catch {
         // ignore
       }
@@ -200,9 +186,9 @@ class AudioSessionManager {
   async startRecording(owner: AudioLockOwner, options = VOICE_RECORDING_OPTIONS): Promise<void> {
     return this.runExclusive('REC START', async () => {
       const recordingOptions = await this.prepareForRecording(owner, options);
-      const recording = new Audio.Recording();
+      const recording = new AudioModule.AudioRecorder(recordingOptions);
       await recording.prepareToRecordAsync(recordingOptions);
-      await recording.startAsync();
+      recording.record();
       this.recording = recording;
     });
   }
@@ -212,9 +198,9 @@ class AudioSessionManager {
       const active = this.recording;
       if (!active) return null;
       try {
-        const status = await active.getStatusAsync();
-        await active.stopAndUnloadAsync();
-        const uri = active.getURI();
+        const status = active.getStatus();
+        await active.stop();
+        const uri = active.uri;
         if (!uri) return null;
         if (status.durationMillis != null && status.durationMillis < 500) {
           audioLog('REC STOP EMPTY', `${status.durationMillis}ms`);
@@ -239,7 +225,7 @@ class AudioSessionManager {
   async getRecordingMetering(): Promise<number> {
     if (!this.recording) return 0;
     try {
-      const status = await this.recording.getStatusAsync();
+      const status = this.recording.getStatus();
       if (status.metering === undefined) return 0;
       return Math.max(0, Math.min(1, (status.metering + 60) / 60));
     } catch {
@@ -248,21 +234,21 @@ class AudioSessionManager {
   }
 
   async setSpeakerOutput(enabled: boolean): Promise<void> {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: !enabled,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'duckOthers',
+      shouldRouteThroughEarpiece: !enabled,
     });
   }
 
   async pauseRecording() {
     return this.runExclusive('REC PAUSE', async () => {
       if (!this.recording) return;
-      const status = await this.recording.getStatusAsync();
+      const status = this.recording.getStatus();
       if (status.isRecording) {
-        await this.recording.pauseAsync();
+        this.recording.pause();
       }
     });
   }
@@ -270,9 +256,9 @@ class AudioSessionManager {
   async resumeRecording() {
     return this.runExclusive('REC RESUME', async () => {
       if (!this.recording) return;
-      const status = await this.recording.getStatusAsync();
+      const status = this.recording.getStatus();
       if (status.canRecord && !status.isRecording) {
-        await this.recording.startAsync();
+        this.recording.record();
       }
     });
   }
@@ -288,4 +274,4 @@ class AudioSessionManager {
 
 export const audioSessionManager = new AudioSessionManager();
 
-export { VOICE_RECORDING_OPTIONS };
+export { VOICE_RECORDING_OPTIONS, createAudioPlayer };

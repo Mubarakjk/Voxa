@@ -96,7 +96,7 @@ export function WeeklyLetterScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader eyebrow={`Week of ${letter.weekKey}`} title="Weekly letter" subtitle="From Voxa — grounded in your real week." />
+        <ScreenHeader showBack eyebrow={`Week of ${letter.weekKey}`} title="Weekly letter" subtitle="From Voxa — grounded in your real week." />
         <GlassCard style={styles.letter}>
           {sections.map((para, i) => (
             <VoxaText key={i} variant="body" color="textSecondary" style={styles.para}>{para}</VoxaText>

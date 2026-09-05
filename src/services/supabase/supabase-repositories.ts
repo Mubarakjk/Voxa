@@ -436,7 +436,7 @@ export class SupabaseMessageRepository implements IMessageRepository {
 
   async createMessage(input: CreateMessageInput) {
     const userId = await requireUserId();
-    const id = createId('msg');
+    const id = input.id ?? createId('msg');
     const { data, error } = await this.client
       .from('messages')
       .insert({

@@ -75,7 +75,7 @@ export class ContextEngine {
     };
   }
 
-  toPromptExtension(context: UnifiedCompanionContext): string {
+  toPromptExtension(context: UnifiedCompanionContext, options?: { includeMemories?: boolean }): string {
     const ip = context.intelligenceProfile;
     const rel = context.relationship;
 
@@ -138,8 +138,9 @@ export class ContextEngine {
             .join('; ')}`
         : '';
 
+    const includeMemories = options?.includeMemories ?? false;
     const memoryLines =
-      context.topMemories.length > 0
+      includeMemories && context.topMemories.length > 0
         ? context.topMemories
             .map((m) => `- ${m.title}: ${m.content.slice(0, 120)} (${memoryAgingEngine.describeForPrompt(m)}, ${memoryConfidenceService.describeForPrompt(m)})`)
             .join('\n')

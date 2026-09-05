@@ -9,12 +9,24 @@ type Props = {
   children: ReactNode;
   scroll?: boolean;
   padded?: boolean;
+  /**
+   * When false, omit bottom safe-area padding (use for tab scenes or screens
+   * that manage their own footer inset). Top inset is always applied.
+   */
+  safeBottom?: boolean;
   /** Ambient glow accent. `purple` kept as alias for primary teal brand glow. */
   glow?: 'primary' | 'purple' | 'blue' | 'safe' | 'none';
   style?: ViewStyle;
 };
 
-export function ScreenShell({ children, scroll, padded = true, glow = 'primary', style }: Props) {
+export function ScreenShell({
+  children,
+  scroll,
+  padded = true,
+  safeBottom = true,
+  glow = 'primary',
+  style,
+}: Props) {
   const insets = useSafeAreaInsets();
   const glowColor =
     glow === 'blue'
@@ -30,7 +42,10 @@ export function ScreenShell({ children, scroll, padded = true, glow = 'primary',
       style={[
         styles.content,
         padded && { paddingHorizontal: layout.screenPadding },
-        { paddingTop: insets.top + spacing.md12, paddingBottom: insets.bottom + spacing.md },
+        {
+          paddingTop: insets.top + spacing.md12,
+          paddingBottom: safeBottom ? insets.bottom + spacing.md : 0,
+        },
         style,
       ]}>
       {children}

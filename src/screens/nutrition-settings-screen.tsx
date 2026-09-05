@@ -151,7 +151,7 @@ export function NutritionSettingsScreen({ navigation }: Props) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ScreenHeader
+          <ScreenHeader showBack
             eyebrow="Preferences"
             title="Calorie tracking"
             subtitle="Opt-in only. Change mode, goals, or remove your data."

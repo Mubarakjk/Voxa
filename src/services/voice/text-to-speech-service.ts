@@ -1,12 +1,11 @@
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { hasOpenAIApiKey, getOpenAIApiKey } from '../../config/env';
 import { VoicePersonality } from '../../types/user-profile';
 import { VoiceSpeechConfig } from '../../types/voice-identity';
 import { VOICE_PERSONALITY_PROFILES } from '../../types/voice-call';
-import { audioSessionManager } from '../audio/audio-session-manager';
+import { audioSessionManager, createAudioPlayer } from '../audio/audio-session-manager';
 import { setVoiceDebugState, ttsLog } from './voice-debug-state';
 
 export interface ITextToSpeechService {
@@ -18,7 +17,9 @@ export interface ITextToSpeechService {
 
 const OPENAI_TTS_URL = 'https://api.openai.com/v1/audio/speech';
 const PLAYBACK_TIMEOUT_MS = 45_000;
-const PLAYBACK_START_TIMEOUT_MS = 3_000;
+/** iOS can delay expo-speech onStart after expo-audio session changes. */
+const PLAYBACK_START_TIMEOUT_MS = 8_000;
+const SESSION_SETTLE_MS = 120;
 
 const LEGACY_SPEECH: Record<VoicePersonality, { pitch: number; rate: number; voice?: string }> = {
   warm_calm: { pitch: 0.95, rate: 0.9, voice: 'nova' },
@@ -114,17 +115,40 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     ttsLog('TTS PROVIDER', 'expo-speech');
     setVoiceDebugState({ ttsProvider: 'expo-speech' });
     await audioSessionManager.setPlaybackMode();
+    // Let the iOS audio session settle after expo-audio mode changes before Speech.speak.
+    await new Promise((resolve) => setTimeout(resolve, SESSION_SETTLE_MS));
+    if (this.cancelled) return;
     ttsLog('TTS AUDIO READY');
 
     let playbackStarted = false;
+    let settled = false;
 
     await new Promise<void>((resolve, reject) => {
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(startTimer);
+        clearInterval(speakingPoll);
+        fn();
+      };
+
       const startTimer = setTimeout(() => {
         if (!playbackStarted) {
           Speech.stop();
-          reject(new Error('expo-speech playback did not start within 3s'));
+          finish(() => reject(new Error('expo-speech playback did not start within 8s')));
         }
       }, PLAYBACK_START_TIMEOUT_MS);
+
+      // Some iOS builds never fire onStart after session churn; poll as a backup.
+      const speakingPoll = setInterval(() => {
+        void Speech.isSpeakingAsync().then((speaking) => {
+          if (speaking && !playbackStarted) {
+            playbackStarted = true;
+            clearTimeout(startTimer);
+            ttsLog('TTS PLAYBACK START', 'expo-speech (polled)');
+          }
+        });
+      }, 250);
 
       Speech.speak(text, {
         pitch: config.expoPitch,
@@ -135,18 +159,15 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
           ttsLog('TTS PLAYBACK START', 'expo-speech');
         },
         onDone: () => {
-          clearTimeout(startTimer);
           ttsLog('TTS PLAYBACK END', 'expo-speech');
-          resolve();
+          finish(resolve);
         },
         onStopped: () => {
-          clearTimeout(startTimer);
           ttsLog('TTS PLAYBACK END', 'expo-speech stopped');
-          resolve();
+          finish(resolve);
         },
         onError: () => {
-          clearTimeout(startTimer);
-          reject(new Error('expo-speech playback failed'));
+          finish(() => reject(new Error('expo-speech playback failed')));
         },
       });
     });
@@ -191,8 +212,8 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     await audioSessionManager.setPlaybackMode();
     await audioSessionManager.unloadPlaybackSound();
 
-    const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false });
-    audioSessionManager.registerPlaybackSound(sound);
+    const player = createAudioPlayer({ uri }, { updateInterval: 200 });
+    audioSessionManager.registerPlaybackSound(player);
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -201,6 +222,7 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
       const finish = (fn: () => void) => {
         if (settled) return;
         settled = true;
+        clearInterval(poll);
         clearTimeout(startTimeout);
         clearTimeout(playTimeout);
         fn();
@@ -217,13 +239,14 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
         finish(() => reject(new Error('OpenAI TTS playback timed out')));
       }, PLAYBACK_TIMEOUT_MS);
 
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded || this.cancelled) return;
-        if ('error' in status && status.error) {
-          finish(() => reject(new Error(String(status.error))));
+      const poll = setInterval(() => {
+        if (this.cancelled) {
+          finish(resolve);
           return;
         }
-        if (status.isPlaying) {
+        const status = player.currentStatus;
+        if (!status.isLoaded) return;
+        if (status.playing && !playbackStarted) {
           playbackStarted = true;
           clearTimeout(startTimeout);
           ttsLog('TTS PLAYBACK START', 'openai');
@@ -232,15 +255,13 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
           ttsLog('TTS PLAYBACK END', 'openai');
           finish(resolve);
         }
-      });
+      }, 100);
 
-      void sound.playAsync().then((playStatus) => {
-        if (!playStatus.isLoaded) {
-          finish(() => reject(new Error('OpenAI TTS playback failed to load')));
-        }
-      }).catch((err) => {
-        finish(() => reject(err instanceof Error ? err : new Error('OpenAI TTS playAsync failed')));
-      });
+      try {
+        player.play();
+      } catch (err) {
+        finish(() => reject(err instanceof Error ? err : new Error('OpenAI TTS play failed')));
+      }
     });
 
     await audioSessionManager.unloadPlaybackSound();

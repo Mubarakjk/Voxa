@@ -39,6 +39,8 @@ const STYLE_RATE: Record<string, number> = {
   calm: 0.88,
   soft: 0.85,
   relaxed: 0.9,
+  friendly: 0.96,
+  caring: 0.9,
   energetic: 1.1,
   motivational: 1.08,
   confident: 1.05,
@@ -100,8 +102,9 @@ export function resolveVoiceSpeechConfig(
 
   const baseRate = SPEED_RATE[identity.speechSpeed];
   const styleRate = STYLE_RATE[identity.speakingStyle] ?? 1.0;
-  const expoRate = (legacy?.expoRate ?? baseRate * styleRate);
-  const expoPitch = (legacy?.expoPitch ?? WARMTH_PITCH[identity.warmth] * AGE_PITCH[identity.ageStyle]);
+  // Prefer Studio identity rate/pitch; only fall back to legacy when no identity-driven values apply.
+  const expoRate = baseRate * styleRate;
+  const expoPitch = WARMTH_PITCH[identity.warmth] * AGE_PITCH[identity.ageStyle];
 
   const instructions = [
     `Speak with a ${accent.label} accent influence.`,
@@ -112,10 +115,11 @@ export function resolveVoiceSpeechConfig(
     .join(' ');
 
   return {
-    openAiVoiceId: legacy?.ttsVoiceId ?? openAiVoiceId,
-    expoPitch,
-    expoRate,
-    speedMultiplier: expoRate,
+    // OpenAI voice id: accent hint filtered by gender. Legacy personality only fills gaps.
+    openAiVoiceId: openAiVoiceId || legacy?.ttsVoiceId || 'nova',
+    expoPitch: Number.isFinite(expoPitch) ? expoPitch : legacy?.expoPitch ?? 1,
+    expoRate: Number.isFinite(expoRate) ? expoRate : legacy?.expoRate ?? 0.95,
+    speedMultiplier: Number.isFinite(expoRate) ? expoRate : legacy?.expoRate ?? 0.95,
     instructions,
   };
 }

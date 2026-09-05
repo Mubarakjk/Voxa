@@ -520,10 +520,15 @@ export function PaywallScreenRoute({ navigation, route }: PaywallRouteProps) {
   }, [loadOfferings, profile, route.params?.source, services.paywallImpressions, services.subscriptionAnalytics]);
 
   const openLegalUrl = useCallback(async (url: string, fallback: () => void) => {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith('https://') || trimmed.toLowerCase().includes('voxa.app')) {
+      fallback();
+      return;
+    }
     try {
-      const supported = await Linking.canOpenURL(url);
+      const supported = await Linking.canOpenURL(trimmed);
       if (supported) {
-        await Linking.openURL(url);
+        await Linking.openURL(trimmed);
         return;
       }
     } catch {

@@ -69,11 +69,13 @@ export function getVoiceDebugSnapshot() {
 }
 
 export function voiceLog(event: string, detail?: string) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   const line = detail ? `${event} · ${detail}` : event;
   console.log(`[Voxa] ${line}`);
 }
 
 export function ttsLog(event: string, detail?: string) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   const line = detail ? `${event} · ${detail}` : event;
   console.log(`[Voxa] ${line}`);
 }

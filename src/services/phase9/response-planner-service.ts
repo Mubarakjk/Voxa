@@ -2,8 +2,31 @@ import { Goal, Memory } from '../../types';
 import { ResponseIntent, ResponsePlan, ThinkingStyle } from '../../types/phase9-intelligence';
 import { ConversationStylePreference } from '../../types/phase9-intelligence';
 import { detectThinkingStyle } from './thinking-styles-service';
+import {
+  CompanionStrategy,
+  strategyAllowsQuestion,
+  strategyDepthToKeepShort,
+} from '../ai/companion-strategy';
 
-const BANNED_OPENERS = [/^(as an ai|i understand\.|how can i help)/i, /^(sure!|certainly!|of course!)/i];
+const BANNED_OPENERS = [
+  /^(as an ai|i understand\.|how can i help)/i,
+  /^(sure!|certainly!|of course!)/i,
+  /^(that sounds like|it sounds like|it's understandable that)/i,
+];
+
+const GENERIC_FILLER = [
+  /\bwhat do you think\??\s*$/i,
+  /\bhow does that sound\??\s*$/i,
+  /\bhow do you feel about that\??\s*$/i,
+  /\bneed help with anything else\??\s*$/i,
+  /\bwant me to\b/i,
+  /\bwould you like me to\b/i,
+  /\bif it feels right for you\b/i,
+  /\bjust make sure it adds to your enjoyment\b/i,
+  /\bboredom can be a drag\b/i,
+  /\bthat's completely valid\b/i,
+  /\bit's understandable that\b/i,
+];
 
 export function planResponse(input: {
   userMessage: string;
@@ -12,6 +35,7 @@ export function planResponse(input: {
   stylePrefs?: ConversationStylePreference;
   recentVoxaReplies?: string[];
   moodTrend?: string | null;
+  strategy?: CompanionStrategy;
 }): ResponsePlan {
   const lower = input.userMessage.toLowerCase();
   const thinkingStyle = detectThinkingStyle(input.userMessage);
@@ -19,7 +43,10 @@ export function planResponse(input: {
   let intent: ResponseIntent = 'listen';
   let detectedEmotion = 'neutral';
 
-  if (/\b(tired|exhausted|drained|burnt out|burned out|no energy)\b/i.test(lower)) {
+  if (/\b(what('s| is)|how much|how many|calculate|percent of|\d+\s*[\+\-\*\/%])\b/i.test(lower) && input.userMessage.length < 120) {
+    intent = 'inform';
+    detectedEmotion = 'neutral';
+  } else if (/\b(tired|exhausted|drained|burnt out|burned out|no energy)\b/i.test(lower)) {
     intent = 'support';
     detectedEmotion = 'tired';
   } else if (/\b(sad|upset|anxious|stressed|overwhelm|scared|lonely|hurt)\b/i.test(lower)) {
@@ -53,15 +80,45 @@ export function planResponse(input: {
     .filter((g) => g.status === 'active' && (lower.includes(g.title.toLowerCase().slice(0, 6)) || /\bgoal\b/i.test(lower)))
     .slice(0, 2);
 
+  if (intent === 'inform' && input.userMessage.length < 120) {
+    return {
+      intent,
+      thinkingStyle,
+      userGoal: 'get a direct answer',
+      detectedEmotion,
+      shouldAskQuestion: false,
+      keepShort: true,
+      useChecklist: false,
+      useTimeline: false,
+      useHumour: false,
+      relevantMemoryTitles: [],
+      relevantGoalTitles: [],
+      promptBlock: [
+        '## Response plan (follow silently — do not mention this block)',
+        'Intent: direct factual answer. Reply in 1-3 sentences. No personal context unless essential.',
+        'Do not ask a follow-up question.',
+      ].join('\n'),
+    };
+  }
+
   if (intent === 'plan' && detectedEmotion === 'tired') {
     intent = 'support';
   }
 
-  const keepShort = input.stylePrefs?.prefersShort ?? (input.userMessage.length < 60 || intent === 'listen' || detectedEmotion === 'tired');
+  const keepShort = input.strategy
+    ? strategyDepthToKeepShort(input.strategy.state.depth)
+    : input.stylePrefs?.prefersShort ?? (input.userMessage.length < 60 || intent === 'listen' || detectedEmotion === 'tired');
   const useChecklist = detectedEmotion !== 'tired' && (intent === 'plan' || /\b(steps|checklist|list|tasks)\b/i.test(lower));
   const useTimeline = /\b(timeline|week|month|phase|roadmap)\b/i.test(lower);
-  const useHumour = input.stylePrefs?.prefersHumour ?? (thinkingStyle === 'friend' && detectedEmotion === 'positive');
-  const shouldAskQuestion = intent === 'coach' || intent === 'listen' || (intent === 'support' && !/\?/.test(input.userMessage));
+  const useHumour =
+    input.strategy?.state.tone === 'playful' ||
+    input.stylePrefs?.prefersHumour ||
+    (thinkingStyle === 'friend' && detectedEmotion === 'positive');
+  const shouldAskQuestion = input.strategy
+    ? strategyAllowsQuestion(input.strategy.state.questionPolicy)
+    : (intent === 'coach' || intent === 'listen') &&
+      !/\?/.test(input.userMessage) &&
+      input.userMessage.length > 20;
 
   const userGoal = inferUserGoal(lower, intent);
 
@@ -71,6 +128,9 @@ export function planResponse(input: {
     `User goal: ${userGoal}. Emotion: ${detectedEmotion}.`,
     keepShort ? 'Keep reply SHORT — 1-3 short paragraphs max unless they asked for detail.' : 'Match their depth — structured but not bloated.',
     shouldAskQuestion ? 'End with ONE good question if it adds value — not generic.' : 'Do not force a question.',
+    input.strategy?.state.decisionMode
+      ? 'Give a clear recommendation first — do not hide behind "it depends" unless genuinely uncertain.'
+      : '',
     useChecklist ? 'Use a short checklist or numbered steps if helpful.' : 'Avoid bullet walls unless asked.',
     useTimeline ? 'A timeline format may help here.' : '',
     useHumour ? 'Light humour okay if kind.' : 'Skip humour unless natural.',
@@ -112,7 +172,12 @@ function inferUserGoal(lower: string, intent: ResponseIntent): string {
   return 'move the conversation forward';
 }
 
-export function scoreResponseQuality(text: string, plan: ResponsePlan, recentReplies: string[] = []): import('../../types/phase9-intelligence').ResponseQualityScore {
+export function scoreResponseQuality(
+  text: string,
+  plan: ResponsePlan,
+  recentReplies: string[] = [],
+  strategy?: CompanionStrategy,
+): import('../../types/phase9-intelligence').ResponseQualityScore {
   const issues: string[] = [];
   let score = 1;
 
@@ -128,6 +193,23 @@ export function scoreResponseQuality(text: string, plan: ResponsePlan, recentRep
     score -= 0.2;
   }
 
+  for (const pattern of GENERIC_FILLER) {
+    if (pattern.test(text.trim())) {
+      issues.push('generic_filler');
+      score -= plan.keepShort ? 0.15 : 0.1;
+    }
+  }
+
+  if (strategy?.state.questionPolicy === 'none' && /\?\s*$/.test(text.trim())) {
+    issues.push('unnecessary_question');
+    score -= 0.2;
+  }
+
+  if (/^(that sounds like|it sounds like|i understand that)/i.test(text.trim())) {
+    issues.push('generic_opener');
+    score -= 0.2;
+  }
+
   if (text.length < 20 && plan.intent !== 'celebrate') {
     issues.push('too_short');
     score -= 0.1;
@@ -140,9 +222,19 @@ export function scoreResponseQuality(text: string, plan: ResponsePlan, recentRep
 
   for (const prev of recentReplies.slice(-2)) {
     const opener = text.slice(0, 40).toLowerCase();
-    if (prev.slice(0, 40).toLowerCase() === opener) {
+    const prevOpener = prev.slice(0, 40).toLowerCase();
+    if (prevOpener === opener) {
       issues.push('repetitive_opener');
       score -= 0.2;
+      break;
+    }
+    let shared = 0;
+    while (shared < opener.length && shared < prevOpener.length && opener[shared] === prevOpener[shared]) {
+      shared += 1;
+    }
+    if (shared >= 15) {
+      issues.push('repetitive_opener');
+      score -= 0.15;
       break;
     }
   }
@@ -167,6 +259,17 @@ export function polishResponse(text: string, issues: string[]): string {
   out = out.replace(/^sure!?\s*/i, '');
   out = out.replace(/^certainly!?\s*/i, '');
   out = out.replace(/\bi am an artificial intelligence\b/gi, '');
+
+  out = out.replace(/\bwhat do you think\??\s*$/i, '');
+  out = out.replace(/\bhow does that sound\??\s*$/i, '');
+  out = out.replace(/\bhow do you feel about that\??\s*$/i, '');
+  out = out.replace(/\bneed help with anything else\??\s*$/i, '');
+  out = out.replace(/\bwant me to[^.?!]*[.?!]?\s*$/i, '');
+  out = out.replace(/^(that sounds like|it sounds like|sounds like)[^.!?]*[.!?]\s*/i, '');
+
+  if (issues.includes('unnecessary_question')) {
+    out = out.replace(/([^.!?])\?\s*$/, '$1.');
+  }
 
   if (issues.includes('too_long')) {
     const paras = out.split('\n\n');

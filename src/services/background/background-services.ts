@@ -42,9 +42,14 @@ export class ReminderSchedulerService {
 
   async syncReminderNotifications(userId: string) {
     const reminders = await this.repositories.reminders.listReminders(userId);
-    const upcoming = reminders.filter(
-      (item) => item.status === 'scheduled' && new Date(item.scheduledAt) > new Date(),
-    );
+    const now = Date.now();
+    const upcoming = reminders.filter((item) => {
+      if (item.status !== 'scheduled') return false;
+      const fireAt = new Date(item.scheduledAt).getTime();
+      if (fireAt > now) return true;
+      // Recurring reminders must survive past their original scheduledAt.
+      return item.recurrence !== 'none';
+    });
 
     for (const reminder of upcoming) {
       if (reminder.notificationId) {

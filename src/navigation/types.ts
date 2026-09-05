@@ -109,7 +109,6 @@ export type MainTabParamList = {
   Home: undefined;
   Talk: { starterPrompt?: string; mode?: import('../types').CompanionModeId; conversationId?: string } | undefined;
   Voxa: { action?: 'voice' | 'safe' | 'music' | 'camera' } | undefined;
-  Routine: undefined;
   Journey: undefined;
   You: undefined;
 };

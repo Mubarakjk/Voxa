@@ -6,7 +6,7 @@ import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { CompanionActionRow } from '../components/companion/companion-action-row';
-import { FadeIn, HeroOrb, ScreenHeader, StaggerFade } from '../components/premium/premium-ui';
+import { FadeIn, HeroOrb, LoadingPulse, ScreenHeader, StaggerFade } from '../components/premium/premium-ui';
 import { PrimaryButton } from '../components/ui/buttons';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
@@ -40,6 +40,7 @@ export function VoxaCentreScreen({ navigation }: Props) {
   const [insightText, setInsightText] = useState<string | null>(null);
   const [goalLine, setGoalLine] = useState<string | null>(null);
   const [bondLine, setBondLine] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const voxaName = getVoxaDisplayName(profile);
   const voxaTint = getVoxaAvatarTint(profile);
@@ -55,6 +56,7 @@ export function VoxaCentreScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!profile) return;
+    setIsLoading(true);
     try {
       const [focus, growth, memories, goals, moodHistory, entries, dash] = await Promise.all([
         getCompanionFocusState(profile.id).catch(() => null),
@@ -101,6 +103,8 @@ export function VoxaCentreScreen({ navigation }: Props) {
       }
     } catch {
       setStatusLine('Here when you need me');
+    } finally {
+      setIsLoading(false);
     }
   }, [companion, profile, services.repositories, services.storage, showInsights]);
 
@@ -123,7 +127,7 @@ export function VoxaCentreScreen({ navigation }: Props) {
         removeClippedSubviews>
         <FadeIn>
           <ScreenHeader
-            eyebrow="Your companion"
+            eyebrow="My Voxa"
             title={voxaName}
             subtitle={`${personalityLabel} · ${voiceLabel}`}
           />
@@ -182,8 +186,8 @@ export function VoxaCentreScreen({ navigation }: Props) {
             />
             <CompanionActionRow
               icon="bookmark-outline"
-              label="Saved moments"
-              detail="Memories Voxa keeps"
+              label="What Voxa remembers"
+              detail="View and manage saved moments"
               onPress={() => {
                 void hapticLight();
                 stackNav.navigate('Memory');
@@ -193,7 +197,11 @@ export function VoxaCentreScreen({ navigation }: Props) {
           </GlassCard>
         </StaggerFade>
 
-        {insightText || bondLine || goalLine ? (
+        {isLoading ? (
+          <StaggerFade index={3}>
+            <LoadingPulse label="Loading companion overview..." />
+          </StaggerFade>
+        ) : insightText || bondLine || goalLine ? (
           <StaggerFade index={3}>
             <GlassCard style={styles.card} variant="elevated">
               {bondLine ? (
@@ -221,7 +229,20 @@ export function VoxaCentreScreen({ navigation }: Props) {
               ) : null}
             </GlassCard>
           </StaggerFade>
-        ) : null}
+        ) : (
+          <StaggerFade index={3}>
+            <GlassCard style={styles.card} variant="elevated">
+              <VoxaText variant="body" color="textSecondary">
+                As you talk, Voxa will learn what matters and show useful context here.
+              </VoxaText>
+              <PrimaryButton
+                label="View memories"
+                variant="ghost"
+                onPress={() => stackNav.navigate('Memory')}
+              />
+            </GlassCard>
+          </StaggerFade>
+        )}
       </ScrollView>
     </ScreenShell>
   );

@@ -10,17 +10,22 @@ const COLORS: Record<MemoryConfidenceLevel, string> = {
   low: '#E8A87C',
 };
 
-type MemoryConfidenceBadgeProps = {
-  level: MemoryConfidenceLevel;
-  percent?: number;
+const LABELS: Record<MemoryConfidenceLevel, string> = {
+  high: 'You told Voxa',
+  medium: 'Likely',
+  low: 'Uncertain',
 };
 
-export function MemoryConfidenceBadge({ level, percent }: MemoryConfidenceBadgeProps) {
-  const label = level === 'high' ? 'High' : level === 'medium' ? 'Medium' : 'Low';
+type MemoryConfidenceBadgeProps = {
+  level: MemoryConfidenceLevel;
+};
+
+/** User-facing trust hint — no scores or internal metadata. */
+export function MemoryConfidenceBadge({ level }: MemoryConfidenceBadgeProps) {
   return (
     <View style={[styles.badge, { borderColor: `${COLORS[level]}55` }]}>
       <VoxaText variant="caption" style={{ color: COLORS[level] }}>
-        {label}{percent != null ? ` · ${percent}%` : ''}
+        {LABELS[level]}
       </VoxaText>
     </View>
   );

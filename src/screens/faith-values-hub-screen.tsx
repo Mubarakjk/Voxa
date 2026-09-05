@@ -150,7 +150,7 @@ export function FaithValuesHubScreen({ navigation }: Props) {
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
-          <ScreenHeader
+          <ScreenHeader showBack
             eyebrow="Private space"
             title="Faith & Values"
             subtitle={faithModeLabel(mode)}

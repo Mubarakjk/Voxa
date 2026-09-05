@@ -4,12 +4,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { EmptyState, FadeIn, ScreenHeader, StaggerFade } from '../components/premium/premium-ui';
+import { EmptyState, FadeIn, HeroOrb, ScreenHeader, StaggerFade } from '../components/premium/premium-ui';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { LoadingState } from '../components/ui/screen-state';
 import { VoxaText } from '../components/ui/voxa-text';
-import { colors, layout, radius, semantic, shadows, spacing } from '../constants/theme';
+import { colors, layout, radius, semantic, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { getDailyCheckInService } from '../services/check-in/daily-check-in-service';
@@ -137,17 +137,23 @@ export function MyCompanionScreen({ navigation }: Props) {
         </FadeIn>
 
         <StaggerFade index={0}>
-          <GlassCard style={{ ...styles.hero, borderColor: tint + '55' }} variant="elevated">
-            <VoxaText variant="caption" color="textMuted">
+          <View style={styles.heroOrb}>
+            <HeroOrb tint={tint} size={168} label={voxaName} caption={growth.familiarityLine} />
+          </View>
+        </StaggerFade>
+
+        <StaggerFade index={1}>
+          <View style={styles.heroStats}>
+            <VoxaText variant="label" color="textMuted">
               Days together
             </VoxaText>
             <VoxaText variant="title">{growth.daysTogether}</VoxaText>
             <VoxaText variant="caption" color="primarySoft">
               {growth.levelLabel}
             </VoxaText>
-            {growth.nextLevelLabel ? (
+            {growth.nextLevelLabel && growth.progressPercent > 0 ? (
               <>
-                <View style={styles.track} accessibilityLabel={`${growth.progressPercent} percent toward next level`}>
+                <View style={styles.track}>
                   <View style={[styles.fill, { width: `${growth.progressPercent}%`, backgroundColor: tint }]} />
                 </View>
                 <VoxaText variant="caption" color="textMuted">
@@ -155,10 +161,10 @@ export function MyCompanionScreen({ navigation }: Props) {
                 </VoxaText>
               </>
             ) : null}
-          </GlassCard>
+          </View>
         </StaggerFade>
 
-        <StaggerFade index={1}>
+        <StaggerFade index={2}>
           <View style={styles.metrics}>
             <Metric label="Conversations" value={metrics.conversationCount} />
             <Metric label="Goals done" value={metrics.goalsCompleted} />
@@ -169,7 +175,7 @@ export function MyCompanionScreen({ navigation }: Props) {
           </View>
         </StaggerFade>
 
-        <StaggerFade index={2}>
+        <StaggerFade index={3}>
           <View style={styles.rowLinks}>
             <LinkChip
               label="Growth"
@@ -203,7 +209,7 @@ export function MyCompanionScreen({ navigation }: Props) {
         </StaggerFade>
 
         {showInsights ? (
-          <StaggerFade index={3}>
+          <StaggerFade index={4}>
             <VoxaText variant="subtitle" style={styles.sectionTitle}>
               What {voxaName} has learned
             </VoxaText>
@@ -280,7 +286,15 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   back: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
-  hero: { gap: spacing.sm, ...shadows.soft },
+  heroOrb: { alignItems: 'center', paddingVertical: spacing.md },
+  heroStats: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceQuiet,
+  },
   track: {
     height: 6,
     borderRadius: 3,
@@ -295,9 +309,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceQuiet,
     gap: 2,
   },
   rowLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -306,9 +318,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     justifyContent: 'center',
     borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.surfaceQuiet,
   },
   sectionTitle: { marginTop: spacing.sm },
   sectionSub: { marginBottom: spacing.xs },
