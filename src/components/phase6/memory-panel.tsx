@@ -36,8 +36,10 @@ export function MemoryPanel({ visible, items, onClose, onToggleInclude, onToggle
                   <VoxaText variant="caption" color="primarySoft">{item.kind}</VoxaText>
                   <VoxaText variant="subtitle">{item.label}</VoxaText>
                   <VoxaText variant="caption" color="textSecondary" numberOfLines={2}>{item.detail}</VoxaText>
-                  {item.confidence ? (
-                    <VoxaText variant="caption" color="textMuted">{item.confidence} confidence</VoxaText>
+                  {item.confidence && item.confidence !== 'high' ? (
+                    <VoxaText variant="caption" color="textMuted">
+                      {item.confidence === 'medium' ? 'Likely relevant' : 'May be outdated'}
+                    </VoxaText>
                   ) : null}
                 </View>
                 <Ionicons

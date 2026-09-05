@@ -1,4 +1,4 @@
-import { CompanionModeId, GoalCategory, Memory, MemoryCategory, MemoryMood, Message } from '../../types';
+import { CompanionModeId, GoalCategory, Memory, MemoryCategory, MemoryMood } from '../../types';
 import {
   AIActionIntentResult,
   AnalyzeConversationInput,
@@ -13,12 +13,12 @@ import {
 import { MEMORY_EXTRACTION_CATEGORIES } from '../../constants/memory-categories';
 import { extractMemoriesLocally } from '../memory/local-memory-extractor';
 import { buildVoxaSystemPrompt } from './voxa-system-prompt';
+import { mapConversationHistory } from './gateway-context-budget';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const DEFAULT_MODEL = 'gpt-4o-mini';
-const MAX_HISTORY_MESSAGES = 20;
 
 type OpenAIContentPart =
   | { type: 'text'; text: string }
@@ -391,16 +391,6 @@ export class OpenAIService implements IAIService {
 
     return content;
   }
-}
-
-function mapConversationHistory(history: Message[]): OpenAIChatMessage[] {
-  return history
-    .filter((item) => item.role !== 'system')
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map((item) => ({
-      role: item.role === 'user' ? ('user' as const) : ('assistant' as const),
-      content: item.content,
-    }));
 }
 
 async function uriToDataUrl(uri: string, mimeType = 'image/jpeg'): Promise<string> {

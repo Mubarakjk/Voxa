@@ -130,7 +130,7 @@ export function JourneyScreen({ navigation }: Props) {
 
   if (isLoading && !dashboard) {
     return (
-      <ScreenShell padded={false}>
+      <ScreenShell padded={false} safeBottom={false}>
         <View style={styles.skeletonWrap}>
           <SkeletonBlock height={48} />
           <SkeletonBlock height={120} />
@@ -143,7 +143,7 @@ export function JourneyScreen({ navigation }: Props) {
 
   if (!dashboard) {
     return (
-      <ScreenShell padded={false}>
+      <ScreenShell padded={false} safeBottom={false}>
         <EmptyState
           icon="trail-sign-outline"
           title="Your journey starts here"
@@ -205,7 +205,7 @@ export function JourneyScreen({ navigation }: Props) {
   };
 
   return (
-    <ScreenShell padded={false}>
+    <ScreenShell padded={false} safeBottom={false}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -301,7 +301,7 @@ export function JourneyScreen({ navigation }: Props) {
           </StaggerFade>
         ) : null}
 
-        {dashboard.phase10 ? (
+        {dashboard.phase10 && isFeatureVisible('socialGames') ? (
           <StaggerFade index={4}>
             <JourneyPlaySection
               data={dashboard.phase10}
@@ -335,14 +335,16 @@ export function JourneyScreen({ navigation }: Props) {
           </FadeIn>
         ) : null}
 
+        {phase8.activeChallenge ? (
         <FadeIn delay={22}>
           <SectionCard
             title="Shared challenges"
-            subtitle={phase8.activeChallenge ? phase8.activeChallenge.title : 'Build habits together'}
+            subtitle={phase8.activeChallenge.title}
             actionLabel="Open"
             onPress={() => stackNav.navigate('SharedChallenges')}
           />
         </FadeIn>
+        ) : null}
 
         <FadeIn delay={20}>
           <LifeDashboardCard data={phase2.lifeDashboard} />
@@ -448,8 +450,8 @@ export function JourneyScreen({ navigation }: Props) {
                 {dashboard.relationshipSummary}
               </VoxaText>
               <View style={styles.moodRow}>
-                <Ionicons name="happy-outline" size={16} color={colors.primarySoft} />
-                <VoxaText variant="caption" color="textMuted">
+                <Ionicons name="happy-outline" size={16} color={colors.primarySoft} style={styles.moodIcon} />
+                <VoxaText variant="caption" color="textMuted" style={styles.moodText}>
                   Mood: {wow.moodLabel} — {wow.moodDetail}
                 </VoxaText>
               </View>
@@ -511,7 +513,7 @@ export function JourneyScreen({ navigation }: Props) {
                   )}
                 </VoxaText>
               ) : null}
-              {(todaySchedule?.blocks ?? routine.blocks).slice(0, 6).map((block) => {
+              {(todaySchedule?.blocks ?? routine.blocks).slice(0, 3).map((block) => {
             const [h, m] = block.time.split(':').map(Number);
             const status = block.completion?.status;
             const done = status === 'completed';
@@ -552,7 +554,7 @@ export function JourneyScreen({ navigation }: Props) {
         {mounted.memories && pinnedMemories.length > 0 ? (
           <>
             <SectionHeader title="Pinned memories" />
-            {pinnedMemories.slice(0, 5).map((memory) => (
+            {pinnedMemories.slice(0, 3).map((memory) => (
               <SectionCard key={memory.id} title={memory.title} subtitle={memory.category}>
                 <VoxaText variant="body" color="textSecondary" numberOfLines={3}>
                   {memory.content}
@@ -573,7 +575,7 @@ export function JourneyScreen({ navigation }: Props) {
         {mounted.memories && rememberMoments.length > 0 ? (
           <>
             <SectionHeader title="Remember this" />
-            {rememberMoments.slice(0, 5).map((memory) => (
+            {rememberMoments.slice(0, 3).map((memory) => (
               <SectionCard
                 key={memory.id}
                 title={memory.title}
@@ -589,7 +591,7 @@ export function JourneyScreen({ navigation }: Props) {
         {mounted.memories && photoMemories.length > 0 ? (
           <>
             <SectionHeader title="Photo memories" />
-            {photoMemories.slice(0, 5).map((memory) => (
+            {photoMemories.slice(0, 3).map((memory) => (
               <SectionCard
                 key={memory.id}
                 title={memory.title}
@@ -612,7 +614,7 @@ export function JourneyScreen({ navigation }: Props) {
                   <VoxaText variant="caption" style={styles.achievementTitle}>
                     {item.title}
                   </VoxaText>
-                  <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
+                  <VoxaText variant="caption" color="textMuted" style={styles.achievementSubtitle}>
                     {item.subtitle}
                   </VoxaText>
                 </GlassCard>
@@ -658,7 +660,7 @@ export function JourneyScreen({ navigation }: Props) {
             <SectionHeader title="Memories" />
             {dashboard.memories
               .filter((m) => !m.tags?.includes('remember-this') && !m.tags?.includes('photo-memory'))
-              .slice(0, 5)
+              .slice(0, 3)
               .map((memory) => (
                 <SectionCard
                   key={memory.id}
@@ -677,7 +679,7 @@ export function JourneyScreen({ navigation }: Props) {
         {voiceMemories.length > 0 ? (
           <>
             <SectionHeader title="Voice memories" />
-            {voiceMemories.slice(0, 5).map((memory) => (
+            {voiceMemories.slice(0, 3).map((memory) => (
               <SectionCard
                 key={memory.id}
                 title={memory.title}
@@ -716,12 +718,12 @@ export function JourneyScreen({ navigation }: Props) {
           <>
             <SectionHeader title="Reflections" />
             <GlassCard style={styles.card}>
-              <VoxaText variant="body" color="textSecondary">
+              <VoxaText variant="body" color="textSecondary" style={styles.reflectionBody}>
                 {dashboard.companionNote}
               </VoxaText>
               <View style={styles.moodRow}>
-                <Ionicons name="pulse-outline" size={16} color={colors.primarySoft} />
-                <VoxaText variant="caption" color="textMuted">
+                <Ionicons name="pulse-outline" size={16} color={colors.primarySoft} style={styles.moodIcon} />
+                <VoxaText variant="caption" color="textMuted" style={styles.moodText}>
                   Mood today: {wow.moodLabel} — {wow.moodDetail}
                 </VoxaText>
               </View>
@@ -743,7 +745,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
     paddingBottom: layout.tabBarHeight + spacing.xxl,
-    gap: spacing.xl,
+    gap: spacing.section,
   },
   streakCelebrate: { gap: spacing.sm },
   streakCta: { minHeight: 44, justifyContent: 'center' },
@@ -764,22 +766,31 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  achievementRow: { gap: spacing.sm, paddingBottom: spacing.md },
-  achievementCard: { width: 140, gap: spacing.sm, marginRight: spacing.sm },
-  achievementTitle: { fontWeight: '600' },
+  achievementRow: { gap: spacing.sm, paddingBottom: spacing.md, paddingRight: spacing.md },
+  achievementCard: {
+    width: 168,
+    minHeight: 118,
+    gap: spacing.sm,
+    marginRight: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md12,
+  },
+  achievementTitle: { fontWeight: '600', lineHeight: 18 },
+  achievementSubtitle: { lineHeight: 17, flexShrink: 1 },
   themeRow: { gap: spacing.sm, paddingBottom: spacing.md },
-  themeCard: { width: 120, gap: 4, marginRight: spacing.sm },
-  card: { gap: spacing.md, marginBottom: spacing.md },
+  themeCard: { width: 128, gap: spacing.xs, marginRight: spacing.sm, paddingVertical: spacing.md12 },
+  card: { gap: spacing.md, marginBottom: spacing.md, paddingVertical: spacing.md },
+  reflectionBody: { lineHeight: 22 },
   routineRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.glassBorder,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
     gap: spacing.sm,
   },
-  routineMain: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  routineMain: { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   routineActions: { flexDirection: 'row', gap: spacing.sm },
   journalActions: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
   nudge: { marginBottom: spacing.sm },
@@ -790,5 +801,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 999 },
-  moodRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  moodRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+  },
+  moodIcon: { marginTop: 2, flexShrink: 0 },
+  moodText: { flex: 1, minWidth: 0, lineHeight: 18 },
 });

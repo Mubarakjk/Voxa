@@ -73,32 +73,42 @@ export function AccentCard({
       style={[styles.accentCard, selected && styles.accentSelected, !available && styles.accentDisabled]}
       onPress={available ? onPress : undefined}
       disabled={!available}>
-      <View style={styles.accentHeader}>
-        <VoxaText variant="subtitle">{flag}</VoxaText>
+      <View style={styles.accentRow}>
+        <VoxaText variant="body" style={styles.flag}>
+          {flag}
+        </VoxaText>
         <View style={styles.accentMeta}>
-          <VoxaText variant="body">{label}</VoxaText>
-          {isPremium && !areAllFeaturesUnlocked() ? (
-            <VoxaText variant="caption" color="primarySoft">
-              Pro
+          <View style={styles.accentTitleRow}>
+            <VoxaText variant="body" numberOfLines={1} style={styles.accentLabel}>
+              {label}
             </VoxaText>
-          ) : null}
-          {futureSupport ? (
-            <VoxaText variant="caption" color="textMuted">
-              Coming soon
-            </VoxaText>
-          ) : null}
-        </View>
-      </View>
-      <VoxaText variant="caption" color="textSecondary">
-        {description}
-      </VoxaText>
-      {available && onPreview ? (
-        <Pressable style={styles.previewBtn} onPress={onPreview}>
-          <VoxaText variant="caption" color="primarySoft">
-            {isPreviewing ? 'Playing…' : 'Hear Voxa'}
+            {isPremium && !areAllFeaturesUnlocked() ? (
+              <VoxaText variant="caption" color="primarySoft">
+                Pro
+              </VoxaText>
+            ) : null}
+            {futureSupport || !available ? (
+              <VoxaText variant="caption" color="textMuted">
+                Soon
+              </VoxaText>
+            ) : null}
+          </View>
+          <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
+            {description}
           </VoxaText>
-        </Pressable>
-      ) : null}
+        </View>
+        {available && onPreview ? (
+          <Pressable
+            style={styles.previewBtn}
+            onPress={onPreview}
+            hitSlop={8}
+            accessibilityLabel={isPreviewing ? 'Playing preview' : 'Hear Voxa'}>
+            <VoxaText variant="caption" color="primarySoft">
+              {isPreviewing ? '…' : 'Hear'}
+            </VoxaText>
+          </Pressable>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -116,15 +126,15 @@ export function StudioSectionCard({ title, subtitle, onPress, children, actionLa
     <Pressable style={styles.sectionCard} onPress={onPress} disabled={!onPress}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
-          <VoxaText variant="subtitle">{title}</VoxaText>
+          <VoxaText variant="body">{title}</VoxaText>
           {subtitle ? (
-            <VoxaText variant="caption" color="textMuted">
+            <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
               {subtitle}
             </VoxaText>
           ) : null}
         </View>
         {actionLabel ? (
-          <VoxaText variant="caption" color="primarySoft">
+          <VoxaText variant="caption" color="primarySoft" style={styles.editLabel}>
             {actionLabel}
           </VoxaText>
         ) : null}
@@ -140,7 +150,7 @@ export function FadeInView({ children, delay = 0 }: { children: ReactNode; delay
   useEffect(() => {
     Animated.timing(opacity, {
       toValue: 1,
-      duration: 420,
+      duration: 320,
       delay,
       useNativeDriver: true,
     }).start();
@@ -152,9 +162,9 @@ export function FadeInView({ children, delay = 0 }: { children: ReactNode; delay
 const styles = StyleSheet.create({
   row: {
     gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.glassBorder,
+    paddingVertical: spacing.md12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
   },
   copy: { gap: 2 },
   track: {
@@ -170,37 +180,47 @@ const styles = StyleSheet.create({
   },
   level: { alignSelf: 'flex-end' },
   accentCard: {
-    padding: spacing.md,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md12,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surface,
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceQuiet,
+    marginBottom: spacing.xs,
   },
   accentSelected: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(45, 212, 191, 0.1)',
+    borderColor: `${colors.primarySoft}66`,
+    backgroundColor: 'rgba(45, 212, 191, 0.08)',
   },
-  accentDisabled: { opacity: 0.45 },
-  accentHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  accentMeta: { flex: 1, gap: 2 },
+  accentDisabled: { opacity: 0.5 },
+  accentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  flag: { width: 28, textAlign: 'center' },
+  accentMeta: { flex: 1, minWidth: 0, gap: 2 },
+  accentTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
+  accentLabel: { flexShrink: 1 },
   previewBtn: {
-    alignSelf: 'flex-start',
-    paddingVertical: spacing.xs,
+    flexShrink: 0,
+    minWidth: 44,
+    minHeight: 36,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(45, 212, 191, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   sectionCard: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surfaceStrong,
-    padding: spacing.lg,
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceQuiet,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    minHeight: 56,
+    justifyContent: 'center',
   },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  sectionCopy: { flex: 1, gap: 4 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  sectionCopy: { flex: 1, minWidth: 0, gap: 2 },
+  editLabel: { flexShrink: 0 },
 });

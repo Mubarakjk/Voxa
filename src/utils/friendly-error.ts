@@ -3,7 +3,7 @@ export function friendlyErrorMessage(
   err: unknown,
   fallback: string,
 ): string {
-  if (__DEV__ && err instanceof Error && err.message.trim()) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__ && err instanceof Error && err.message.trim()) {
     return err.message;
   }
   return fallback;

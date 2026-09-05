@@ -56,7 +56,7 @@ export function CompanionChallengesScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Companion challenges" subtitle="Shared experience — accept, pause, skip, or complete days." />
+        <ScreenHeader showBack title="Companion challenges" subtitle="Shared experience — accept, pause, skip, or complete days." />
         {active ? (
           <GlassCard style={styles.card}>
             <VoxaText variant="subtitle">{active.title}</VoxaText>

@@ -41,7 +41,7 @@ export function FocusModeScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Focus mode" subtitle="Quiet notifications. Voxa stays with you." />
+        <ScreenHeader showBack title="Focus mode" subtitle="Quiet notifications. Voxa stays with you." />
         <GlassCard style={styles.card}>
           <VoxaText variant="body" color="textSecondary">What are you focusing on?</VoxaText>
           <VoxaText variant="subtitle">{label}</VoxaText>

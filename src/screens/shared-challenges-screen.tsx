@@ -51,7 +51,7 @@ export function SharedChallengesScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Shared challenges" subtitle="Voxa joins you — no pressure, real progress." />
+        <ScreenHeader showBack title="Shared challenges" subtitle="Voxa joins you — no pressure, real progress." />
         {active ? (
           <GlassCard style={styles.card}>
             <VoxaText variant="subtitle">{active.title}</VoxaText>

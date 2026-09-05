@@ -11,7 +11,7 @@ import { ScreenShell } from '../components/ui/screen-shell';
 import { SectionHeader, VoxaText } from '../components/ui/voxa-text';
 import { isFeatureVisible } from '../config/feature-status';
 import { isFreeLaunchMode } from '../config/launch-mode';
-import { hasSupabaseConfig, getDataSourceMode } from '../config/env';
+import { hasSupabaseConfig, getDataSourceModeLabel } from '../config/env';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { useVoxa } from '../context/voxa-context';
@@ -31,7 +31,7 @@ import { createDefaultCompanionControls } from '../types/relationship-personalit
 import { trackEvent } from '../services/analytics/analytics-service';
 import { navigateToPaywall } from '../utils/paywall-navigation';
 import { openPlatformSubscriptionManagement } from '../services/billing/revenuecat-purchase-manager';
-import { LEGAL_URLS } from '../constants/legal-urls';
+import { isSupportEmailConfigured, LEGAL_URLS } from '../constants/legal-urls';
 import { toFriendlyBillingError } from '../services/billing/friendly-billing-errors';
 import {
   restoreAlertMessage,
@@ -173,7 +173,7 @@ export function YouScreen() {
     }
     if (itemId === 'features') return navigation.navigate('Features');
     if (itemId === 'life-os') return navigation.navigate('LifeOSHub');
-    if (itemId === 'memory-debug') return navigation.navigate('Memory');
+    if (itemId === 'view-memories' || itemId === 'memory-debug') return navigation.navigate('Memory');
     if (itemId === 'music' && isFeatureVisible('musicRecognition')) return navigation.navigate('Music');
     if (
       itemId === 'subscription-upgrade' ||
@@ -191,6 +191,13 @@ export function YouScreen() {
       return;
     }
     if (itemId === 'contact-support') {
+      if (!isSupportEmailConfigured()) {
+        Alert.alert(
+          'Support email not configured',
+          'A monitored support address has not been set for this build yet. Account deletion and privacy controls remain available under You → Privacy & data.',
+        );
+        return;
+      }
       void Linking.openURL(`mailto:${LEGAL_URLS.supportEmail}?subject=Voxa%20Support`);
       return;
     }
@@ -230,7 +237,7 @@ export function YouScreen() {
       Alert.alert(
         'Delete account',
         hasSupabaseConfig()
-          ? 'This permanently deletes your Voxa account and associated cloud data (profile, chats, memories, goals, reminders) where configured, then signs you out and clears local data on this device. This cannot be undone.'
+          ? 'This permanently deletes your Voxa account and associated cloud data (profile, chats, attachments, memories, goals, reminders) where configured, then signs you out and clears local data on this device. This cannot be undone.'
           : 'This permanently resets all Voxa data stored on this device. This cannot be undone.',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -276,17 +283,20 @@ export function YouScreen() {
       if (nextEnabled) {
         const granted = await notificationService.requestPermissions();
         if (!granted) {
-          Alert.alert('Notifications off', 'Enable notifications in Settings to receive check-ins.');
+          Alert.alert(
+            'Notifications off',
+            'Enable notifications in iOS Settings to receive gentle daily check-ins. Voxa stays fully usable without them.',
+          );
         } else {
           await notificationService.scheduleDailyCheckIns(profile.id, {
             morningEnabled: true,
             eveningEnabled: true,
           });
-          Alert.alert('Notifications on', 'Voxa will send gentle daily check-ins.');
+          Alert.alert('Notifications on', 'Voxa will send a morning hello and an evening reflection reminder.');
         }
       } else {
-        await notificationService.cancelAll();
-        Alert.alert('Notifications off', 'Daily check-ins paused.');
+        await notificationService.cancelDailyCheckIns();
+        Alert.alert('Notifications off', 'Daily check-ins paused. Your personal reminders stay as they are.');
       }
       await refreshProfile();
       return;
@@ -318,7 +328,7 @@ export function YouScreen() {
 
   if (!profile) {
     return (
-      <ScreenShell padded={false}>
+      <ScreenShell padded={false} safeBottom={false}>
         <View style={styles.centered}>
           <VoxaText variant="body" color="textSecondary">
             Loading profile...
@@ -357,7 +367,7 @@ export function YouScreen() {
   const renderSection = (section: { title: string; items: Array<{ id: string; label: string; value?: string; displayOnly?: boolean }> }) => (
     <View key={section.title}>
       <SectionHeader title={section.title} />
-      <GlassCard style={styles.group}>
+      <GlassCard variant="quiet" style={styles.group}>
         {section.items.map((item, index) => (
           <SettingRow
             key={item.id}
@@ -373,7 +383,7 @@ export function YouScreen() {
   );
 
   return (
-    <ScreenShell padded={false}>
+    <ScreenShell padded={false} safeBottom={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
           <ScreenHeader
@@ -422,7 +432,7 @@ export function YouScreen() {
             {companion ? (
               <>
                 <SectionHeader title="Companion & memory" />
-                <GlassCard style={styles.group}>
+                <GlassCard variant="quiet" style={styles.group}>
                   {companion.items
                     .filter((item) => !['features', 'music', 'memory-debug'].includes(item.id))
                     .map((item, index, arr) => (
@@ -443,7 +453,7 @@ export function YouScreen() {
             {privacy ? renderSection(privacy) : null}
 
             <SectionHeader title="More" />
-            <GlassCard style={styles.group}>
+            <GlassCard variant="quiet" style={styles.group}>
               <SettingRow label="All features" value="" onPress={() => navigation.navigate('Features')} />
               <SettingRow label="My Companion" value="Bond & insights" onPress={() => navigation.navigate('MyCompanion')} />
               <SettingRow label="Life Book" value="Chapters" onPress={() => navigation.navigate('LifeBook')} />
@@ -465,7 +475,7 @@ export function YouScreen() {
         ) : null}
 
         {showDebug && __DEV__ ? (
-          <GlassCard style={styles.group}>
+          <GlassCard variant="quiet" style={styles.group}>
             <SettingRow
               label="System health"
               value="QA"
@@ -500,7 +510,7 @@ export function YouScreen() {
         ) : null}
 
         <VoxaText variant="caption" color="textMuted" style={styles.version}>
-          Voxa · {Constants.expoConfig?.version ?? '1.0.0'} · {getDataSourceMode()}
+          Voxa · {Constants.expoConfig?.version ?? '1.0.0'} · {getDataSourceModeLabel()}
         </VoxaText>
       </ScrollView>
     </ScreenShell>

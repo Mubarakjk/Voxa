@@ -1,12 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ReactNode, useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { colors, layout, radius, spacing, typography } from '../../constants/theme';
 import { PREMIUM_MOTION, staggerDelay } from '../../utils/premium-motion';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
+import { BackButton } from '../ui/back-button';
 import { VoxaText } from '../ui/voxa-text';
 import { VoiceOrb } from '../ui/voice-orb';
+import { RootStackParamList } from '../../navigation/types';
 import {
   CompanionOrbMood,
   CompanionOrbState,
@@ -18,30 +22,48 @@ export function ScreenHeader({
   title,
   subtitle,
   right,
+  onBack,
+  showBack,
   style,
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   right?: ReactNode;
+  /** Drill-down screens: native-style back before the title row. */
+  onBack?: () => void;
+  /** When true, wires navigation.goBack() if onBack is not provided. */
+  showBack?: boolean;
   style?: ViewStyle;
 }) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const handleBack =
+    onBack ??
+    (showBack
+      ? () => {
+          if (navigation.canGoBack()) navigation.goBack();
+        }
+      : undefined);
+
   return (
-    <View style={[styles.screenHeader, style]}>
-      <View style={styles.screenHeaderCopy}>
-        {eyebrow ? (
-          <VoxaText variant="caption" color="textMuted">
-            {eyebrow}
-          </VoxaText>
-        ) : null}
-        <VoxaText variant="title">{title}</VoxaText>
-        {subtitle ? (
-          <VoxaText variant="body" color="textSecondary">
-            {subtitle}
-          </VoxaText>
-        ) : null}
+    <View style={[styles.screenHeaderWrap, style]}>
+      {handleBack ? <BackButton onPress={handleBack} /> : null}
+      <View style={styles.screenHeader}>
+        <View style={styles.screenHeaderCopy}>
+          {eyebrow ? (
+            <VoxaText variant="caption" color="textMuted">
+              {eyebrow}
+            </VoxaText>
+          ) : null}
+          <VoxaText variant="title">{title}</VoxaText>
+          {subtitle ? (
+            <VoxaText variant="body" color="textSecondary">
+              {subtitle}
+            </VoxaText>
+          ) : null}
+        </View>
+        {right}
       </View>
-      {right}
     </View>
   );
 }
@@ -165,14 +187,14 @@ export function ActionPill({
 export function StatCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <View style={styles.statCard}>
-      <VoxaText variant="label" color="textMuted">
+      <VoxaText variant="label" color="textMuted" style={styles.statLabel}>
         {label}
       </VoxaText>
       <VoxaText variant="subtitle" style={styles.statValue}>
         {value}
       </VoxaText>
       {detail ? (
-        <VoxaText variant="caption" color="textMuted" numberOfLines={2}>
+        <VoxaText variant="caption" color="textMuted" style={styles.statDetail}>
           {detail}
         </VoxaText>
       ) : null}
@@ -198,9 +220,11 @@ export function TimelineItem({
         {!isLast ? <View style={styles.timelineLine} /> : null}
       </View>
       <View style={styles.timelineCopy}>
-        <VoxaText variant="body">{title}</VoxaText>
+        <VoxaText variant="body" style={styles.timelineTitle}>
+          {title}
+        </VoxaText>
         {subtitle ? (
-          <VoxaText variant="caption" color="textSecondary">
+          <VoxaText variant="caption" color="textSecondary" style={styles.timelineSubtitle}>
             {subtitle}
           </VoxaText>
         ) : null}
@@ -477,6 +501,10 @@ export function VoiceWavePulse({ active, tint = colors.primarySoft }: { active: 
 }
 
 const styles = StyleSheet.create({
+  screenHeaderWrap: {
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -490,15 +518,19 @@ const styles = StyleSheet.create({
   heroCaption: { textAlign: 'center', maxWidth: 280 },
   sectionCard: {
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surfaceStrong,
-    padding: spacing.lg,
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    backgroundColor: colors.surfaceQuiet,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md12,
+    marginBottom: spacing.md12,
   },
-  sectionCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  sectionCardCopy: { flex: 1, gap: 4 },
+  sectionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  sectionCardCopy: { flex: 1, minWidth: 0, gap: spacing.xs },
   actionPill: { alignItems: 'center', gap: spacing.sm, minWidth: 72 },
   actionPillIcon: {
     width: 48,
@@ -511,25 +543,30 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: 0,
-    padding: spacing.md,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md12,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    gap: spacing.xs,
   },
-  statValue: { fontSize: 20 },
+  statLabel: { lineHeight: 16 },
+  statValue: { fontSize: 20, lineHeight: 26 },
+  statDetail: { lineHeight: 17 },
   timelineRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
   timelineRail: { alignItems: 'center', width: 16 },
   timelineDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.primary,
-    marginTop: 4,
+    backgroundColor: colors.primarySoft,
+    marginTop: 6,
   },
-  timelineLine: { flex: 1, width: 2, backgroundColor: colors.glassBorder, marginTop: 4 },
-  timelineCopy: { flex: 1, gap: 2, paddingBottom: spacing.sm },
+  timelineLine: { flex: 1, width: 2, backgroundColor: colors.borderSubtle, marginTop: 4 },
+  timelineCopy: { flex: 1, minWidth: 0, gap: spacing.xs, paddingBottom: spacing.sm },
+  timelineTitle: { lineHeight: 22 },
+  timelineSubtitle: { lineHeight: 18 },
   emptyState: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
   emptyIconWrap: {
     width: 64,

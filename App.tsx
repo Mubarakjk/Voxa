@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorState, LoadingState } from './src/components/ui/screen-state';
+import { AppErrorBoundary } from './src/components/ui/app-error-boundary';
 import { colors } from './src/constants/theme';
 import { hasSupabaseConfig } from './src/config/env';
 import { isScheduledCallsEnabled } from './src/config/scheduled-calls';
@@ -16,6 +17,7 @@ import { OnboardingScreen } from './src/screens/onboarding-screen';
 import { CelebrationOverlay } from './src/components/phase10/celebration-overlay';
 import { useProactiveCheckInNotifications } from './src/hooks/use-proactive-check-in-notifications';
 import { useScheduledCallNotifications } from './src/hooks/use-scheduled-call-notifications';
+import { useLocalNotificationRouting } from './src/hooks/use-local-notification-routing';
 import { runScheduledCallNotificationCleanup } from './src/services/scheduled-calls/scheduled-call-notification-cleanup';
 import { RootStackParamList } from './src/navigation/types';
 
@@ -35,6 +37,11 @@ function AppRoot() {
   const { isLoading, error, isReady, reinitialize, profile, services } = useVoxa();
   const [onboardingDone, setOnboardingDone] = useState(false);
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
+
+  useLocalNotificationRouting({
+    navigationRef,
+    enabled: isReady && Boolean(profile?.onboardingComplete),
+  });
 
   useProactiveCheckInNotifications({
     profile,
@@ -129,9 +136,11 @@ function AppGate() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <AppGate />
-      </AuthProvider>
+      <AppErrorBoundary>
+        <AuthProvider>
+          <AppGate />
+        </AuthProvider>
+      </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }

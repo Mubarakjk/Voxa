@@ -213,7 +213,7 @@ export function CreateReminderScreen({ navigation, route }: Props) {
 
         <PrimaryButton label="Schedule with Voxa" onPress={saveReminder} />
         <VoxaText variant="caption" color="textMuted" style={styles.note}>
-          Local only for now. Push notifications coming later.
+          Local reminders on this device. Permission is requested when you save.
         </VoxaText>
       </ScrollView>
     </ScreenShell>

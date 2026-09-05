@@ -41,7 +41,7 @@ export async function requestAccountDeletion(input: {
       return {
         ok: false,
         message:
-          'Cloud account deletion is not fully configured yet. Sign out and contact support, or deploy the delete-account Edge Function.',
+          'We could not delete your cloud account right now. Check your connection and try again from Settings. Your account was not deleted.',
       };
     }
 
@@ -62,7 +62,7 @@ export async function requestAccountDeletion(input: {
     return {
       ok: false,
       message:
-        'Could not reach the deletion service. Check your connection, or contact support to delete your account.',
+        'Could not reach the deletion service. Check your connection and try again from Settings. Your account was not deleted.',
     };
   }
 }

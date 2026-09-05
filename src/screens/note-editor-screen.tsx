@@ -17,10 +17,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { BackButton } from '../components/ui/back-button';
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
-import { PremiumButton, ScreenHeader } from '../components/premium/premium-ui';
+import { PremiumButton } from '../components/premium/premium-ui';
 import { LoadingState } from '../components/ui/screen-state';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
@@ -46,7 +47,7 @@ import {
 } from '../types/notes';
 import { createUuid } from '../types';
 import { usePlanStatus } from '../hooks/use-plan-status';
-import { hapticSelection, hapticWarning } from '../utils/haptics';
+import { hapticLight, hapticSelection, hapticWarning } from '../utils/haptics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NoteEditor'>;
 
@@ -73,6 +74,7 @@ export function NoteEditorScreen({ navigation, route }: Props) {
   const [memoryConsent, setMemoryConsent] = useState<NoteMemoryConsent>('private');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPreview, setAiPreview] = useState<NoteAIActionResult | null>(null);
@@ -215,6 +217,11 @@ export function NoteEditorScreen({ navigation, route }: Props) {
     scheduleSave();
   };
 
+  const goBack = useCallback(() => {
+    if (dirtyRef.current) void persist();
+    navigation.goBack();
+  }, [navigation, persist]);
+
   const toggleChecklistItem = (id: string) => {
     void hapticSelection();
     mark(() =>
@@ -300,6 +307,7 @@ export function NoteEditorScreen({ navigation, route }: Props) {
   };
 
   const confirmDelete = () => {
+    setMenuOpen(false);
     Alert.alert('Delete note?', 'This removes the note from your library.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -322,16 +330,78 @@ export function NoteEditorScreen({ navigation, route }: Props) {
     ]);
   };
 
+  const editTags = () => {
+    setMenuOpen(false);
+    Alert.prompt('Tags', 'Comma-separated labels', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Save',
+        onPress: (value?: string) => {
+          if (value === undefined) return;
+          mark(() => setTagsText(value));
+        },
+      },
+    ]);
+  };
+
+  const pickNoteType = () => {
+    setMenuOpen(false);
+    Alert.alert('Note type', undefined, [
+      ...TYPES.map((id) => ({
+        text: NOTE_TYPE_LABELS[id],
+        onPress: () => mark(() => setType(id)),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
+
+  const pickMemoryConsent = () => {
+    setMenuOpen(false);
+    Alert.alert(
+      'Memory',
+      'Choose how Voxa may use this note.',
+      [
+        {
+          text: 'Keep private',
+          onPress: () => mark(() => setMemoryConsent('private')),
+        },
+        {
+          text: 'Ask Voxa to remember',
+          onPress: () => mark(() => setMemoryConsent('remember')),
+        },
+        {
+          text: 'Use in conversations',
+          onPress: () => mark(() => setMemoryConsent('use_in_conversations')),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
+
   if (loading || !note) {
     return (
       <ScreenShell>
+        <BackButton onPress={() => navigation.goBack()} />
         <LoadingState label="Opening note..." />
       </ScreenShell>
     );
   }
 
   const saveLabel =
-    saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Save failed' : 'Edits autosave';
+    saveState === 'saving'
+      ? 'Saving…'
+      : saveState === 'saved'
+        ? 'Saved'
+        : saveState === 'error'
+          ? 'Save failed'
+          : '';
+
+  const memoryLabel =
+    memoryConsent === 'private'
+      ? 'Private'
+      : memoryConsent === 'remember'
+        ? 'Saved to memory'
+        : 'Usable in chat';
 
   return (
     <ScreenShell padded={false}>
@@ -339,25 +409,25 @@ export function NoteEditorScreen({ navigation, route }: Props) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top}>
-        <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
-          keyboardShouldPersistTaps="handled">
-          <ScreenHeader
-            title={title.trim() || 'Untitled'}
-            subtitle={saveLabel}
-            right={
-              <Pressable
-                onPress={() => {
-                  if (dirtyRef.current) void persist();
-                  navigation.goBack();
-                }}
-                hitSlop={10}
-                accessibilityLabel="Close note">
-                <Ionicons name="close" size={22} color={colors.text} />
-              </Pressable>
-            }
-          />
+        <View style={[styles.toolbar, { paddingTop: insets.top + spacing.sm }]}>
+          <BackButton onPress={goBack} compact />
+          <VoxaText variant="caption" color="textMuted" style={styles.saveHint} numberOfLines={1}>
+            {saveLabel}
+          </VoxaText>
+          <Pressable
+            onPress={() => {
+              void hapticLight();
+              setMenuOpen(true);
+            }}
+            hitSlop={12}
+            style={styles.menuBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Note options">
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+          </Pressable>
+        </View>
 
+        <View style={styles.editor}>
           <TextInput
             value={title}
             onChangeText={(value) => mark(() => setTitle(value))}
@@ -365,13 +435,21 @@ export function NoteEditorScreen({ navigation, route }: Props) {
             placeholderTextColor={colors.textMuted}
             style={styles.titleInput}
             accessibilityLabel="Note title"
+            returnKeyType="next"
           />
 
           {type === 'checklist' ? (
-            <GlassCard style={styles.card}>
+            <ScrollView
+              style={styles.checklistScroll}
+              contentContainerStyle={styles.checklistContent}
+              keyboardShouldPersistTaps="handled">
               {checklist.map((item) => (
                 <View key={item.id} style={styles.checkRow}>
-                  <Pressable onPress={() => toggleChecklistItem(item.id)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => toggleChecklistItem(item.id)}
+                    hitSlop={8}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: item.done }}>
                     <Ionicons
                       name={item.done ? 'checkbox' : 'square-outline'}
                       size={22}
@@ -387,14 +465,19 @@ export function NoteEditorScreen({ navigation, route }: Props) {
                         ),
                       )
                     }
-                    placeholder="Checklist item"
+                    placeholder="Item"
                     placeholderTextColor={colors.textMuted}
-                    style={styles.checkInput}
+                    style={[styles.checkInput, item.done && styles.checkDone]}
                   />
                 </View>
               ))}
-              <PremiumButton label="Add item" variant="ghost" onPress={addChecklistItem} />
-            </GlassCard>
+              <Pressable onPress={addChecklistItem} style={styles.addItem} accessibilityRole="button">
+                <Ionicons name="add" size={18} color={colors.primarySoft} />
+                <VoxaText variant="body" color="primarySoft">
+                  Add item
+                </VoxaText>
+              </Pressable>
+            </ScrollView>
           ) : (
             <TextInput
               value={body}
@@ -407,86 +490,84 @@ export function NoteEditorScreen({ navigation, route }: Props) {
               accessibilityLabel="Note body"
             />
           )}
+        </View>
+      </KeyboardAvoidingView>
 
-          <GlassCard style={styles.card}>
+      <Modal visible={menuOpen} animationType="slide" transparent onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(false)}>
+          <Pressable style={[styles.modalSheet, { paddingBottom: insets.bottom + spacing.md }]}>
+            <VoxaText variant="subtitle">Note options</VoxaText>
             <VoxaText variant="caption" color="textMuted">
-              Type
-            </VoxaText>
-            <View style={styles.chipRow}>
-              {TYPES.map((id) => (
-                <Pressable
-                  key={id}
-                  style={[styles.chip, type === id && styles.chipActive]}
-                  onPress={() => mark(() => setType(id))}>
-                  <VoxaText variant="caption">{NOTE_TYPE_LABELS[id]}</VoxaText>
-                </Pressable>
-              ))}
-            </View>
-
-            <VoxaText variant="caption" color="textMuted">
-              Tags (comma separated)
-            </VoxaText>
-            <TextInput
-              value={tagsText}
-              onChangeText={(value) => mark(() => setTagsText(value))}
-              placeholder="ideas, work"
-              placeholderTextColor={colors.textMuted}
-              style={styles.metaInput}
-            />
-
-            <View style={styles.actionsRow}>
-              <PremiumButton
-                label={pinned ? 'Unpin' : 'Pin'}
-                variant="ghost"
-                onPress={() => mark(() => setPinned((v) => !v))}
-              />
-              <PremiumButton
-                label={favourite ? 'Unfavourite' : 'Favourite'}
-                variant="ghost"
-                onPress={() => mark(() => setFavourite((v) => !v))}
-              />
-              <PremiumButton
-                label={archived ? 'Unarchive' : 'Archive'}
-                variant="ghost"
-                onPress={() => mark(() => setArchived((v) => !v))}
-              />
-            </View>
-
-            <VoxaText variant="caption" color="textMuted">
-              Memory
+              {NOTE_TYPE_LABELS[type]} · {memoryLabel}
+              {tagsText.trim() ? ` · ${tagsText.split(',').filter(Boolean).length} tags` : ''}
             </VoxaText>
             {(
               [
-                { id: 'private' as const, label: 'Keep private' },
-                { id: 'remember' as const, label: 'Ask Voxa to remember this' },
-                { id: 'use_in_conversations' as const, label: 'Use in future conversations' },
-              ] as const
-            ).map((option) => (
+                {
+                  label: pinned ? 'Unpin note' : 'Pin note',
+                  onPress: () => {
+                    setMenuOpen(false);
+                    mark(() => setPinned((v) => !v));
+                  },
+                },
+                {
+                  label: favourite ? 'Remove favourite' : 'Favourite',
+                  onPress: () => {
+                    setMenuOpen(false);
+                    mark(() => setFavourite((v) => !v));
+                  },
+                },
+                { label: 'Change note type', onPress: pickNoteType },
+                { label: 'Edit tags', onPress: editTags },
+                {
+                  label: archived ? 'Unarchive' : 'Archive',
+                  onPress: () => {
+                    setMenuOpen(false);
+                    mark(() => setArchived((v) => !v));
+                  },
+                },
+                { label: 'Memory & privacy', onPress: pickMemoryConsent },
+                {
+                  label: 'Duplicate',
+                  onPress: async () => {
+                    setMenuOpen(false);
+                    if (!profile) return;
+                    await persist();
+                    const copy = await notesService.duplicate(profile.id, noteId);
+                    if (copy) navigation.replace('NoteEditor', { noteId: copy.id });
+                  },
+                },
+                {
+                  label: 'Quick tools',
+                  onPress: () => {
+                    setMenuOpen(false);
+                    setAiOpen(true);
+                  },
+                },
+                {
+                  label: 'Delete note',
+                  destructive: true,
+                  onPress: () => {
+                    void hapticWarning();
+                    confirmDelete();
+                  },
+                },
+              ] as Array<{ label: string; onPress: () => void; destructive?: boolean }>
+            ).map((action) => (
               <Pressable
-                key={option.id}
-                style={[styles.option, memoryConsent === option.id && styles.optionActive]}
-                onPress={() => mark(() => setMemoryConsent(option.id))}>
-                <VoxaText variant="body">{option.label}</VoxaText>
+                key={action.label}
+                style={styles.menuRow}
+                onPress={action.onPress}
+                accessibilityRole="button">
+                <VoxaText variant="body" color={action.destructive ? 'danger' : 'text'}>
+                  {action.label}
+                </VoxaText>
               </Pressable>
             ))}
-          </GlassCard>
-
-          <PremiumButton label="Quick tools" onPress={() => setAiOpen(true)} />
-          <View style={styles.actionsRow}>
-            <PremiumButton
-              label="Duplicate"
-              variant="ghost"
-              onPress={async () => {
-                if (!profile) return;
-                await persist();
-                const copy = await notesService.duplicate(profile.id, noteId);
-                if (copy) navigation.replace('NoteEditor', { noteId: copy.id });
-              }}
-            />
-            <PremiumButton label="Delete" variant="ghost" onPress={confirmDelete} />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <PremiumButton label="Close" variant="ghost" onPress={() => setMenuOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={aiOpen} animationType="slide" transparent onRequestClose={() => setAiOpen(false)}>
         <View style={styles.modalBackdrop}>
@@ -501,7 +582,7 @@ export function NoteEditorScreen({ navigation, route }: Props) {
                 return (
                   <Pressable
                     key={actionId}
-                    style={styles.option}
+                    style={styles.menuRow}
                     disabled={aiBusy}
                     onPress={() => void runAi(actionId)}>
                     <VoxaText variant="body">
@@ -518,7 +599,7 @@ export function NoteEditorScreen({ navigation, route }: Props) {
                   Preview{aiPreview.isEstimate ? ' · on-device' : ''}
                 </VoxaText>
                 <VoxaText variant="body">{aiPreview.previewText}</VoxaText>
-                <View style={styles.actionsRow}>
+                <View style={styles.previewActions}>
                   <PremiumButton label="Replace" onPress={() => void applyPreview('replace')} />
                   <PremiumButton label="Insert" variant="ghost" onPress={() => void applyPreview('insert')} />
                   <PremiumButton label="New note" variant="ghost" onPress={() => void applyPreview('new')} />
@@ -547,68 +628,54 @@ export function NoteEditorScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: {
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  saveHint: { flex: 1, textAlign: 'center' },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editor: {
+    flex: 1,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: spacing.xl,
     gap: spacing.md,
   },
   titleInput: {
     color: colors.text,
     fontSize: 28,
     fontWeight: '600',
-    minHeight: 48,
+    letterSpacing: -0.5,
+    lineHeight: 34,
+    minHeight: 44,
   },
   bodyInput: {
+    flex: 1,
     color: colors.text,
     fontSize: 17,
-    lineHeight: 26,
-    minHeight: 220,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    lineHeight: 28,
+    paddingVertical: spacing.xs,
+    minHeight: 200,
   },
-  card: { gap: spacing.sm },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-  },
-  chipActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(45, 212, 191, 0.12)',
-  },
-  metaInput: {
-    backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    color: colors.text,
-    fontSize: 16,
-    minHeight: 48,
-  },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  option: {
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    marginTop: spacing.xs,
-  },
-  optionActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(45, 212, 191, 0.1)',
-  },
+  checklistScroll: { flex: 1 },
+  checklistContent: { gap: spacing.sm, paddingBottom: spacing.xl },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  checkInput: { flex: 1, color: colors.text, fontSize: 16, minHeight: 44 },
+  checkInput: { flex: 1, color: colors.text, fontSize: 17, minHeight: 44, lineHeight: 24 },
+  checkDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  addItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -619,9 +686,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     padding: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.sm,
     maxHeight: '88%',
   },
   modalScroll: { maxHeight: 280 },
+  menuRow: {
+    paddingVertical: spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
+  },
   previewCard: { gap: spacing.sm },
+  previewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

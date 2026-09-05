@@ -96,7 +96,7 @@ export function DailyReflectionScreen(_props: Props) {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Evening ritual"
           title="Daily reflection"
           subtitle={`Three gentle questions · +${DAILY_REFLECTION_XP} XP when you complete tonight`}
@@ -134,18 +134,26 @@ const styles = StyleSheet.create({
   scroll: {
     padding: layout.screenPadding,
     paddingBottom: spacing.xxl,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
-  form: { gap: spacing.md },
-  field: { gap: spacing.xs },
+  form: {
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  field: {
+    gap: spacing.sm,
+  },
   input: {
-    minHeight: 72,
-    padding: spacing.md,
+    minHeight: 80,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
     color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
     textAlignVertical: 'top',
   },
 });

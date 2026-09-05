@@ -41,7 +41,7 @@ export function RelationshipTimelineScreen(_props: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Our story" subtitle="Verified milestones only — no invented romance." />
+        <ScreenHeader showBack title="Our story" subtitle="Verified milestones only — no invented romance." />
         {milestones.length === 0 ? (
           <EmptyState icon="heart-outline" title="Story growing" message="Keep chatting and achieving — milestones appear from real events." />
         ) : (

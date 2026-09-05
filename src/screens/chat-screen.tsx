@@ -24,6 +24,8 @@ import {
 
 import { SuggestedReplies } from '../components/chat/suggested-replies';
 import { TypingIndicator } from '../components/chat/typing-indicator';
+import { resolveTurnSuggestionPrompts } from '../services/chat/contextual-suggestions-service';
+import { chatViewsToHistory } from '../services/chat/talk-critical-path';
 import { LimitReachedModal } from '../components/subscription/limit-reached-modal';
 import { ErrorState, LoadingState } from '../components/ui/screen-state';
 import { ScreenShell } from '../components/ui/screen-shell';
@@ -41,7 +43,6 @@ import {
   SmartChatAction,
 } from '../types/phase4-intelligence';
 import { ContextCardsRow } from '../components/phase4/context-cards-row';
-import { SmartActionsRow } from '../components/phase4/smart-actions-row';
 import { ConversationCanvasCard } from '../components/phase4/conversation-canvas-card';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { isPaywallEnabled } from '../config/launch-mode';
@@ -49,6 +50,9 @@ import { useVoxa } from '../context/voxa-context';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { FeatureLimitError } from '../services/billing/subscription-service';
 import { getAIProviderInfo } from '../services/ai/create-ai-service';
+import { warmAiGateway } from '../services/ai/ai-gateway-client';
+import { formatTalkErrorForUser } from '../services/ai/talk-ai-errors';
+import { friendlyErrorMessage } from '../utils/friendly-error';
 import { toggleBookmark, listBookmarks, removeBookmark, ChatBookmark } from '../services/chat/chat-bookmarks-service';
 import {
   buildConversationStarters,
@@ -66,6 +70,7 @@ import {
 import { navigateToPaywall } from '../utils/paywall-navigation';
 import { recordChatLatency } from '../utils/chat-debug-state';
 import { logFeature } from '../utils/feature-logger';
+import { talkPerf, talkPerfNow } from '../utils/talk-perf';
 import { recordTiming } from '../utils/performance-metrics';
 import { canStartLiveVoice, canStartSafeCall, openVoiceConversation } from '../utils/voice-navigation';
 import { isFeatureVisible } from '../config/feature-status';
@@ -95,7 +100,7 @@ import { getConversationDraftsService } from '../services/phase6/conversation-dr
 import { RichReplyPayload } from '../types/phase6-premium';
 
 function capSuggestions(items: string[], max = 3): string[] {
-  return items.slice(0, max);
+  return items.map((item) => item.trim()).filter(Boolean).slice(0, max);
 }
 
 function mergeChatViews(loaded: ChatMessageView[], inFlight: ChatMessageView[]): ChatMessageView[] {
@@ -177,13 +182,22 @@ export function ChatScreen() {
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const pendingStarterRef = useRef<{ text: string; autoSend: boolean } | null>(null);
   const listRef = useRef<FlatList>(null);
+  const messagesRef = useRef<ChatMessageView[]>([]);
   const loadedConversationRef = useRef<string | null>(null);
   const isTypingRef = useRef(false);
+  const messagesLengthRef = useRef(0);
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
   const thinkingStageInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  messagesLengthRef.current = messages.length;
 
   useEffect(() => {
     isTypingRef.current = isTyping;
   }, [isTyping]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     if (!thinkingStageInterval.current && isTyping) {
@@ -228,17 +242,21 @@ export function ChatScreen() {
       );
       const living = d.phase7.livingCompanion;
       setOrbMood(living.mood);
-      setOrbState(isTyping ? 'thinking' : living.state);
+      setOrbState(living.state);
       setContextChips(
         buildChatContextChips({
           goals: d.activeGoals,
           memories: d.memories,
           routine: d.routineSummary,
           thinkingAbout: d.phase4.livingCompanion.thinkingAbout,
-        }),
+        }).filter((chip) => chip.label.trim().length > 0),
       );
     });
-  }, [profile, companion, messages.length, isTyping]);
+  }, [profile, companion]);
+
+  useEffect(() => {
+    if (isTyping) setOrbState('thinking');
+  }, [isTyping]);
 
   const adaptiveDisplay = ADAPTIVE_MODE_LABELS[adaptiveModeLabel];
 
@@ -248,58 +266,67 @@ export function ChatScreen() {
       return;
     }
     if (!force && isTypingRef.current) return;
+    if (!force && loadInFlightRef.current) return loadInFlightRef.current;
 
-    const paramConversationId = route.params?.conversationId;
-    const mode = profile.companion.lastUsedMode ?? profile.companion.defaultMode ?? 'friend';
-    setActiveMode(mode);
-    const loadStarted = Date.now();
-    logFeature('chat.load', 'start');
-    try {
-      let conversation;
-      if (paramConversationId) {
-        conversation = await services.repositories.conversations.getConversation(paramConversationId);
+    const run = async () => {
+      const paramConversationId = route.params?.conversationId;
+      const mode = profile.companion.lastUsedMode ?? profile.companion.defaultMode ?? 'friend';
+      setActiveMode(mode);
+      const loadStarted = Date.now();
+      logFeature('chat.load', 'start');
+      try {
+        let conversation;
+        if (paramConversationId) {
+          conversation = await services.repositories.conversations.getConversation(paramConversationId);
+          if (!conversation) {
+            setError('Conversation not found.');
+            setIsLoading(false);
+            return;
+          }
+          setActiveMode(conversation.mode);
+        }
         if (!conversation) {
-          setError('Conversation not found.');
+          conversation = await companion.getOrCreateConversation(profile.id, mode, 'chat');
+        }
+        if (!force && loadedConversationRef.current === conversation.id && messagesLengthRef.current > 0) {
+          setConversationId(conversation.id);
           setIsLoading(false);
           return;
         }
-        setActiveMode(conversation.mode);
-      }
-      if (!conversation) {
-        conversation = await companion.getOrCreateConversation(profile.id, mode, 'chat');
-      }
-      if (!force && loadedConversationRef.current === conversation.id && messages.length > 0) {
+        setIsLoading(true);
+        setError(null);
+        const loadedMessages = await companion.loadChatMessages(conversation.id);
         setConversationId(conversation.id);
+        setMessages((current) => {
+          const inFlight = current.filter(
+            (item) => item.status === 'pending' || item.status === 'failed',
+          );
+          return mergeChatViews(loadedMessages, inFlight);
+        });
+        loadedConversationRef.current = conversation.id;
         setIsLoading(false);
-        return;
+        void companion.getChatExperience(profile.id, conversation.id).then((experience) => {
+          if (!experience) return;
+          setContextCards(experience.contextCards);
+          setLivingCompanion(experience.livingCompanion);
+          setCanvas(experience.canvas);
+        }).catch(() => undefined);
+        logFeature('chat.load', 'success', undefined, Date.now() - loadStarted);
+        recordTiming('chat.load', Date.now() - loadStarted);
+      } catch (err) {
+        logFeature('chat.load', 'failure', err instanceof Error ? err.message : 'Failed to load chat.', Date.now() - loadStarted);
+        setError(friendlyErrorMessage(err, "Couldn't open this conversation. Try again."));
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(true);
-      setError(null);
-      const loadedMessages = await companion.loadChatMessages(conversation.id);
-      setConversationId(conversation.id);
-      setMessages((current) => {
-        const inFlight = current.filter(
-          (item) => item.status === 'pending' || item.status === 'failed',
-        );
-        return mergeChatViews(loadedMessages, inFlight);
-      });
-      loadedConversationRef.current = conversation.id;
-      const experience = await companion.getChatExperience(profile.id, conversation.id).catch(() => null);
-      if (experience) {
-        setContextCards(experience.contextCards);
-        setLivingCompanion(experience.livingCompanion);
-        setCanvas(experience.canvas);
-      }
-      logFeature('chat.load', 'success', undefined, Date.now() - loadStarted);
-      recordTiming('chat.load', Date.now() - loadStarted);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load chat.';
-      logFeature('chat.load', 'failure', message, Date.now() - loadStarted);
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [companion, profile, messages.length, route.params?.conversationId, services.repositories.conversations]);
+    };
+
+    const pending = run().finally(() => {
+      loadInFlightRef.current = null;
+    });
+    loadInFlightRef.current = pending;
+    return pending;
+  }, [companion, profile, route.params?.conversationId, services.repositories.conversations]);
 
   useFocusEffect(
     useCallback(() => {
@@ -347,13 +374,11 @@ export function ChatScreen() {
     }
   }, [profile, refreshProfile, services.repositories.userProfile]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (messages.length > 0) {
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-      }
-    }, [messages, isTyping]),
-  );
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    return () => clearTimeout(timer);
+  }, [messages.length, isTyping]);
 
   useEffect(() => {
     if (!isTyping || streamingText) return;
@@ -425,11 +450,13 @@ export function ChatScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      warmAiGateway();
       void listBookmarks().then(setBookmarks);
     }, []),
   );
 
   const sendMessage = async (attachments: PendingAttachmentInput[] = [], overrideText?: string) => {
+    const sendTapAt = talkPerfNow();
     const trimmed = (overrideText ?? input).trim();
     if ((!trimmed && attachments.length === 0) || isTyping || !profile || !conversationId) return;
 
@@ -465,7 +492,11 @@ export function ChatScreen() {
         : undefined,
     };
     setMessages((current) => [...current, optimisticMessage]);
+    talkPerf('local-ui', talkPerfNow() - sendTapAt);
+    talkPerf('thinking', talkPerfNow() - sendTapAt);
+    talkPerf('conversation-ready', 0);
     const started = Date.now();
+    let assistantVisible = false;
     logFeature('chat.send', 'start');
 
     try {
@@ -476,9 +507,29 @@ export function ChatScreen() {
           content: trimmed,
           mode: activeMode,
           attachments: attachments.length > 0 ? attachments : undefined,
+          loadedProfile: profile,
+          recentHistory: chatViewsToHistory(messages, conversationId, activeMode),
         },
         {
           onStreamChunk: (chunk) => setStreamingText((current) => (current ?? '') + chunk),
+          onAssistantReady: ({ userMessage, voxaMessage }) => {
+            assistantVisible = true;
+            setMessages((current) => {
+              const withoutOptimistic = current.filter((item) => item.id !== optimisticId);
+              if (withoutOptimistic.some((item) => item.id === voxaMessage.id)) {
+                return withoutOptimistic;
+              }
+              return [
+                ...withoutOptimistic,
+                toChatMessageView(userMessage),
+                toChatMessageView(voxaMessage),
+              ];
+            });
+            talkPerf('render', talkPerfNow() - sendTapAt);
+            talkPerf('total-visible-response', talkPerfNow() - sendTapAt);
+            setIsTyping(false);
+            setStreamingText(null);
+          },
         },
       );
 
@@ -497,18 +548,18 @@ export function ChatScreen() {
       }
 
       if (result.chatExperience) {
-        setContextCards(result.chatExperience.contextCards);
         setSmartActions(result.chatExperience.smartActions);
         setCanvas(result.chatExperience.canvas);
-        setLivingCompanion(result.chatExperience.livingCompanion);
+        if (result.chatExperience.contextCards.length > 0) {
+          setContextCards(result.chatExperience.contextCards);
+        }
+        if (result.chatExperience.livingCompanion.greeting) {
+          setLivingCompanion(result.chatExperience.livingCompanion);
+        }
       }
 
       if (result.richReply) {
         setRichReplies((prev) => ({ ...prev, [result.voxaMessage.id]: result.richReply! }));
-        if (result.richReply.followUpChips.length > 0) {
-          setSuggestions(capSuggestions(result.richReply.followUpChips));
-          setSuggestionsDismissed(false);
-        }
       }
 
       if (profile && conversationId) {
@@ -516,6 +567,13 @@ export function ChatScreen() {
       }
 
       setMessages((current) => {
+        if (current.some((item) => item.id === result.voxaMessage.id)) {
+          return current.map((item) =>
+            item.id === result.userMessage.id || item.id === result.voxaMessage.id
+              ? toChatMessageView(item.id === result.userMessage.id ? result.userMessage : result.voxaMessage)
+              : item,
+          );
+        }
         const withoutOptimistic = current.filter((m) => m.id !== optimisticId);
         return [
           ...withoutOptimistic,
@@ -536,13 +594,15 @@ export function ChatScreen() {
       ) {
         void playCompanionText(reply, result.voxaMessage.id);
       }
-      if (result.phase9Suggestions?.length) {
-        setSuggestions(capSuggestions(result.phase9Suggestions.map((s) => s.prompt)));
-        setSuggestionsDismissed(false);
-      } else if (reply) {
-        setSuggestions(capSuggestions(buildPostReplyStarters(reply, activeMode)));
-        setSuggestionsDismissed(false);
-      }
+      setSuggestions(
+        capSuggestions(
+          resolveTurnSuggestionPrompts({
+            contextual: result.phase9Suggestions,
+            fallback: reply ? buildPostReplyStarters(reply, activeMode) : [],
+          }),
+        ),
+      );
+      setSuggestionsDismissed(false);
 
       if (result.sideEffect?.type === 'open_voice_conversation') {
         const stackNav = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
@@ -555,8 +615,10 @@ export function ChatScreen() {
         }
       }
     } catch (err) {
-      setMessages((current) => current.filter((item) => item.id !== optimisticId));
-      if (conversationId) {
+      if (!assistantVisible) {
+        setMessages((current) => current.filter((item) => item.id !== optimisticId));
+      }
+      if (!assistantVisible && conversationId) {
         try {
           const reloaded = await companion.loadChatMessages(conversationId);
           setMessages(reloaded);
@@ -571,7 +633,7 @@ export function ChatScreen() {
         setLimitMessage(err.message);
         setLimitModalVisible(true);
       } else if (!(err instanceof FeatureLimitError)) {
-        setError(err instanceof Error ? err.message : 'Failed to send message.');
+        setError(formatTalkErrorForUser(err));
       }
     } finally {
       setIsTyping(false);
@@ -597,7 +659,7 @@ export function ChatScreen() {
           return mergeChatViews(updatedMessages, inFlight);
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Upload retry failed.');
+        setError(formatTalkErrorForUser(err));
       }
     },
     [profile, conversationId, companion],
@@ -829,32 +891,35 @@ export function ChatScreen() {
 
   const renderMessage = useCallback(
     ({ item, index }: { item: ChatMessageView; index: number }) => {
-      const prev = messages[index - 1];
+      const prev = index > 0 ? messagesRef.current[index - 1] : undefined;
       const showDate =
         !prev || formatChatDateLabel(item.createdAt) !== formatChatDateLabel(prev.createdAt);
+      const showAvatar = item.role !== 'user' && (!prev || prev.role === 'user' || showDate);
+      const richReply = richReplies[item.id];
       return (
         <View>
           {showDate ? <ChatDateSeparator label={formatChatDateLabel(item.createdAt)} /> : null}
           <ChatMessageBubble
-          message={item}
-          voxaTint={voxaTint}
-          voxaName={profile ? getVoxaDisplayName(profile) : 'Voxa'}
-          bookmarked={bookmarks.some((b) => b.messageId === item.id)}
-          isSpeaking={speakingMessageId === item.id}
-          onRetryUpload={(attachmentId) => void retryAttachmentUpload(item.id, attachmentId)}
-          onRemember={(message) => void rememberMessage(message)}
-          onBookmark={(message) => void handleBookmark(message)}
-          onDelete={(message) => void handleDelete(message)}
-          onRetrySend={(message) => void handleRetrySend(message)}
-          onRegenerate={(message) => void handleRegenerate(message)}
-          onPlayAloud={(message) => void handlePlayAloud(message)}
-          onSavePhotoMemory={(message) => void handleSavePhotoMemory(message)}
-          onSaveVoiceMemory={(message) => void handleSaveVoiceMemory(message)}
-          onCopyTranscript={(message) => void handleCopyTranscript(message)}
-        />
-        {item.role === 'voxa' && richReplies[item.id]?.blocks?.length ? (
-          <ResponseBlocks blocks={richReplies[item.id].blocks} />
-        ) : null}
+            message={item}
+            voxaTint={voxaTint}
+            voxaName={profile ? getVoxaDisplayName(profile) : 'Voxa'}
+            showAvatar={showAvatar}
+            bookmarked={bookmarks.some((b) => b.messageId === item.id)}
+            isSpeaking={speakingMessageId === item.id}
+            onRetryUpload={(attachmentId) => void retryAttachmentUpload(item.id, attachmentId)}
+            onRemember={(message) => void rememberMessage(message)}
+            onBookmark={(message) => void handleBookmark(message)}
+            onDelete={(message) => void handleDelete(message)}
+            onRetrySend={(message) => void handleRetrySend(message)}
+            onRegenerate={(message) => void handleRegenerate(message)}
+            onPlayAloud={(message) => void handlePlayAloud(message)}
+            onSavePhotoMemory={(message) => void handleSavePhotoMemory(message)}
+            onSaveVoiceMemory={(message) => void handleSaveVoiceMemory(message)}
+            onCopyTranscript={(message) => void handleCopyTranscript(message)}
+          />
+          {item.role === 'voxa' && richReply?.blocks?.length ? (
+            <ResponseBlocks blocks={richReply.blocks} />
+          ) : null}
         </View>
       );
     },
@@ -873,7 +938,6 @@ export function ChatScreen() {
       handleSaveVoiceMemory,
       handleCopyTranscript,
       richReplies,
-      messages,
       speakingMessageId,
     ],
   );
@@ -942,7 +1006,7 @@ export function ChatScreen() {
 
   if (isLoading) {
     return (
-      <ScreenShell padded={false} glow="blue">
+      <ScreenShell padded={false} glow="none" safeBottom={false}>
         <LoadingState label="Opening conversation..." />
       </ScreenShell>
     );
@@ -950,7 +1014,7 @@ export function ChatScreen() {
 
   if (error && messages.length === 0) {
     return (
-      <ScreenShell padded={false} glow="blue">
+      <ScreenShell padded={false} glow="none" safeBottom={false}>
         <ErrorState message={error} onRetry={() => loadChat(true)} />
       </ScreenShell>
     );
@@ -960,55 +1024,74 @@ export function ChatScreen() {
   const headerOrbState = isTyping ? 'thinking' : isSpeaking ? 'speaking' : orbState;
   const autoSpeakOn = profile?.preferences.voxaSpeaksReplies !== false;
 
+  const statusLabel = isTyping
+    ? THINKING_STATUS_LABELS[thinkingStage] ?? 'Thinking…'
+    : isSpeaking
+      ? 'Speaking…'
+      : adaptiveDisplay;
+
   return (
-    <ScreenShell padded={false} glow="blue">
+    <ScreenShell padded={false} glow="none" safeBottom={false}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={layout.tabBarHeight}>
+        keyboardVerticalOffset={0}>
         <View style={styles.header}>
-          <View style={[styles.avatar, { borderColor: voxaTint }]}>
-            <LiveCompanionOrb size={36} tint={voxaTint} active mood={orbMood} state={headerOrbState} intensity={0.55} />
+          <View style={styles.avatar}>
+            <LiveCompanionOrb size={28} tint={voxaTint} active mood={orbMood} state={headerOrbState} intensity={0.4} />
           </View>
           <View style={styles.headerCopy}>
-            <VoxaText variant="subtitle">{voxaName}</VoxaText>
-            <VoxaText variant="caption" color="textMuted">
-              {isSpeaking ? 'Speaking…' : adaptiveDisplay}
+            <VoxaText variant="subtitle" style={styles.headerTitle}>
+              {voxaName}
+            </VoxaText>
+            <VoxaText variant="caption" color="textMuted" style={styles.headerStatus} numberOfLines={1}>
+              {statusLabel}
             </VoxaText>
           </View>
-          {isFeatureVisible('playAloud') ? (
+          <View style={styles.headerActions}>
+            {isFeatureVisible('playAloud') ? (
+              <Pressable
+                style={styles.headerAction}
+                hitSlop={8}
+                onPress={() => {
+                  if (isSpeaking) {
+                    void stopCompanionSpeech();
+                    setIsSpeaking(false);
+                    setSpeakingMessageId(null);
+                    return;
+                  }
+                  void toggleAutoSpeak();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isSpeaking
+                    ? 'Stop speaking'
+                    : autoSpeakOn
+                      ? 'Voxa speaks replies on. Tap to turn off.'
+                      : 'Voxa speaks replies off. Tap to turn on.'
+                }>
+                <Ionicons
+                  name={isSpeaking ? 'stop-circle' : autoSpeakOn ? 'volume-high' : 'volume-mute'}
+                  size={18}
+                  color={autoSpeakOn || isSpeaking ? colors.primarySoft : colors.textMuted}
+                />
+              </Pressable>
+            ) : null}
             <Pressable
               style={styles.headerAction}
-              onPress={() => {
-                if (isSpeaking) {
-                  void stopCompanionSpeech();
-                  setIsSpeaking(false);
-                  setSpeakingMessageId(null);
-                  return;
-                }
-                void toggleAutoSpeak();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isSpeaking
-                  ? 'Stop speaking'
-                  : autoSpeakOn
-                    ? 'Voxa speaks replies on. Tap to turn off.'
-                    : 'Voxa speaks replies off. Tap to turn on.'
-              }>
-              <Ionicons
-                name={isSpeaking ? 'stop-circle' : autoSpeakOn ? 'volume-high' : 'volume-mute'}
-                size={20}
-                color={autoSpeakOn || isSpeaking ? colors.primarySoft : colors.textMuted}
-              />
+              hitSlop={8}
+              onPress={() => setMemoryPanelOpen(true)}
+              accessibilityLabel="Memory and context">
+              <Ionicons name="layers-outline" size={17} color={colors.textMuted} />
             </Pressable>
-          ) : null}
-          <Pressable style={styles.headerAction} onPress={() => setMemoryPanelOpen(true)} accessibilityLabel="Memory and context">
-            <Ionicons name="layers-outline" size={18} color={colors.primarySoft} />
-          </Pressable>
-          <Pressable style={styles.headerAction} onPress={() => setHeaderMenuOpen(true)} accessibilityLabel="More options">
-            <Ionicons name="ellipsis-horizontal" size={18} color={colors.primarySoft} />
-          </Pressable>
+            <Pressable
+              style={styles.headerAction}
+              hitSlop={8}
+              onPress={() => setHeaderMenuOpen(true)}
+              accessibilityLabel="More options">
+              <Ionicons name="ellipsis-horizontal" size={17} color={colors.textMuted} />
+            </Pressable>
+          </View>
         </View>
 
         {livingCompanion?.thinkingAbout ? (
@@ -1020,14 +1103,21 @@ export function ChatScreen() {
         ) : null}
 
         {error ? (
-          <View style={styles.inlineError}>
+          <Pressable
+            style={styles.inlineError}
+            onPress={() => setError(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss send error">
             <VoxaText variant="caption" color="textSecondary">
               {error}
             </VoxaText>
-          </View>
+            <VoxaText variant="caption" color="primarySoft">
+              Tap to dismiss
+            </VoxaText>
+          </Pressable>
         ) : null}
 
-        {__DEV__ && contextCards.length > 0 ? (
+        {__DEV__ && !isTyping && contextCards.length > 0 ? (
           <ContextCardsRow
             cards={contextCards}
             thinkingAbout={livingCompanion?.thinkingAbout}
@@ -1035,7 +1125,7 @@ export function ChatScreen() {
           />
         ) : null}
 
-        {__DEV__ && contextChips.length > 0 ? (
+        {__DEV__ && !isTyping && contextChips.length > 0 ? (
           <ChatContextChips
             chips={contextChips}
             onSelect={(chip) => {
@@ -1047,7 +1137,7 @@ export function ChatScreen() {
           />
         ) : null}
 
-        {__DEV__ && canvas ? (
+        {__DEV__ && !isTyping && canvas ? (
           <ConversationCanvasCard
             canvas={canvas}
             expanded={canvasExpanded}
@@ -1067,12 +1157,15 @@ export function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={keyExtractor}
+          extraData={speakingMessageId ?? ''}
           contentContainerStyle={styles.messages}
           showsVerticalScrollIndicator={false}
           renderItem={renderMessage}
           removeClippedSubviews
-          maxToRenderPerBatch={12}
-          windowSize={9}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
           onScrollToIndexFailed={(info) => {
             setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: true }), 200);
           }}
@@ -1101,10 +1194,6 @@ export function ChatScreen() {
             ) : null
           }
         />
-
-        {!isTyping && smartActions.length > 0 && __DEV__ ? (
-          <SmartActionsRow actions={smartActions} onSelect={(action) => void handleSmartAction(action)} />
-        ) : null}
 
         {!isTyping &&
         !suggestionsDismissed &&
@@ -1260,45 +1349,59 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.glassBorder,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
   },
-  headerCopy: { flex: 1, gap: 2 },
+  headerCopy: { flex: 1, minWidth: 0, gap: 1 },
+  headerTitle: { fontSize: 17, lineHeight: 22 },
+  headerStatus: { fontSize: 12, lineHeight: 16 },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   headerAction: {
-    width: layout.minTapTarget,
-    height: layout.minTapTarget,
-    borderRadius: layout.minTapTarget / 2,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
   },
-  inlineError: { paddingHorizontal: layout.screenPadding, paddingTop: spacing.sm },
+  inlineError: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.sm,
+    gap: 2,
+  },
   contextThought: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   messages: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    gap: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    flexGrow: 1,
   },
-  suggestions: { paddingHorizontal: layout.screenPadding },
+  suggestions: {
+    width: '100%',
+    alignSelf: 'stretch',
+    minWidth: 0,
+    paddingLeft: layout.screenPadding,
+    paddingRight: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',

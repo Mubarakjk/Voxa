@@ -15,15 +15,19 @@ type Props = {
 };
 
 export function ChatContextChips({ chips, onSelect }: Props) {
-  if (chips.length === 0) return null;
+  const visible = chips.filter((chip) => chip.label.trim().length > 0);
+  if (visible.length === 0) return null;
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {chips.map((chip) => (
+      {visible.map((chip) => (
         <Pressable
           key={chip.id}
           style={[styles.chip, chip.kind === 'memory' && styles.memory, chip.kind === 'goal' && styles.goal]}
-          onPress={() => onSelect?.(chip)}>
+          onPress={() => onSelect?.(chip)}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={chip.label}>
           <VoxaText variant="caption" color="textSecondary">{chip.label}</VoxaText>
         </Pressable>
       ))}
@@ -34,12 +38,14 @@ export function ChatContextChips({ chips, onSelect }: Props) {
 const styles = StyleSheet.create({
   row: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   chip: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    borderWidth: 1,
+    borderRadius: radius.chip,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.glassBorder,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceQuiet,
+    minHeight: 36,
+    justifyContent: 'center',
   },
   memory: { borderColor: `${colors.primarySoft}44` },
   goal: { borderColor: `${colors.primarySoft}66` },

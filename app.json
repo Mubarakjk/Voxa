@@ -7,23 +7,39 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B0F14",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0F14"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.voxa.companion",
       "buildNumber": "1",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Voxa may use the microphone if you enable optional audio features in a future update. Spoken replies do not require microphone access.",
-        "UIBackgroundModes": ["audio"],
-        "NSCameraUsageDescription": "Voxa uses the camera to capture photos and videos in chat.",
-        "NSPhotoLibraryUsageDescription": "Voxa uses your photo library to share images and videos in chat.",
-        "NSLocationWhenInUseUsageDescription": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually."
-      }
+        "NSCameraUsageDescription": "Voxa uses the camera so you can take a photo to attach in chat.",
+        "NSPhotoLibraryUsageDescription": "Voxa uses your photo library if you choose to attach an existing photo in chat.",
+        "NSLocationWhenInUseUsageDescription": "Voxa uses your location to provide accurate weather, local suggestions and morning briefings. You can also choose a city manually.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1", "3B52.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
+      },
+      "bitcode": false
     },
     "android": {
       "package": "app.voxa.companion",
@@ -32,21 +48,20 @@
         "backgroundColor": "#0B0F14"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@config-plugins/react-native-webrtc",
       "@react-native-community/datetimepicker",
       [
         "expo-notifications",
@@ -58,27 +73,30 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Voxa uses your photo library to share images and videos in chat.",
-          "cameraPermission": "Voxa uses the camera to capture photos and videos in chat.",
-          "microphonePermission": "Voxa uses the microphone for voice notes and video recording."
-        }
-      ],
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Voxa uses the microphone when you choose to record audio in supported features."
+          "photosPermission": "Voxa uses your photo library if you choose to attach an existing photo in chat.",
+          "cameraPermission": "Voxa uses the camera so you can take a photo to attach in chat.",
+          "microphonePermission": false
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "Voxa uses the microphone when you choose to record audio in supported features."
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       "expo-secure-store",
       "expo-dev-client",
       "expo-font",
       "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0F14",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
       [
         "expo-location",
         {
@@ -88,8 +106,15 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "replace-with-eas-project-id"
+        "projectId": "edbeeb3f-1e8a-4bf5-9794-814157fdad98"
       }
+    },
+    "owner": "mujimoh2008gmail.com",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/edbeeb3f-1e8a-4bf5-9794-814157fdad98"
     }
   }
 }

@@ -30,10 +30,12 @@ export function logFeature(
   const suffix = `${ms != null ? ` ${ms}ms` : ''}${detail ? ` — ${detail}` : ''}`;
   const line = `${level.toUpperCase()}${suffix}`;
 
-  if (level === 'failure') {
-    console.error(`[Voxa:${feature}]`, line);
-  } else {
-    console.log(`[Voxa:${feature}]`, line);
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    if (level === 'failure') {
+      console.error(`[Voxa:${feature}]`, line);
+    } else {
+      console.log(`[Voxa:${feature}]`, line);
+    }
   }
 }
 

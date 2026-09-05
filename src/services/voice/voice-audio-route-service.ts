@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { Audio } from 'expo-av';
+import { setAudioModeAsync } from 'expo-audio';
 
 export type VoiceAudioRoute = 'speaker' | 'earpiece' | 'headphones' | 'bluetooth';
 
@@ -28,12 +28,12 @@ class VoiceAudioRouteService {
   async applyRoute(route: VoiceAudioRoute): Promise<void> {
     this.route = route;
     const throughEarpiece = route === 'earpiece';
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: throughEarpiece,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'duckOthers',
+      shouldRouteThroughEarpiece: throughEarpiece,
     });
   }
 

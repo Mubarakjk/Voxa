@@ -67,23 +67,72 @@ export function checkUsageAllowance(input: {
 }
 
 export const ABUSE_LIMITS = {
-  maxMessageChars: 8000,
+  maxUserMessageChars: 4_000,
+  maxContextPayloadChars: 24_000,
+  maxTotalPayloadChars: 28_000,
   maxAudioSeconds: 180,
   maxImageBytes: 12 * 1024 * 1024,
   maxRetryCount: 3,
 } as const;
+
+export type ChatPayloadSizeResult =
+  | { allowed: true }
+  | { allowed: false; plan: 'free' | 'pro'; code: string; message: string };
+
+export function validateChatPayloadSize(
+  messages: { role: string; content: string }[],
+): ChatPayloadSizeResult {
+  const totalChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  const userMessages = messages.filter((message) => message.role === 'user');
+  const largestUserMessageChars = userMessages.reduce(
+    (max, message) => Math.max(max, message.content.length),
+    0,
+  );
+
+  if (largestUserMessageChars > ABUSE_LIMITS.maxUserMessageChars) {
+    return {
+      allowed: false,
+      plan: 'free',
+      code: 'message_too_large',
+      message: 'Message exceeds maximum size.',
+    };
+  }
+
+  const lastUserMessage = userMessages[userMessages.length - 1];
+  const contextChars = totalChars - (lastUserMessage?.content.length ?? 0);
+
+  if (contextChars > ABUSE_LIMITS.maxContextPayloadChars) {
+    return {
+      allowed: false,
+      plan: 'free',
+      code: 'context_too_large',
+      message: 'Conversation context exceeds maximum size.',
+    };
+  }
+
+  if (totalChars > ABUSE_LIMITS.maxTotalPayloadChars) {
+    return {
+      allowed: false,
+      plan: 'free',
+      code: 'context_too_large',
+      message: 'Conversation context exceeds maximum size.',
+    };
+  }
+
+  return { allowed: true };
+}
 
 export function validatePayloadSize(input: {
   messageChars?: number;
   audioSeconds?: number;
   imageBytes?: number;
 }): UsageCheckResult | { allowed: true } {
-  if (input.messageChars != null && input.messageChars > ABUSE_LIMITS.maxMessageChars) {
+  if (input.messageChars != null && input.messageChars > ABUSE_LIMITS.maxTotalPayloadChars) {
     return {
       allowed: false,
       plan: 'free',
-      code: 'message_too_large',
-      message: 'Message exceeds maximum size.',
+      code: 'context_too_large',
+      message: 'Conversation context exceeds maximum size.',
     };
   }
   if (input.audioSeconds != null && input.audioSeconds > ABUSE_LIMITS.maxAudioSeconds) {

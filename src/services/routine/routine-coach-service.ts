@@ -201,12 +201,21 @@ export class RoutineCoachService {
         scheduledAt: scheduled.toISOString(),
         recurrence: inferRecurrence(block.repeatDays),
       });
-      await notificationService.scheduleReminderFromEntity(updated).catch(() => undefined);
+      if (updated.notificationId) {
+        await notificationService.cancelNotification(updated.notificationId).catch(() => undefined);
+      }
+      const notificationId = await notificationService.scheduleReminderFromEntity(updated).catch(() => undefined);
+      if (notificationId && notificationId !== updated.notificationId) {
+        return this.repositories.reminders.updateReminder(updated.id, { notificationId });
+      }
       return updated;
     }
 
     const reminder = await this.repositories.reminders.createReminder(input);
-    await notificationService.scheduleReminderFromEntity(reminder).catch(() => undefined);
+    const notificationId = await notificationService.scheduleReminderFromEntity(reminder).catch(() => undefined);
+    if (notificationId) {
+      return this.repositories.reminders.updateReminder(reminder.id, { notificationId });
+    }
     return reminder;
   }
 

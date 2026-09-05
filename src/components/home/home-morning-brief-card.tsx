@@ -11,6 +11,7 @@ import { Reminder } from '../../types';
 import { Phase11DashboardData } from '../../types/phase11-living-companion';
 import { Phase12DashboardData } from '../../types/phase12-experiences';
 import { TodayRoutineSummary } from '../../types/routine';
+import { WeatherBundle } from '../../types/weather';
 import { formatReminderDateTime } from '../../utils/reminders';
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
   upcomingReminder: Reminder | null;
   routineSummary: TodayRoutineSummary;
   reflectionPending: boolean;
+  weatherBundle?: WeatherBundle | null;
   showRelationship?: boolean;
   onFollowUp: () => void;
   onReflection: () => void;
@@ -36,6 +38,7 @@ export function HomeMorningBriefCard({
   upcomingReminder,
   routineSummary,
   reflectionPending,
+  weatherBundle,
   showRelationship = true,
   onFollowUp,
   onReflection,
@@ -55,20 +58,29 @@ export function HomeMorningBriefCard({
         : null);
 
   const showFollowUp = Boolean(followUp && followUp.prompt !== phase11.emotionalMessage);
+  const headerMeta = weatherBundle?.current
+    ? `${Math.round(weatherBundle.current.temperatureC)}° · ${weatherBundle.current.conditionLabel}`
+    : relationship.stageLabel;
 
   return (
     <StaggerFade index={1}>
-      <GlassCard style={styles.card}>
+      <GlassCard style={styles.card} variant="quiet">
         <View style={styles.header}>
-          <VoxaText variant="caption" color="primarySoft">Today at a glance</VoxaText>
-          <VoxaText variant="caption" color="textMuted">{relationship.stageLabel}</VoxaText>
+          <VoxaText variant="label" color="textMuted" style={styles.headerLabel}>
+            Today
+          </VoxaText>
+          <View style={styles.headerMeta}>
+            <VoxaText variant="caption" color="textMuted" style={styles.headerMetaText}>
+              {headerMeta}
+            </VoxaText>
+          </View>
         </View>
 
-        <VoxaText variant="body" color="textSecondary" numberOfLines={3}>
+        <VoxaText variant="supporting" color="textSecondary" style={styles.personalMessage}>
           {dailyBriefing.personalMessage}
         </VoxaText>
 
-        {showRelationship ? (
+        {showRelationship && relationship.progressPercent > 0 ? (
           <Pressable
             style={styles.relationshipRow}
             onPress={onRelationship}
@@ -80,20 +92,16 @@ export function HomeMorningBriefCard({
             <View style={styles.relMeta}>
               <View style={styles.relCount}>
                 <CountUpNumber value={relationship.progressPercent} style={styles.relCountText} />
-                <VoxaText variant="caption" color="textMuted">
+                <VoxaText variant="caption" color="textMuted" style={styles.relCountLabel}>
                   % toward {relationship.nextStageLabel ?? 'Inner Circle'}
                 </VoxaText>
               </View>
-              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} style={styles.rowChevron} />
             </View>
           </Pressable>
         ) : null}
 
-        <BriefRow
-          icon="compass-outline"
-          label="Focus"
-          value={phase11.todayFocus}
-        />
+        <BriefRow icon="compass-outline" label="Focus" value={phase11.todayFocus} />
 
         {digest ? (
           <BriefRow
@@ -161,12 +169,18 @@ function BriefRow({
 }) {
   const content = (
     <View style={styles.row}>
-      <Ionicons name={icon} size={16} color={colors.primarySoft} />
+      <Ionicons name={icon} size={16} color={colors.primarySoft} style={styles.rowIcon} />
       <View style={styles.rowBody}>
-        <VoxaText variant="caption" color="textMuted">{label}</VoxaText>
-        <VoxaText variant="body" color="textSecondary" numberOfLines={2}>{value}</VoxaText>
+        <VoxaText variant="caption" color="textMuted">
+          {label}
+        </VoxaText>
+        <VoxaText variant="body" color="textSecondary" style={styles.rowValue}>
+          {value}
+        </VoxaText>
       </View>
-      {onPress ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
+      {onPress ? (
+        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} style={styles.rowChevron} />
+      ) : null}
     </View>
   );
 
@@ -180,7 +194,24 @@ function BriefRow({
 
 const styles = StyleSheet.create({
   card: { gap: spacing.md },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  headerLabel: { flexShrink: 0 },
+  headerMeta: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+  },
+  headerMetaText: {
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  personalMessage: {
+    flexShrink: 1,
+  },
   relationshipRow: { gap: spacing.xs },
   track: {
     height: 6,
@@ -193,10 +224,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,
   },
-  relMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  relCount: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  relMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  relCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
+  },
   relCountText: { fontSize: 13, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  row: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  rowBody: { flex: 1, gap: 2 },
+  relCountLabel: { flexShrink: 1 },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  rowIcon: { flexShrink: 0, marginTop: 2 },
+  rowBody: { flex: 1, minWidth: 0, gap: 2 },
+  rowValue: { flexShrink: 1 },
+  rowChevron: { flexShrink: 0, marginTop: 4 },
   pressed: { opacity: 0.85 },
 });

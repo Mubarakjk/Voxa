@@ -95,7 +95,7 @@ export function ScheduleCompanionCallScreen({ navigation, route }: Props) {
   if (!isScheduledCallsEnabled()) {
     return (
       <ScreenShell>
-        <ScreenHeader title="Schedule a call" />
+        <ScreenHeader showBack title="Schedule a call" />
         <EmptyState
           icon="call-outline"
           title="Scheduled calls are off"
@@ -157,7 +157,7 @@ export function ScheduleCompanionCallScreen({ navigation, route }: Props) {
 
   return (
     <ScreenShell padded={false}>
-      <ScreenHeader title={editId ? 'Edit call' : 'Schedule a call'} />
+      <ScreenHeader showBack title={editId ? 'Edit call' : 'Schedule a call'} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <VoxaText variant="body" color="textSecondary">
           Allow Voxa to alert you when a scheduled companion call is ready. This is not a telephone call.

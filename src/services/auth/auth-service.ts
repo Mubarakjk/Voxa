@@ -28,6 +28,7 @@ export function isSignupInFlight() {
 }
 
 function logAuthError(scope: string, error: AuthError) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
   console.error(`${scope} ERROR`, {
     status: error.status,
     code: error.code ?? error.name,
@@ -61,7 +62,9 @@ export class AuthService {
 
   async signUp(input: SignUpInput) {
     if (signupInFlight) {
-      console.warn('[Auth] SIGNUP BLOCKED — request already in flight, reusing existing promise');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[Auth] SIGNUP BLOCKED — request already in flight, reusing existing promise');
+      }
       return signupInFlight;
     }
 
@@ -69,8 +72,10 @@ export class AuthService {
     const requestNumber = signupCounter;
     const email = input.email.trim();
 
-    console.log('Signup request #', requestNumber);
-    console.log('SIGNUP START', { email, timestamp: Date.now() });
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('Signup request #', requestNumber);
+      console.log('SIGNUP START', { email, timestamp: Date.now() });
+    }
 
     const client = getSupabaseClient();
 
@@ -89,16 +94,18 @@ export class AuthService {
           throw error;
         }
 
-        console.log('SIGNUP SUCCESS', {
-          requestNumber,
-          userId: data.user?.id ?? null,
-          session: Boolean(data.session),
-        });
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.log('SIGNUP SUCCESS', {
+            requestNumber,
+            userId: data.user?.id ?? null,
+            session: Boolean(data.session),
+          });
+        }
         return data;
       } catch (error) {
         if (error instanceof AuthError) {
           logAuthError('SIGNUP', error);
-        } else {
+        } else if (typeof __DEV__ !== 'undefined' && __DEV__) {
           console.error('SIGNUP ERROR', error);
         }
         throw error;

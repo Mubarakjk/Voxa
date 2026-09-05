@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { colors, radius, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 import { VoxaText } from '../ui/voxa-text';
 import { TypingDots } from '../premium/premium-ui';
 
@@ -14,7 +14,8 @@ type Props = {
 export function TypingIndicator({ voxaName, tint, streamingText, thinkingLabel }: Props) {
   return (
     <View style={styles.row}>
-      <View style={[styles.bubble, { borderColor: `${tint}33` }]}>
+      <View style={styles.avatarSpacer} />
+      <View style={styles.bubble}>
         {streamingText ? (
           <VoxaText variant="body" color="textSecondary">
             {streamingText}
@@ -33,14 +34,18 @@ export function TypingIndicator({ voxaName, tint, streamingText, thinkingLabel }
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'flex-start' },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  avatarSpacer: { width: 24 },
   bubble: {
-    maxWidth: '82%',
-    borderRadius: radius.lg,
-    borderBottomLeftRadius: 6,
-    padding: spacing.md,
-    backgroundColor: colors.chatVoxa,
-    borderWidth: 1,
+    maxWidth: '88%',
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
   },
   thinkingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

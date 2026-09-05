@@ -23,7 +23,7 @@ export class LocalMessageRepository implements IMessageRepository {
 
   async createMessage(input: CreateMessageInput): Promise<Message> {
     const message: Message = {
-      id: createId('message'),
+      id: input.id ?? createId('message'),
       conversationId: input.conversationId,
       role: input.role,
       content: input.content,
@@ -35,7 +35,9 @@ export class LocalMessageRepository implements IMessageRepository {
     };
 
     const messages = await this.readAll();
-    messages.push(message);
+    const index = messages.findIndex((item) => item.id === message.id);
+    if (index >= 0) messages[index] = message;
+    else messages.push(message);
     await this.writeAll(messages);
     return message;
   }

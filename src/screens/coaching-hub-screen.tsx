@@ -53,7 +53,7 @@ export function CoachingHubScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Specialist coaching" subtitle="Same Voxa memory — focused tone and boundaries per coach." />
+        <ScreenHeader showBack title="Specialist coaching" subtitle="Same Voxa memory — focused tone and boundaries per coach." />
         {COACH_DEFINITIONS.map((coach) => (
           <Pressable key={coach.id} onPress={() => void start(coach.id)}>
             <GlassCard style={styles.card}>

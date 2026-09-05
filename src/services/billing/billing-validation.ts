@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+import { getAiGatewayUrlFromEnv, isAiGatewayConfiguredFromEnv } from '../../config/ai-gateway-env';
+import { isReleaseAiEnvironment } from '../../config/ai-routing';
 import { hasSupabaseConfig, getSupabaseUrl } from '../../config/env';
 import {
   getRevenueCatAndroidApiKey,
@@ -38,15 +40,15 @@ export function getConfiguredPlatformKeyPrefix(): string {
 }
 
 export function getAiGatewayUrl(): string | undefined {
-  return process.env.EXPO_PUBLIC_AI_GATEWAY_URL?.trim() || undefined;
+  return getAiGatewayUrlFromEnv();
 }
 
 export function isAiGatewayConfigured(): boolean {
-  return Boolean(getAiGatewayUrl() && hasSupabaseConfig());
+  return isAiGatewayConfiguredFromEnv();
 }
 
 export function shouldPreferAiGateway(): boolean {
-  return isAiGatewayConfigured() && !__DEV__;
+  return isReleaseAiEnvironment();
 }
 
 export function validateBillingEnvironment(): BillingValidationReport {
@@ -127,8 +129,12 @@ export function validateBillingEnvironment(): BillingValidationReport {
     {
       id: 'ai_gateway',
       label: 'AI gateway URL',
-      ok: __DEV__ || isAiGatewayConfigured(),
-      detail: getAiGatewayUrl() ? maskSecret(getAiGatewayUrl()) : __DEV__ ? 'dev client OK' : 'required in production',
+      ok: !isReleaseAiEnvironment() || isAiGatewayConfigured(),
+      detail: getAiGatewayUrl()
+        ? maskSecret(getAiGatewayUrl())
+        : isReleaseAiEnvironment()
+          ? 'required in preview/production'
+          : 'optional in development',
     },
   ];
 

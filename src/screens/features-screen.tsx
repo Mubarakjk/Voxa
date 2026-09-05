@@ -49,8 +49,8 @@ const ALL_CORE_FEATURES: CoreFeature[] = [
     title: 'Routine Coach',
     description: 'Build your daily rhythm and track progress',
     icon: 'calendar-outline',
-    action: 'tab',
-    tab: 'Routine',
+    action: 'stack',
+    stack: 'RoutineCoach',
     featureKey: 'routineCoach',
   },
   {
@@ -126,6 +126,7 @@ export function FeaturesScreen() {
       const stack = feature.stack;
       if (stack === 'Music') navigation.navigate('Music');
       else if (stack === 'CompanionStudio') navigation.navigate('CompanionStudio');
+      else if (stack === 'RoutineCoach') navigation.navigate('RoutineCoach');
       else if (stack === 'FeatureDiscovery') navigation.navigate('FeatureDiscovery');
       else if (stack === 'Activities') navigation.navigate('Activities');
     }
@@ -134,7 +135,11 @@ export function FeaturesScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={20} color={colors.primarySoft} />
           <VoxaText variant="caption" color="primarySoft">
             Back

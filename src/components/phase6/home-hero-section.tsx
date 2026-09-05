@@ -1,11 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { LiveCompanionOrb, CompanionOrbMood, CompanionOrbState } from '../live-companion/live-companion-orb';
 import { PremiumButton } from '../premium/premium-ui';
 import { VoxaText } from '../ui/voxa-text';
-import { colors, layout, radius, spacing } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 import { hapticLight } from '../../utils/haptics';
 
 type Props = {
@@ -23,8 +22,6 @@ type Props = {
   onOrbPress?: () => void;
   onCheckIn?: () => void;
   onRoutine?: () => void;
-  onSearch?: () => void;
-  onLife?: () => void;
 };
 
 export function HomeHeroSection({
@@ -35,19 +32,15 @@ export function HomeHeroSection({
   orbMood = 'calm',
   orbState = 'idle',
   orbIntensity = 0.5,
-  moodReason,
-  ritualRing,
   primaryLabel,
   onPrimary,
   onOrbPress,
   onCheckIn,
   onRoutine,
-  onSearch,
-  onLife,
 }: Props) {
   const orb = (
     <LiveCompanionOrb
-      size={200}
+      size={176}
       tint={tint}
       active
       state={orbState}
@@ -58,7 +51,9 @@ export function HomeHeroSection({
 
   return (
     <View style={styles.hero}>
-      <VoxaText variant="caption" color="textMuted" style={styles.eyebrow}>{greeting}</VoxaText>
+      <VoxaText variant="label" color="textMuted" style={styles.eyebrow}>
+        {greeting}
+      </VoxaText>
 
       <View style={styles.orbWrap}>
         {onOrbPress ? (
@@ -73,38 +68,35 @@ export function HomeHeroSection({
         ) : (
           orb
         )}
-        {ritualRing ? <View style={styles.ritualBadge}>{ritualRing}</View> : null}
       </View>
 
-      {moodReason ? (
-        <VoxaText variant="caption" color="primarySoft" style={styles.moodReason}>{moodReason}</VoxaText>
+      <VoxaText variant="display" style={styles.headline} numberOfLines={3}>
+        {headline}
+      </VoxaText>
+      {subline ? (
+        <VoxaText variant="supporting" color="textSecondary" style={styles.subline} numberOfLines={2}>
+          {subline}
+        </VoxaText>
       ) : null}
 
-      <VoxaText variant="title" style={styles.headline}>{headline}</VoxaText>
-      <VoxaText variant="body" color="textSecondary" style={styles.subline}>{subline}</VoxaText>
-
-      <PremiumButton label={primaryLabel} icon="chatbubbles" onPress={onPrimary} />
+      <View style={styles.primaryWrap}>
+        <PremiumButton label={primaryLabel} icon="chatbubbles" onPress={onPrimary} />
+      </View>
 
       {onCheckIn || onRoutine ? (
         <View style={styles.secondaryRow}>
           {onCheckIn ? (
-            <Pressable
-              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-              onPress={onCheckIn}
-              accessibilityRole="button"
-              accessibilityLabel="Daily check-in">
-              <Ionicons name="sunny-outline" size={layout.iconSm} color={colors.primarySoft} />
-              <VoxaText variant="caption" color="primarySoft">Check in</VoxaText>
+            <Pressable onPress={onCheckIn} style={styles.secondaryLink} accessibilityRole="button">
+              <VoxaText variant="caption" color="primarySoft">
+                Check in
+              </VoxaText>
             </Pressable>
           ) : null}
           {onRoutine ? (
-            <Pressable
-              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-              onPress={onRoutine}
-              accessibilityRole="button"
-              accessibilityLabel="Open routine">
-              <Ionicons name="repeat-outline" size={layout.iconSm} color={colors.primarySoft} />
-              <VoxaText variant="caption" color="primarySoft">Routine</VoxaText>
+            <Pressable onPress={onRoutine} style={styles.secondaryLink} accessibilityRole="button">
+              <VoxaText variant="caption" color="primarySoft">
+                Routine
+              </VoxaText>
             </Pressable>
           ) : null}
         </View>
@@ -114,26 +106,18 @@ export function HomeHeroSection({
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl },
-  eyebrow: { letterSpacing: 1.2, textTransform: 'uppercase' },
-  orbWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center', marginVertical: spacing.sm },
-  ritualBadge: { position: 'absolute', top: 4, right: -8 },
-  orbPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
-  moodReason: { letterSpacing: 0.3, marginTop: -spacing.xs },
-  headline: { textAlign: 'center', lineHeight: 34, maxWidth: 320 },
-  subline: { textAlign: 'center', maxWidth: 300, lineHeight: 24 },
-  secondaryRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm, justifyContent: 'center' },
-  secondary: {
-    flexDirection: 'row',
+  hero: {
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: layout.minTapTarget,
-    borderRadius: radius.chip,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surface,
+    gap: spacing.md12,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
   },
-  pressed: { opacity: 0.75 },
+  eyebrow: { letterSpacing: 1.1 },
+  orbWrap: { marginVertical: spacing.sm },
+  orbPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
+  headline: { textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
+  subline: { textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
+  primaryWrap: { width: '100%', marginTop: spacing.sm },
+  secondaryRow: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.xs },
+  secondaryLink: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
 });

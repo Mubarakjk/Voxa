@@ -41,7 +41,7 @@ export function ConversationWorldsScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader title="Conversation worlds" subtitle="Original visuals — gradients only. Exit anytime from Talk." />
+        <ScreenHeader showBack title="Conversation worlds" subtitle="Original visuals — gradients only. Exit anytime from Talk." />
         {CONVERSATION_WORLDS.map((world) => (
           <Pressable key={world.id} onPress={() => void enter(world.id)} style={styles.worldWrap}>
             <LinearGradient colors={world.gradient} style={styles.world}>

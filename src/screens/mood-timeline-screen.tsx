@@ -53,7 +53,7 @@ export function MoodTimelineScreen(_props: Props) {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Mood intelligence"
           title="Mood timeline"
           subtitle="Local-first history from chat, voice, journal, and check-ins."

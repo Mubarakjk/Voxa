@@ -32,7 +32,7 @@ export function CompanionArcadeScreen() {
   return (
     <ScreenShell padded={false}>
       <View style={styles.headerWrap}>
-        <ScreenHeader
+        <ScreenHeader showBack
           title="Companion Arcade"
           subtitle="Chat games with Voxa — lighter side modes. For party games, open Games Hub."
           right={

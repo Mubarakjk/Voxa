@@ -105,9 +105,6 @@ const ROADMAP_ITEMS: Array<{ key: FeatureKey; label: string }> = [
 ];
 
 export function getRoadmapFeatures(): Array<{ key: FeatureKey; label: string }> {
-  return ROADMAP_ITEMS.filter(
-    (item) =>
-      isFeatureRoadmap(item.key) ||
-      (FEATURE_STATUS[item.key] === 'hidden' && !isExperimentalFeaturesEnabled()),
-  );
+  // Hidden V1 features (live voice, music, etc.) must not appear as "coming soon".
+  return ROADMAP_ITEMS.filter((item) => isFeatureRoadmap(item.key));
 }

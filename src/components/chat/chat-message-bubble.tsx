@@ -22,6 +22,7 @@ type ChatMessageBubbleProps = {
   message: ChatMessageView;
   voxaTint: string;
   voxaName?: string;
+  showAvatar?: boolean;
   bookmarked?: boolean;
   isSpeaking?: boolean;
   onRetryUpload?: (attachmentId: string) => void;
@@ -40,6 +41,7 @@ function ChatMessageBubbleComponent({
   message,
   voxaTint,
   voxaName = 'Voxa',
+  showAvatar = true,
   bookmarked,
   isSpeaking,
   onRetryUpload,
@@ -55,13 +57,13 @@ function ChatMessageBubbleComponent({
 }: ChatMessageBubbleProps) {
   const isUser = message.role === 'user';
   const fade = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(8)).current;
+  const slide = useRef(new Animated.Value(4)).current;
   const [actionsOpen, setActionsOpen] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.timing(slide, { toValue: 0, duration: 280, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: true }),
     ]).start();
   }, [fade, slide]);
 
@@ -80,11 +82,20 @@ function ChatMessageBubbleComponent({
   return (
     <>
       <Animated.View
-        style={[styles.row, isUser && styles.rowUser, { opacity: fade, transform: [{ translateY: slide }] }]}>
+        style={[
+          styles.row,
+          isUser && styles.rowUser,
+          !isUser && !showAvatar && styles.rowAvatarGutter,
+          { opacity: fade, transform: [{ translateY: slide }] },
+        ]}>
         {!isUser ? (
-          <View style={styles.bubbleAvatar}>
-            <LiveCompanionOrb size={26} tint={voxaTint} active mood="calm" state="idle" intensity={0.45} />
-          </View>
+          showAvatar ? (
+            <View style={styles.bubbleAvatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <LiveCompanionOrb size={22} tint={voxaTint} active mood="calm" state="idle" intensity={0.35} />
+            </View>
+          ) : (
+            <View style={styles.avatarSpacer} />
+          )
         ) : null}
         <Pressable
           onPress={() => {
@@ -93,12 +104,13 @@ function ChatMessageBubbleComponent({
             }
           }}
           onLongPress={() => setActionsOpen(true)}
-          style={[
+          style={({ pressed }) => [
             styles.bubble,
             isUser ? styles.bubbleUser : styles.bubbleVoxa,
             message.status === 'failed' && styles.failed,
             bookmarked && styles.bookmarked,
             hasVoice && styles.voiceBubble,
+            pressed && styles.bubblePressed,
           ]}>
           {message.attachments?.map((attachment) => {
             if (attachment.type === 'image' && (attachment.remoteUrl ?? attachment.localUri)) {
@@ -136,10 +148,14 @@ function ChatMessageBubbleComponent({
             )
           ) : null}
           <View style={styles.footer}>
-            {bookmarked ? <Ionicons name="bookmark" size={12} color={colors.primarySoft} /> : null}
+            {bookmarked ? <Ionicons name="bookmark" size={11} color={colors.primarySoft} /> : null}
             <VoxaText variant="caption" color="textMuted" style={styles.time}>
               {message.time}
-              {message.status === 'failed' ? ' · Failed — tap to retry' : message.status === 'pending' ? ' · Sending…' : ''}
+              {message.status === 'failed'
+                ? ' · Failed — tap to retry'
+                : message.status === 'pending'
+                  ? ' · Sending…'
+                  : ''}
             </VoxaText>
             {!isUser && isFeatureVisible('playAloud') && message.text ? (
               <Pressable
@@ -150,8 +166,8 @@ function ChatMessageBubbleComponent({
                 style={styles.speakBtn}>
                 <Ionicons
                   name={isSpeaking ? 'stop-circle' : 'volume-medium'}
-                  size={18}
-                  color={isSpeaking ? colors.primary : colors.primarySoft}
+                  size={16}
+                  color={isSpeaking ? colors.primary : colors.textMuted}
                 />
               </Pressable>
             ) : null}
@@ -281,45 +297,63 @@ function ActionRow({
 export const ChatMessageBubble = memo(ChatMessageBubbleComponent);
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-end', gap: spacing.sm, marginBottom: spacing.md },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+    marginBottom: spacing.md12,
+  },
   rowUser: { justifyContent: 'flex-end' },
+  rowAvatarGutter: {},
   bubbleAvatar: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-end',
+    marginBottom: 2,
     overflow: 'hidden',
   },
-  bubble: {
-    maxWidth: '82%',
-    borderRadius: 20,
-    paddingHorizontal: spacing.md + 2,
-    paddingVertical: spacing.sm + 4,
-    gap: spacing.sm,
+  avatarSpacer: {
+    width: 24,
   },
+  bubble: {
+    maxWidth: '78%',
+    borderRadius: 18,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    gap: spacing.xs,
+  },
+  bubblePressed: { opacity: 0.92 },
   voiceBubble: { minWidth: 250 },
   bubbleVoxa: {
-    backgroundColor: colors.chatVoxa,
-    borderBottomLeftRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    backgroundColor: 'transparent',
+    paddingHorizontal: spacing.xs,
+    paddingLeft: 0,
+    maxWidth: '88%',
   },
   bubbleUser: {
     backgroundColor: colors.chatUser,
     borderBottomRightRadius: 6,
   },
-  bookmarked: { borderColor: colors.primarySoft },
+  bookmarked: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.primarySoft}55` },
   failed: { borderWidth: 1, borderColor: colors.danger },
-  messageText: { lineHeight: 22, fontSize: 16 },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
+  messageText: { lineHeight: 23, fontSize: 16 },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: spacing.xs,
+    marginTop: 2,
+  },
   speakBtn: {
     minWidth: 28,
     minHeight: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  time: { fontSize: 11 },
+  time: { fontSize: 11, opacity: 0.85 },
   image: { width: 220, height: 160, borderRadius: radius.md, backgroundColor: colors.surface },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   sheet: {
@@ -328,7 +362,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     padding: spacing.xl,
     gap: spacing.xs,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.glassBorder,
   },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },

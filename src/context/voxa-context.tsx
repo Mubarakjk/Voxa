@@ -18,6 +18,7 @@ import { UserProfile } from '../types';
 import { validateBillingEnvironment } from '../services/billing/billing-validation';
 import { BillingLog } from '../services/billing/billing-logger';
 import { hasRevenueCatConfig } from '../config/revenuecat-env';
+import { friendlyErrorMessage } from '../utils/friendly-error';
 
 const FOREGROUND_ENTITLEMENT_REFRESH_MIN_MS = 5_000;
 
@@ -141,7 +142,13 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initialize Voxa.');
+      const profileMissing =
+        err instanceof Error && err.message === 'User profile not found. Please sign in again.';
+      setError(
+        profileMissing
+          ? err.message
+          : friendlyErrorMessage(err, 'Unable to start Voxa. Check your connection and try again.'),
+      );
       setIsReady(false);
       recordSyncFailure();
     } finally {
@@ -201,7 +208,7 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
       setProfile(seededProfile);
       setIsReady(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset local data.');
+      setError(friendlyErrorMessage(err, 'Could not reset local data. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -216,7 +223,9 @@ export function VoxaProvider({ children }: { children: ReactNode }) {
         await clearAllLocalVoxaData(services.storage);
       }
     } catch (err) {
-      console.warn('[Voxa] Failed to clear local cache on sign out.', err);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[Voxa] Failed to clear local cache on sign out.', err);
+      }
     }
     resetVoxaServices();
     setServices(getVoxaServices());

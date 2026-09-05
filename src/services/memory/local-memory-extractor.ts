@@ -1,5 +1,6 @@
 import { CompanionModeId, Memory, MemoryCategory, MemoryMood } from '../../types';
 import { ExtractedMemoryCandidate } from '../contracts';
+import { assessMemoryWrite, decisionToCandidate } from './memory-write-policy';
 
 type ExtractionRule = {
   category: MemoryCategory;
@@ -37,11 +38,27 @@ const RULES: ExtractionRule[] = [
   },
   {
     category: 'habits',
-    keywords: ['habit', 'usually i', 'i always', 'i tend to'],
+    keywords: ['habit', 'usually i', 'i always', 'i tend to', 'i usually', 'from now on'],
     titleBuilder: () => 'Personal habit',
     importance: 3,
     mood: 'neutral',
     tags: ['habits'],
+  },
+  {
+    category: 'fitness',
+    keywords: ['switched to', "i've switched", 'i have switched', 'train after work', 'train in the morning'],
+    titleBuilder: () => 'Training routine',
+    importance: 3,
+    mood: 'motivated',
+    tags: ['fitness', 'routine'],
+  },
+  {
+    category: 'study',
+    keywords: ["i'm studying", 'i am studying', "i'm working on", 'assignment due', 'exam is'],
+    titleBuilder: () => 'Study context',
+    importance: 3,
+    mood: 'motivated',
+    tags: ['study'],
   },
   {
     category: 'favourites',
@@ -53,7 +70,16 @@ const RULES: ExtractionRule[] = [
   },
   {
     category: 'preferences',
-    keywords: ['i prefer', 'i like', "i don't like", 'i dislike', 'rather than'],
+    keywords: [
+      'i prefer',
+      'i like',
+      "i don't like",
+      'i dislike',
+      'i hate',
+      'rather than',
+      'short answers',
+      'concise answers',
+    ],
     titleBuilder: () => 'Preference',
     importance: 3,
     mood: 'neutral',
@@ -168,6 +194,17 @@ export function extractMemoriesLocally(input: {
   if (text.length < 8) return [];
 
   const lower = text.toLowerCase();
+  if (/^(lol|lmao|haha|just kidding|jk)\b/.test(lower)) return [];
+  if (/^(yeah|yep|ok|okay|thanks|thank you|cool|nice)\b/.test(lower) && text.length < 40) return [];
+  if (/\b(maybe|probably|might|perhaps|whatever|nevermind|never mind)\b/.test(lower) && text.length < 60) {
+    return [];
+  }
+
+  const explicitDecision = assessMemoryWrite(text);
+  if (explicitDecision?.shouldPersist) {
+    return [decisionToCandidate(explicitDecision)];
+  }
+
   const candidates: ExtractedMemoryCandidate[] = [];
   const seen = new Set<string>();
 

@@ -99,6 +99,10 @@ export type GenerateReplyInput = {
   upcomingReminders?: Reminder[];
   currentTime?: string;
   companionContextExtension?: string;
+  talkIntent?: import('../ai/companion-intent').TalkIntent;
+  referencesRecentTurns?: boolean;
+  conversationState?: import('../ai/companion-strategy').ConversationState;
+  contextModules?: string[];
   /** Base64 data URL or remote URL for vision. */
   imageUrlForVision?: string;
   imageAnalysisSummary?: string;

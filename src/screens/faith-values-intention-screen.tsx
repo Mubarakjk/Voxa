@@ -56,7 +56,7 @@ export function FaithValuesIntentionScreen({ navigation }: Props) {
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxxl }]}
           keyboardShouldPersistTaps="handled">
-          <ScreenHeader
+          <ScreenHeader showBack
             title="Today's intention"
             subtitle="A gentle focus — private to you."
           />

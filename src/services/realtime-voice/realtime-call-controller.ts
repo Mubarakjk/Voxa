@@ -16,7 +16,7 @@ import {
 } from './realtime-call-state';
 import { mapCompanionVoiceToRealtime } from './realtime-voice-map';
 import { isWebRTCAvailable, RealtimeWebRTCSession } from './realtime-webrtc-session';
-import { Audio } from 'expo-av';
+import { requestRecordingPermissionsAsync } from 'expo-audio';
 
 export type RealtimeCallListener = (snapshot: RealtimeCallSnapshot) => void;
 
@@ -107,7 +107,7 @@ export class RealtimeCallController {
       return;
     }
 
-    const permission = await Audio.requestPermissionsAsync();
+    const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
       this.dispatch({ type: 'MIC_DENIED' });
       await this.endCall();

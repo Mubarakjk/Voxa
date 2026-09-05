@@ -106,7 +106,7 @@ export function FaithReflectionScreen({ navigation, route }: Props) {
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxxl }]}
           keyboardShouldPersistTaps="handled">
-          <ScreenHeader
+          <ScreenHeader showBack
             title="Private reflection"
             subtitle="Saved on your device. Not shared unless you choose."
           />

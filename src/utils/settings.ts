@@ -1,4 +1,4 @@
-import { hasSupabaseConfig, getDataSourceMode } from '../config/env';
+import { hasSupabaseConfig, getDataSourceModeLabel } from '../config/env';
 import { getVoiceOption } from '../constants/voice-options';
 import {
   CheckInStyle,
@@ -15,7 +15,7 @@ import { NUTRITION_MODE_LABELS, NutritionMode } from '../types/nutrition';
 import { isFeatureVisible } from '../config/feature-status';
 import { isFreeLaunchMode } from '../config/launch-mode';
 import { isScheduledCallsEnabled } from '../config/scheduled-calls';
-import { LEGAL_URLS } from '../constants/legal-urls';
+import { isSupportEmailConfigured, LEGAL_URLS } from '../constants/legal-urls';
 
 const CHECKIN_STYLES: CheckInStyle[] = ['off', 'gentle', 'proactive'];
 
@@ -268,16 +268,15 @@ export function buildSettingsSections(
           label: 'Friendliness',
           value: levelLabel(c.friendliness),
         },
-        {
-          id: 'music',
-          label: 'Music recognition',
-          value: 'Preview',
-        },
-        {
-          id: 'memory-debug',
-          label: 'View saved memories',
-          value: 'Debug',
-        },
+        ...(isFeatureVisible('musicRecognition')
+          ? [
+              {
+                id: 'music',
+                label: 'Music recognition',
+                value: 'Preview',
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -294,7 +293,7 @@ export function buildSettingsSections(
         },
         {
           id: 'notifications',
-          label: 'Push notifications',
+          label: 'Daily check-ins',
           value: profile.preferences.morningGreetingEnabled ? 'On' : 'Off',
         },
         ...(isScheduledCallsEnabled()
@@ -319,8 +318,13 @@ export function buildSettingsSections(
         {
           id: 'data',
           label: 'Data storage',
-          value: getDataSourceMode() === 'supabase' ? 'Supabase cloud' : 'Local only',
+          value: getDataSourceModeLabel(),
           displayOnly: true,
+        },
+        {
+          id: 'view-memories',
+          label: 'What Voxa remembers',
+          value: 'View',
         },
         {
           id: 'privacy-policy',
@@ -390,7 +394,7 @@ export function buildFreeLaunchSettingsSections(
       items: [
         { id: 'theme', label: 'Appearance', value: THEME_LABELS[profile.preferences.theme ?? 'dark'] },
         { id: 'checkins', label: 'Check-in style', value: CHECKIN_LABELS[profile.preferences.checkInStyle] },
-        { id: 'notifications', label: 'Push notifications', value: profile.preferences.morningGreetingEnabled ? 'On' : 'Off' },
+        { id: 'notifications', label: 'Daily check-ins', value: profile.preferences.morningGreetingEnabled ? 'On' : 'Off' },
         { id: 'quiet-hours', label: 'Quiet hours', value: formatQuietHours(profile) },
         { id: 'weather-location', label: 'Weather location', value: weatherLocationLabel },
         { id: 'news-digest', label: 'Your Digest', value: 'Personal notes' },
@@ -414,7 +418,8 @@ export function buildFreeLaunchSettingsSections(
     {
       title: 'Privacy & data',
       items: [
-        { id: 'data', label: 'Data storage', value: getDataSourceMode() === 'supabase' ? 'Cloud sync' : 'Local only', displayOnly: true },
+        { id: 'data', label: 'Data storage', value: getDataSourceModeLabel(), displayOnly: true },
+        { id: 'view-memories', label: 'What Voxa remembers', value: 'View' },
         { id: 'privacy-policy', label: 'Privacy', value: 'View' },
         { id: 'terms', label: 'Terms', value: 'View' },
         { id: 'export-data', label: 'Export data', value: 'JSON' },
@@ -423,7 +428,13 @@ export function buildFreeLaunchSettingsSections(
     },
     {
       title: 'Support',
-      items: [{ id: 'contact-support', label: 'Contact support', value: LEGAL_URLS.supportEmail }],
+      items: [
+        {
+          id: 'contact-support',
+          label: 'Contact support',
+          value: isSupportEmailConfigured() ? LEGAL_URLS.supportEmail : 'Configure in release build',
+        },
+      ],
     },
     {
       title: 'About',

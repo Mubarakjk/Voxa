@@ -48,7 +48,7 @@ export function ConversationDecksScreen() {
   return (
     <ScreenShell padded={false}>
       <View style={styles.headerWrap}>
-        <ScreenHeader title="Conversation Decks" subtitle="Earn deeper topics over time" />
+        <ScreenHeader showBack title="Conversation Decks" subtitle="Earn deeper topics over time" />
       </View>
 
       <FlatList

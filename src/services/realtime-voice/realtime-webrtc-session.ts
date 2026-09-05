@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { setAudioModeAsync } from 'expo-audio';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 
 import { mapConnectionError } from './realtime-call-state';
@@ -332,12 +332,12 @@ export class RealtimeWebRTCSession {
 
   private async configureAudioSession() {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
       realtimeLog('audio_session_configured', { platform: Platform.OS });
     } catch (err) {
@@ -349,12 +349,12 @@ export class RealtimeWebRTCSession {
 
   private async releaseAudioSession() {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
     } catch {
       // ignore

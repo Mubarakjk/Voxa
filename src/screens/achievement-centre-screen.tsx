@@ -22,7 +22,7 @@ export function AchievementCentreScreen() {
   return (
     <ScreenShell padded={false}>
       <View style={styles.headerWrap}>
-        <ScreenHeader title="Achievement Centre" subtitle="Your trophy cabinet" />
+        <ScreenHeader showBack title="Achievement Centre" subtitle="Your trophy cabinet" />
       </View>
       <FlatList
         data={items}
@@ -32,9 +32,16 @@ export function AchievementCentreScreen() {
         renderItem={({ item, index }) => (
           <FadeIn delay={index * 25}>
             <GlassCard style={{ ...styles.card, ...(item.unlockedAt ? {} : styles.locked) }}>
-              <VoxaText variant="subtitle">{item.emoji} {item.title}</VoxaText>
-              <VoxaText variant="caption" color="textMuted">{item.description}</VoxaText>
-              <VoxaText variant="caption" color={item.unlockedAt ? 'primarySoft' : 'textMuted'}>
+              <VoxaText variant="subtitle" style={styles.title}>
+                {item.emoji} {item.title}
+              </VoxaText>
+              <VoxaText variant="caption" color="textMuted" style={styles.description}>
+                {item.description}
+              </VoxaText>
+              <VoxaText
+                variant="caption"
+                color={item.unlockedAt ? 'primarySoft' : 'textMuted'}
+                style={styles.meta}>
                 {item.unlockedAt ? `Unlocked · ${item.rarity}` : `Locked · ${item.rarity}`}
               </VoxaText>
             </GlassCard>
@@ -48,6 +55,13 @@ export function AchievementCentreScreen() {
 const styles = StyleSheet.create({
   headerWrap: { paddingHorizontal: layout.screenPadding, paddingTop: spacing.lg },
   list: { padding: layout.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
-  card: { gap: spacing.xs },
-  locked: { opacity: 0.55 },
+  card: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  locked: { opacity: 0.58 },
+  title: { lineHeight: 22 },
+  description: { lineHeight: 18 },
+  meta: { lineHeight: 17, marginTop: 2 },
 });

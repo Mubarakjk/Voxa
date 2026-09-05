@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { GreetingStyle } from '../../constants/companion-studio-extended';
 import { Goal, Memory, UserProfile } from '../../types';
+import { formatHomeHeroSubline } from '../../utils/home-hero-copy';
 import { dailyPersonalityEngine } from '../personality/daily-personality-engine';
 import { CompanionFocusState, getCompanionFocusState, upsertCompanionFocusState } from './companion-focus-state';
 
@@ -126,27 +127,18 @@ function deriveTodayFocus(input: PresenceContext): string | null {
   return null;
 }
 
-function buildContextualSubline(input: PresenceContext, todayFocus: string | null): string | null {
-  const previous = input.focusState?.previousFocus;
-  if (previous && todayFocus && previous !== todayFocus) {
-    return `Yesterday you worked on ${previous}. Today your biggest focus is ${todayFocus}.`;
-  }
-  if (todayFocus && input.activeGoal?.title && todayFocus.includes(input.activeGoal.title)) {
-    return `Today your biggest focus is ${todayFocus}.`;
-  }
-  if (todayFocus && input.nextRoutineTitle) {
-    return `Today’s focus is ${todayFocus}. Next up: ${input.nextRoutineTitle}.`;
-  }
-  if (todayFocus) {
-    return `Today your biggest focus is ${todayFocus}.`;
-  }
-  if (input.followUpTopic) {
-    return `I wanted to check in about ${input.followUpTopic}.`;
-  }
-  if (input.nextRoutineTitle) {
-    return `Next on your routine: ${input.nextRoutineTitle}.`;
-  }
-  return null;
+function buildHeroSubline(input: PresenceContext, todayFocus: string | null): string {
+  const rememberMoments = input.memories.filter((m) => m.tags?.includes('remember-this'));
+  const rememberContent = rememberMoments[0]?.content ?? rememberMoments[0]?.title ?? null;
+
+  return formatHomeHeroSubline({
+    todayFocusRaw: todayFocus,
+    activeGoalTitle: input.activeGoal?.title ?? null,
+    nextRoutineTitle: input.nextRoutineTitle ?? null,
+    followUpTopic: input.followUpTopic ?? null,
+    previousFocus: input.focusState?.previousFocus ?? null,
+    rememberMomentContent: rememberContent,
+  });
 }
 
 export function buildCompanionGreeting(input: PresenceContext): CompanionGreeting {
@@ -155,13 +147,12 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   const hour = new Date().getHours();
   const daysAway = input.daysAway ?? 0;
   const personality = dailyPersonalityEngine.resolve();
-  const rememberMoments = input.memories.filter((m) => m.tags?.includes('remember-this'));
   const daySeed = Math.floor(Date.now() / 86_400_000) + (input.profile.id?.length ?? 0);
   const lastKey = input.lastGreetingKey ?? null;
   const lastParts = lastKey?.split('||') ?? [];
   const greeting = timeGreeting(hour, firstName, input.greetingStyle, daySeed, lastParts[0]);
   const todayFocus = deriveTodayFocus(input);
-  const contextual = buildContextualSubline(input, todayFocus);
+  const heroSubline = buildHeroSubline(input, todayFocus);
   const moodHeadline = moodAwareHeadline(firstName, input.moodLabel, daySeed + 3);
 
   let mood: CompanionMood = 'calm';
@@ -189,7 +180,7 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (daysAway >= 30) {
     return finish({
       headline: `${firstName} — you're back`,
-      subline: contextual ?? "I'm really happy you came back. Your memories are safe, and I'm here.",
+      subline: heroSubline || "I'm really happy you came back. Your memories are safe, and I'm here.",
       todayFocus,
       mood: 'warm',
       isReturnAfterAbsence: true,
@@ -200,7 +191,7 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (daysAway >= 7) {
     return finish({
       headline: pickRotated([`Good to see you, ${firstName}`, `Missed this, ${firstName}`], daySeed, lastParts[1]),
-      subline: contextual ?? "I've been wondering how you've been. No pressure — just glad you're here.",
+      subline: heroSubline || "I've been wondering how you've been. No pressure — just glad you're here.",
       todayFocus,
       mood: 'warm',
       isReturnAfterAbsence: true,
@@ -211,7 +202,7 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (daysAway >= 3) {
     return finish({
       headline: pickRotated([`Welcome back, ${firstName}`, `Nice to have you back`], daySeed, lastParts[1]),
-      subline: contextual ?? "It's good to have you back. Want to ease in together?",
+      subline: heroSubline || "It's good to have you back. Want to ease in together?",
       todayFocus,
       mood: 'warm',
       isReturnAfterAbsence: true,
@@ -222,11 +213,13 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (daysAway >= 1) {
     return finish({
       headline: pickRotated(welcomeHeadlines, daySeed + 1, lastParts[1]),
-      subline: contextual ?? pickRotated(
-        ['I missed hearing from you yesterday.', 'Glad you came back today.', 'How did yesterday leave you?'],
-        daySeed + 2,
-        lastParts[2],
-      ),
+      subline:
+        heroSubline ||
+        pickRotated(
+          ['I missed hearing from you yesterday.', 'Glad you came back today.', 'How did yesterday leave you?'],
+          daySeed + 2,
+          lastParts[2],
+        ),
       todayFocus,
       mood: 'warm',
       isReturnAfterAbsence: true,
@@ -237,7 +230,7 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (input.streakDays && input.streakDays >= 7 && input.streakDays % 7 === 0) {
     return finish({
       headline: `${input.streakDays}-day streak`,
-      subline: contextual ?? `${voxaName} sees how consistently you show up. That matters.`,
+      subline: heroSubline || `${voxaName} sees how consistently you show up. That matters.`,
       todayFocus,
       mood: 'celebrating',
       isReturnAfterAbsence: false,
@@ -248,63 +241,23 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (moodHeadline) {
     return finish({
       headline: moodHeadline,
-      subline: contextual ?? pickRotated(
-        ['How are you feeling now?', 'Want to talk it through?', "I'm listening whenever you're ready."],
-        daySeed + 4,
-        lastParts[2],
-      ),
+      subline:
+        heroSubline ||
+        pickRotated(
+          ['How are you feeling now?', 'Want to talk it through?', "I'm listening whenever you're ready."],
+          daySeed + 4,
+          lastParts[2],
+        ),
       todayFocus,
       mood,
       isReturnAfterAbsence: false,
       daysAway: 0,
     });
   }
-
-  if (contextual) {
-    return finish({
-      headline: pickRotated(welcomeHeadlines, daySeed + 5, lastParts[1]),
-      subline: contextual,
-      todayFocus,
-      mood,
-      isReturnAfterAbsence: false,
-      daysAway: 0,
-    });
-  }
-
-  if (rememberMoments.length > 0) {
-    const moment = rememberMoments[0];
-    return finish({
-      headline: pickRotated(welcomeHeadlines, daySeed + 6, lastParts[1]),
-      subline: `I still remember: "${moment.content.slice(0, 72)}${moment.content.length > 72 ? '…' : ''}"`,
-      todayFocus,
-      mood: 'warm',
-      isReturnAfterAbsence: false,
-      daysAway: 0,
-    });
-  }
-
-  const fallbacks =
-    hour < 12
-      ? [
-          `Ready when you are — what's on your mind this morning?`,
-          `A new day. I'm here with you.`,
-          `What's one thing that would make today feel better?`,
-        ]
-      : hour < 17
-        ? [
-            `How's your day going? I'm here if you want to talk.`,
-            `Anything I can help you focus on?`,
-            `Need a brainstorm, a plan, or just a check-in?`,
-          ]
-        : [
-            `Winding down together? I'm glad you're here.`,
-            `How are you feeling tonight?`,
-            `Want to reflect, or keep it light?`,
-          ];
 
   return finish({
-    headline: pickRotated(welcomeHeadlines, daySeed + 7, lastParts[1]),
-    subline: pickRotated(fallbacks, daySeed + 8, lastParts[2]),
+    headline: pickRotated(welcomeHeadlines, daySeed + 5, lastParts[1]),
+    subline: heroSubline,
     todayFocus,
     mood,
     isReturnAfterAbsence: false,

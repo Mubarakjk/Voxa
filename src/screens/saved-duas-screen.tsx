@@ -51,7 +51,7 @@ export function SavedDuasScreen({ navigation }: Props) {
   return (
     <ScreenShell padded={false}>
       <View style={styles.pad}>
-        <ScreenHeader
+        <ScreenHeader showBack
           title="Saved duas"
           subtitle="Your private collection — no built-in religious text."
           right={

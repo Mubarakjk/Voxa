@@ -124,7 +124,7 @@ export function NutritionAddMealScreen({ navigation, route }: Props) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ScreenHeader
+          <ScreenHeader showBack
             eyebrow="Log"
             title="Add meal"
             subtitle="Manual, quick add, or a natural-language estimate you can edit."

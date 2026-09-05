@@ -28,7 +28,7 @@ export function MonthlyReplayScreen() {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title={`${replay.monthLabel}`} subtitle="Your month with Voxa" />
+        <ScreenHeader showBack title={`${replay.monthLabel}`} subtitle="Your month with Voxa" />
         <FadeIn>
           <GlassCard style={styles.card}>
             <VoxaText variant="caption" color="primarySoft">Biggest win</VoxaText>

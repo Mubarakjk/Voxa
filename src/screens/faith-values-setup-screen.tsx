@@ -108,7 +108,7 @@ export function FaithValuesSetupScreen({ navigation }: Props) {
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <FadeIn>
-          <ScreenHeader
+          <ScreenHeader showBack
             title="Faith & Values"
             subtitle="Optional and private. You can change or turn this off anytime."
           />

@@ -48,7 +48,7 @@ export function RelationshipGrowthScreen({ navigation }: Props) {
   return (
     <ScreenShell padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader
+        <ScreenHeader showBack
           eyebrow="Built over time"
           title={snapshot.levelLabel}
           subtitle={snapshot.familiarityLine}
@@ -83,17 +83,25 @@ export function RelationshipGrowthScreen({ navigation }: Props) {
 
         <VoxaText variant="subtitle">Conversations you have earned</VoxaText>
         {snapshot.lockedConversations.map((item) => (
-          <GlassCard key={item.id} style={styles.convCard}>
+          <GlassCard
+            key={item.id}
+            style={item.unlocked ? styles.convCard : [styles.convCard, styles.convCardLocked]}>
             <View style={styles.convRow}>
-              <View style={styles.flex}>
-                <VoxaText variant="subtitle" color={item.unlocked ? 'text' : 'textMuted'}>
+              <View style={styles.convCopy}>
+                <VoxaText
+                  variant="subtitle"
+                  color={item.unlocked ? 'text' : 'textMuted'}
+                  style={styles.convTitle}>
                   {item.title}
                 </VoxaText>
-                <VoxaText variant="caption" color="textMuted">{item.description}</VoxaText>
+                <VoxaText variant="caption" color="textMuted" style={styles.convDescription}>
+                  {item.description}
+                </VoxaText>
               </View>
               {item.unlocked ? (
                 <Pressable
                   style={styles.startBtn}
+                  hitSlop={6}
                   onPress={() => {
                     const starter = growthSvc.getUnlockedStarters(snapshot.level).find((s) => s.id === item.id);
                     if (starter) {
@@ -103,7 +111,9 @@ export function RelationshipGrowthScreen({ navigation }: Props) {
                   <VoxaText variant="caption" color="primarySoft">Start</VoxaText>
                 </Pressable>
               ) : (
-                <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+                <View style={styles.lockWrap} accessibilityLabel="Locked">
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+                </View>
               )}
             </View>
           </GlassCard>
@@ -116,8 +126,12 @@ export function RelationshipGrowthScreen({ navigation }: Props) {
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.metric}>
-      <VoxaText variant="title">{value}</VoxaText>
-      <VoxaText variant="caption" color="textMuted">{label}</VoxaText>
+      <VoxaText variant="title" style={styles.metricValue}>
+        {value}
+      </VoxaText>
+      <VoxaText variant="caption" color="textMuted" style={styles.metricLabel}>
+        {label}
+      </VoxaText>
     </View>
   );
 }
@@ -132,26 +146,68 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: colors.primarySoft, borderRadius: radius.lg },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  metrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   metric: {
-    width: '30%',
-    minWidth: 96,
-    gap: 2,
-    padding: spacing.md,
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 0,
+    maxWidth: '100%',
+    gap: spacing.xs,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceStrong,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
   },
-  convCard: { gap: spacing.xs },
-  convRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  flex: { flex: 1, gap: 2 },
+  metricValue: { lineHeight: 28 },
+  metricLabel: {
+    lineHeight: 18,
+    flexShrink: 1,
+  },
+  convCard: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  convCardLocked: {
+    opacity: 0.72,
+  },
+  convRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  convCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.xs,
+    paddingRight: spacing.xs,
+  },
+  convTitle: { lineHeight: 22 },
+  convDescription: { lineHeight: 18 },
   startBtn: {
+    flexShrink: 0,
+    alignSelf: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    minHeight: 36,
+    justifyContent: 'center',
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+    backgroundColor: colors.surfaceQuiet,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+  },
+  lockWrap: {
+    flexShrink: 0,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
   },
 });

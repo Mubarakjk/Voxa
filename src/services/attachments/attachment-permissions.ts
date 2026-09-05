@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 
 export type PermissionState = 'granted' | 'denied' | 'undetermined';
 
@@ -11,7 +11,7 @@ export type MediaPermissions = {
 
 export async function getMediaPermissions(): Promise<MediaPermissions> {
   const [mic, camera, library] = await Promise.all([
-    Audio.getPermissionsAsync(),
+    getRecordingPermissionsAsync(),
     ImagePicker.getCameraPermissionsAsync(),
     ImagePicker.getMediaLibraryPermissionsAsync(),
   ]);
@@ -24,7 +24,7 @@ export async function getMediaPermissions(): Promise<MediaPermissions> {
 }
 
 export async function requestMicrophonePermission(): Promise<boolean> {
-  const result = await Audio.requestPermissionsAsync();
+  const result = await requestRecordingPermissionsAsync();
   return result.granted;
 }
 
@@ -43,7 +43,7 @@ export function permissionErrorLabel(kind: keyof MediaPermissions): string {
     case 'microphone':
       return 'Microphone access is required for voice notes. Enable it in Settings.';
     case 'camera':
-      return 'Camera access is required to take photos or videos. Enable it in Settings.';
+      return 'Camera access is required to take a photo. Enable it in Settings.';
     case 'mediaLibrary':
       return 'Photo library access is required to pick media. Enable it in Settings.';
   }

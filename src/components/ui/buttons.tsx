@@ -41,7 +41,7 @@ export function PrimaryButton({
       ) : icon ? (
         <Ionicons name={icon} size={18} color={textColor} />
       ) : null}
-      <VoxaText variant="caption" style={{ color: textColor, fontWeight: '700' }}>
+      <VoxaText variant="buttonLabel" style={{ color: textColor }}>
         {label}
       </VoxaText>
     </Pressable>
