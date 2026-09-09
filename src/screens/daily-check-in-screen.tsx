@@ -4,12 +4,16 @@ import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-naviga
 import { useCallback, useState } from 'react';
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GoodnightView } from '../components/ritual/goodnight-view';
 import { RitualOverview } from '../components/ritual/ritual-overview';
@@ -46,6 +50,7 @@ type Phase = 'overview' | 'questions' | 'goodnight';
 export function DailyCheckInScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
+  const insets = useSafeAreaInsets();
   const { profile, companion, services } = useVoxa();
   const period = (route.params?.period ?? 'morning') as CheckInPeriod;
   const questions = getCheckInQuestions(period);
@@ -251,134 +256,169 @@ export function DailyCheckInScreen() {
   }
 
   return (
-    <ScreenShell padded={false} glow={isEvening ? 'blue' : undefined}>
-      <ScrollView
-        contentContainerStyle={[styles.scroll, isEvening && styles.eveningScroll]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.back}>
-          <Ionicons name="chevron-back" size={20} color={colors.primarySoft} />
-          <VoxaText variant="caption" color="primarySoft">
-            Back
-          </VoxaText>
-        </Pressable>
+    <ScreenShell padded={false} safeBottom={false} glow={isEvening ? 'blue' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={insets.top}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            isEvening && styles.eveningScroll,
+            { paddingBottom: insets.bottom + spacing.xxxl },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}>
+          {/* Tap blank form space to dismiss — children (chips/inputs/CTA) still receive presses. */}
+          <Pressable style={styles.formBody} onPress={Keyboard.dismiss} accessible={false}>
+            <Pressable onPress={() => navigation.goBack()} style={styles.back}>
+              <Ionicons name="chevron-back" size={20} color={colors.primarySoft} />
+              <VoxaText variant="caption" color="primarySoft">
+                Back
+              </VoxaText>
+            </Pressable>
 
-        {content ? (
-          <>
-            <VoxaText variant="title" style={styles.greeting}>
-              {content.greeting}
-            </VoxaText>
-            <VoxaText variant="body" color="textSecondary" style={styles.subGreeting}>
-              {content.subGreeting}
-            </VoxaText>
-
-            {streaks && streaks.combined > 0 ? (
-              <View style={styles.streakRow}>
-                <VoxaText variant="caption" color="primarySoft">
-                  ☀ {streaks.morning}m · 🌙 {streaks.evening}e · {streaks.combined} combined
-                </VoxaText>
-              </View>
-            ) : null}
-
-            {phase === 'overview' ? (
+            {content ? (
               <>
-                <RitualOverview period={period} content={content} />
-                <PrimaryButton
-                  label={period === 'morning' ? 'Continue' : 'Begin reflection'}
-                  onPress={() => setPhase('questions')}
-                />
-                <Pressable onPress={() => void finish(false, true)} style={styles.secondary}>
-                  <VoxaText variant="caption" color="textMuted">
-                    Remind me later
-                  </VoxaText>
-                </Pressable>
-                <Pressable onPress={() => void finish(true)} style={styles.secondary}>
-                  <VoxaText variant="caption" color="textMuted">
-                    Skip for now
-                  </VoxaText>
-                </Pressable>
+                <VoxaText variant="title" style={styles.greeting}>
+                  {content.greeting}
+                </VoxaText>
+                <VoxaText variant="body" color="textSecondary" style={styles.subGreeting}>
+                  {content.subGreeting}
+                </VoxaText>
+
+                {streaks && streaks.combined > 0 ? (
+                  <View style={styles.streakRow}>
+                    <VoxaText variant="caption" color="primarySoft">
+                      ☀ {streaks.morning}m · 🌙 {streaks.evening}e · {streaks.combined} combined
+                    </VoxaText>
+                  </View>
+                ) : null}
+
+                {phase === 'overview' ? (
+                  <>
+                    <RitualOverview period={period} content={content} />
+                    <PrimaryButton
+                      label={period === 'morning' ? 'Continue' : 'Begin reflection'}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setPhase('questions');
+                      }}
+                    />
+                    <Pressable onPress={() => void finish(false, true)} style={styles.secondary}>
+                      <VoxaText variant="caption" color="textMuted">
+                        Remind me later
+                      </VoxaText>
+                    </Pressable>
+                    <Pressable onPress={() => void finish(true)} style={styles.secondary}>
+                      <VoxaText variant="caption" color="textMuted">
+                        Skip for now
+                      </VoxaText>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.field}>
+                      <VoxaText variant="subtitle">How are you feeling today?</VoxaText>
+                      <View style={styles.moodChips}>
+                        {DAILY_MOOD_CHIPS.map((chip) => {
+                          const active = moodChip === chip.id;
+                          return (
+                            <SpringPressable
+                              key={chip.id}
+                              onPress={() => {
+                                Keyboard.dismiss();
+                                void hapticSelection();
+                                setMoodChip(chip.id);
+                                if (chip.id !== 'custom' && chip.mood) {
+                                  setAnswers((current) => ({ ...current, mood: chip.label }));
+                                }
+                              }}
+                              style={active ? [styles.moodChip, styles.moodChipActive] : styles.moodChip}>
+                              <VoxaText variant="caption" color={active ? 'primarySoft' : 'textMuted'}>
+                                {chip.label}
+                              </VoxaText>
+                            </SpringPressable>
+                          );
+                        })}
+                      </View>
+                      {moodChip === 'custom' ? (
+                        <TextInput
+                          value={customMood}
+                          onChangeText={(text) => {
+                            setCustomMood(text);
+                            setAnswers((current) => ({ ...current, mood: text }));
+                          }}
+                          placeholder="In your own words…"
+                          placeholderTextColor={colors.textMuted}
+                          style={styles.input}
+                          returnKeyType="done"
+                          blurOnSubmit
+                          onSubmitEditing={Keyboard.dismiss}
+                          accessibilityLabel="Custom mood"
+                        />
+                      ) : null}
+                    </View>
+                    {questions
+                      .filter((question) => question.id !== 'mood')
+                      .map((question) => (
+                        <View key={question.id} style={styles.field}>
+                          <VoxaText variant="subtitle">{question.label}</VoxaText>
+                          <TextInput
+                            value={answers[question.id] ?? ''}
+                            onChangeText={(text) => setAnswers((current) => ({ ...current, [question.id]: text }))}
+                            placeholder={question.placeholder}
+                            placeholderTextColor={colors.textMuted}
+                            style={styles.input}
+                            multiline
+                            blurOnSubmit={false}
+                            textAlignVertical="top"
+                            accessibilityLabel={question.label}
+                          />
+                        </View>
+                      ))}
+                    <PrimaryButton
+                      label={period === 'morning' ? 'Start my day' : 'Save reflection'}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        void finish(false);
+                      }}
+                      loading={saving}
+                    />
+                    <Pressable
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setPhase('overview');
+                      }}
+                      style={styles.secondary}>
+                      <VoxaText variant="caption" color="textMuted">
+                        Back to overview
+                      </VoxaText>
+                    </Pressable>
+                  </>
+                )}
               </>
             ) : (
-              <>
-                <View style={styles.field}>
-                  <VoxaText variant="subtitle">How are you feeling today?</VoxaText>
-                  <View style={styles.moodChips}>
-                    {DAILY_MOOD_CHIPS.map((chip) => {
-                      const active = moodChip === chip.id;
-                      return (
-                        <SpringPressable
-                          key={chip.id}
-                          onPress={() => {
-                            void hapticSelection();
-                            setMoodChip(chip.id);
-                            if (chip.id !== 'custom' && chip.mood) {
-                              setAnswers((current) => ({ ...current, mood: chip.label }));
-                            }
-                          }}
-                          style={active ? [styles.moodChip, styles.moodChipActive] : styles.moodChip}>
-                          <VoxaText variant="caption" color={active ? 'primarySoft' : 'textMuted'}>
-                            {chip.label}
-                          </VoxaText>
-                        </SpringPressable>
-                      );
-                    })}
-                  </View>
-                  {moodChip === 'custom' ? (
-                    <TextInput
-                      value={customMood}
-                      onChangeText={(text) => {
-                        setCustomMood(text);
-                        setAnswers((current) => ({ ...current, mood: text }));
-                      }}
-                      placeholder="In your own words…"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.input}
-                      accessibilityLabel="Custom mood"
-                    />
-                  ) : null}
-                </View>
-                {questions
-                  .filter((question) => question.id !== 'mood')
-                  .map((question) => (
-                    <View key={question.id} style={styles.field}>
-                      <VoxaText variant="subtitle">{question.label}</VoxaText>
-                      <TextInput
-                        value={answers[question.id] ?? ''}
-                        onChangeText={(text) => setAnswers((current) => ({ ...current, [question.id]: text }))}
-                        placeholder={question.placeholder}
-                        placeholderTextColor={colors.textMuted}
-                        style={styles.input}
-                        multiline
-                      />
-                    </View>
-                  ))}
-                <PrimaryButton
-                  label={period === 'morning' ? 'Start my day' : 'Save reflection'}
-                  onPress={() => void finish(false)}
-                  loading={saving}
-                />
-                <Pressable onPress={() => setPhase('overview')} style={styles.secondary}>
-                  <VoxaText variant="caption" color="textMuted">
-                    Back to overview
-                  </VoxaText>
-                </Pressable>
-              </>
+              <VoxaText variant="body" color="textMuted">
+                Preparing your ritual…
+              </VoxaText>
             )}
-          </>
-        ) : (
-          <VoxaText variant="body" color="textMuted">
-            Preparing your ritual…
-          </VoxaText>
-        )}
-      </ScrollView>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   scroll: {
+    flexGrow: 1,
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: spacing.xxl,
+  },
+  formBody: {
+    flexGrow: 1,
     gap: spacing.lg,
   },
   eveningScroll: { backgroundColor: colors.backgroundDeep },

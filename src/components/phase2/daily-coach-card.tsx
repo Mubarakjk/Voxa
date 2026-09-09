@@ -25,12 +25,12 @@ export function DailyCoachCard({ coach, compact }: DailyCoachCardProps) {
           {coach.greeting}
         </VoxaText>
       ) : null}
-      <VoxaText variant="body" color="textSecondary">
+      <VoxaText variant="body" color="textSecondary" style={styles.message}>
         {coach.message}
       </VoxaText>
       <View style={styles.focusRow}>
         <Ionicons name="compass-outline" size={14} color={colors.textMuted} />
-        <VoxaText variant="caption" color="textMuted">
+        <VoxaText variant="caption" color="textMuted" style={styles.focusText}>
           Focus: {coach.focus}
         </VoxaText>
       </View>
@@ -44,9 +44,20 @@ export function DailyCoachCard({ coach, compact }: DailyCoachCardProps) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: spacing.sm },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  greeting: { marginTop: spacing.xs },
-  focusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
-  adapted: { marginTop: 4, fontStyle: 'italic' },
+  greeting: { marginTop: spacing.xs, lineHeight: 24 },
+  message: { lineHeight: 22 },
+  focusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  focusText: { flex: 1, minWidth: 0, lineHeight: 18 },
+  adapted: { marginTop: spacing.xs, fontStyle: 'italic', lineHeight: 18, paddingBottom: spacing.xs },
 });

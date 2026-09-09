@@ -5,6 +5,7 @@ import { TalkIntent } from './companion-intent';
 import { logFeature } from '../../utils/feature-logger';
 import { buildVoxaSystemPrompt } from './voxa-system-prompt';
 import { TalkAIError } from './talk-ai-errors';
+import { TURN_INTELLIGENCE_END } from './turn-intelligence-plan';
 
 export type GatewayChatMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -71,6 +72,22 @@ export function trimContextExtension(extension?: string): string {
     .trim();
   if (!normalized) return '';
   return truncateText(normalized, AI_GATEWAY_BUDGETS.maxContextExtensionChars);
+}
+
+/** Length of identity + safety + the authoritative turn block. Never cut this prefix. */
+export function systemPromptProtectedPrefixLength(system: string): number {
+  const end = system.indexOf(TURN_INTELLIGENCE_END);
+  if (end < 0) return 0;
+  return end + TURN_INTELLIGENCE_END.length;
+}
+
+export function truncateSystemPromptPreservingTurnPlan(system: string, maxChars: number): string {
+  const protectedLen = systemPromptProtectedPrefixLength(system);
+  if (system.length <= maxChars) return system;
+  if (protectedLen > 0 && maxChars < protectedLen) {
+    return system.slice(0, protectedLen);
+  }
+  return truncateText(system, maxChars);
 }
 
 export function mapConversationHistory(history: Message[]): GatewayChatMessage[] {
@@ -140,10 +157,13 @@ function enforceTotalPayloadBudget(messages: GatewayChatMessage[]): GatewayChatM
 
     if (systemIndex >= 0) {
       const system = trimmed[systemIndex];
-      const nextLength = Math.max(1_500, Math.floor(system.content.length * 0.9));
+      const protectedLen = systemPromptProtectedPrefixLength(system.content);
+      const floor = Math.max(1_500, protectedLen);
+      const nextLength = Math.max(floor, Math.floor(system.content.length * 0.9));
       if (nextLength < system.content.length) {
-        totalChars -= system.content.length - nextLength;
-        system.content = truncateText(system.content, nextLength);
+        const next = truncateSystemPromptPreservingTurnPlan(system.content, nextLength);
+        totalChars -= system.content.length - next.length;
+        system.content = next;
         reduced = true;
       }
     }
@@ -213,7 +233,7 @@ export function buildBoundedGatewayChatMessages(input: GenerateReplyInput): {
   const goals = trimGoalsForPrompt(input.goals ?? []);
   const upcomingReminders = trimRemindersForPrompt(input.upcomingReminders ?? []);
 
-  const systemPrompt = truncateText(
+  const systemPrompt = truncateSystemPromptPreservingTurnPlan(
     buildVoxaSystemPrompt({
       userProfile: input.userProfile,
       mode: input.mode,
@@ -222,9 +242,11 @@ export function buildBoundedGatewayChatMessages(input: GenerateReplyInput): {
       upcomingReminders,
       currentTime: input.currentTime ?? new Date().toISOString(),
       companionContextExtension: contextExtension,
+      turnIntelligenceBlock: input.turnIntelligenceBlock,
       talkIntent: input.talkIntent,
       referencesRecentTurns: input.referencesRecentTurns,
       conversationState: input.conversationState,
+      userMessage: input.userMessage,
     }),
     AI_GATEWAY_BUDGETS.maxSystemPromptChars + AI_GATEWAY_BUDGETS.maxContextExtensionChars,
   );

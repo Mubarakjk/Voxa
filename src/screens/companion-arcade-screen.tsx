@@ -53,7 +53,7 @@ export function CompanionArcadeScreen() {
           <Pressable onPress={() => navigation.navigate('GamesHub')} style={styles.hubLink}>
             <GlassCard style={styles.hubCard}>
               <VoxaText variant="subtitle">Social Games Hub</VoxaText>
-              <VoxaText variant="caption" color="textMuted">
+              <VoxaText variant="caption" color="textMuted" style={styles.hubDescription}>
                 Impostor, Night Circle, Would You Rather, and more — local pass-and-play.
               </VoxaText>
             </GlassCard>
@@ -66,12 +66,18 @@ export function CompanionArcadeScreen() {
               <Pressable onPress={() => playGame(item)}>
                 <GlassCard style={styles.card}>
                   <View style={styles.row}>
-                    <VoxaText variant="subtitle">{item.emoji} {item.title}</VoxaText>
-                    <VoxaText variant="caption" color="primarySoft">+{item.xpReward} XP</VoxaText>
+                    <VoxaText variant="subtitle" style={styles.gameTitle} numberOfLines={2}>
+                      {item.emoji} {item.title}
+                    </VoxaText>
+                    <VoxaText variant="caption" color="primarySoft" style={styles.xp}>
+                      +{item.xpReward} XP
+                    </VoxaText>
                   </View>
-                  <VoxaText variant="caption" color="textMuted">{item.description}</VoxaText>
+                  <VoxaText variant="caption" color="textMuted" style={styles.gameDescription}>
+                    {item.description}
+                  </VoxaText>
                   {s ? (
-                    <VoxaText variant="caption" color="textMuted">
+                    <VoxaText variant="caption" color="textMuted" style={styles.statsLine}>
                       Played {s.gamesPlayed} · Wins {s.wins} · Streak {s.streak}
                     </VoxaText>
                   ) : null}
@@ -90,9 +96,32 @@ export function CompanionArcadeScreen() {
 
 const styles = StyleSheet.create({
   headerWrap: { paddingHorizontal: layout.screenPadding, paddingTop: spacing.lg },
-  list: { padding: layout.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
-  card: { gap: spacing.xs },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  list: {
+    padding: layout.screenPadding,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl * 2,
+  },
+  card: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    minHeight: 88,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  gameTitle: { flex: 1, minWidth: 0, lineHeight: 22 },
+  xp: { flexShrink: 0, lineHeight: 18, paddingTop: 2 },
+  gameDescription: { lineHeight: 19 },
+  statsLine: { lineHeight: 18, paddingTop: spacing.xs },
   hubLink: { marginBottom: spacing.sm },
-  hubCard: { gap: spacing.xs },
+  hubCard: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  hubDescription: { lineHeight: 19 },
 });

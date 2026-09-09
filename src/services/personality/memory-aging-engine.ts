@@ -1,5 +1,6 @@
 import { Memory, MemoryCategory, nowIso } from '../../types';
 import { CreateMemoryInput, UpdateMemoryInput } from '../../types';
+import { parseUserTemporal } from '../memory/temporal-memory';
 
 const CATEGORY_EMOTIONAL: Partial<Record<MemoryCategory, Memory['emotionalSignificance']>> = {
   birthdays: 5,
@@ -135,33 +136,8 @@ export class MemoryAgingEngine {
 
 export const memoryAgingEngine = new MemoryAgingEngine();
 
-function inferExpiryFromContent(category: MemoryCategory, content: string): string | undefined {
-  const lower = content.toLowerCase();
-  const now = new Date();
-
-  if (/\b(tomorrow|due tomorrow|interview is tomorrow|exam is tomorrow)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 3);
-    return expiry.toISOString();
-  }
-
-  if (/\b(today|tonight|this evening)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 2);
-    return expiry.toISOString();
-  }
-
-  if (/\b(next week|this week)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 14);
-    return expiry.toISOString();
-  }
-
-  if (category === 'moments' && /\b(interview|deadline|exam|assignment)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 21);
-    return expiry.toISOString();
-  }
-
+function inferExpiryFromContent(_category: MemoryCategory, content: string): string | undefined {
+  const parsed = parseUserTemporal(content, new Date());
+  if (parsed) return parsed.expiresAt;
   return undefined;
 }

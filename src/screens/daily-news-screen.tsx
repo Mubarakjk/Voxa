@@ -55,17 +55,25 @@ export function DailyNewsScreen(_props: Props) {
           subtitle="Personal companion notes from your goals and routines — not external world headlines."
         />
         <GlassCard style={styles.card}>
-          <VoxaText variant="subtitle">{digest.headline}</VoxaText>
-          <VoxaText variant="body" color="textSecondary">{digest.companionTake}</VoxaText>
+          <VoxaText variant="subtitle" style={styles.title}>
+            {digest.headline}
+          </VoxaText>
+          <VoxaText variant="body" color="textSecondary" style={styles.body}>
+            {digest.companionTake}
+          </VoxaText>
         </GlassCard>
         {digest.items.map((item) => (
           <GlassCard key={item.id} style={styles.card}>
-            <VoxaText variant="caption" color="primarySoft">
+            <VoxaText variant="caption" color="primarySoft" style={styles.category}>
               {item.category}
               {item.source ? ` · ${item.source}` : ' · Voxa'}
             </VoxaText>
-            <VoxaText variant="subtitle">{item.title}</VoxaText>
-            <VoxaText variant="body" color="textSecondary">{item.summary}</VoxaText>
+            <VoxaText variant="subtitle" style={styles.title}>
+              {item.title}
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.body}>
+              {item.summary}
+            </VoxaText>
           </GlassCard>
         ))}
       </ScrollView>
@@ -74,6 +82,17 @@ export function DailyNewsScreen(_props: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.sm },
-  card: { gap: spacing.xs },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  category: { lineHeight: 18 },
+  title: { lineHeight: 24 },
+  body: { lineHeight: 22 },
 });

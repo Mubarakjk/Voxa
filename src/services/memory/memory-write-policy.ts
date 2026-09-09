@@ -11,6 +11,13 @@ import {
   inferSemanticSlot,
   importanceFromLevel,
 } from './memory-taxonomy';
+import { isDurableEnoughToStore } from './memory-quality';
+import { TAG_SENSITIVE, detectMemorySensitivity, shouldPersistSensitiveFact } from './memory-sensitivity';
+import { isOpenLoopEligible } from './open-loop-service';
+import { mergeTemporalTags, parseUserTemporal } from './temporal-memory';
+import { TemporalParseContext, resolveDeviceTimeZone } from './temporal-parse';
+
+export type MemoryWriteContext = Partial<TemporalParseContext>;
 
 export type MemoryWriteDecision = {
   shouldPersist: boolean;
@@ -18,6 +25,7 @@ export type MemoryWriteDecision = {
   confidenceKind: MemoryConfidenceKind;
   confidenceScore: number;
   expiresAt?: string;
+  occurredAt?: string;
   tags: string[];
   semanticSlot: MemorySemanticSlot;
   title: string;
@@ -30,28 +38,47 @@ const TRANSIENT_PATTERNS = [
   /^(lol|lmao|haha|jk|just kidding)\b/i,
   /^(yeah|yep|ok|okay|thanks|thank you|cool|nice|sure)\b/i,
   /\b(right now|at the moment|currently eating|just ate)\b/i,
-  /\b(maybe|probably|might|perhaps|whatever|nevermind|never mind)\b/i,
 ];
+
+const SHORT_HEDGE = /\b(maybe|probably|might|perhaps|whatever|nevermind|never mind)\b/i;
 
 const EXPLICIT_REMEMBER = /\b(remember that|remember this|don't forget|do not forget)\b/i;
 const EXPLICIT_CORRECTION = /\b(that's wrong|that is wrong|actually|i don't anymore|anymore|not anymore|from now on|i switched|i've switched|i have switched|i stopped|i've stopped|i hate|i don't like)\b/i;
 const EXPLICIT_CONVERSATIONAL_STYLE =
   /\b(keep your (replies|answers) short|be more direct with me|be more direct|don't ask me loads of questions|don't ask so many questions|i like detailed explanations|be honest and just pick|you can joke with me)\b/i;
 
-const EXPLICIT_PREFERENCE = /\b(i prefer|i like|i love|i usually|i always|my goal is|i'm trying to|i am trying to|i'm working on|i am working on|i'm studying|i'm applying for|my interview is|my exam is)\b/i;
+const EXPLICIT_PREFERENCE = /\b(i prefer|i like|i love|i usually|i always|my goal is|i'm trying to|i am trying to|i'm working on|i am working on|i'm studying|i'm applying for|my interview is|my exam is|i box|times a week|i'm building|i am building)\b/i;
 
-const EVENT_TEMPORAL = /\b(tomorrow|today|tonight|this week|next week|on friday|on monday|due tomorrow|interview is|exam is|deadline)\b/i;
+const EXPLICIT_EVENT =
+  /\b(driving test|i'?ve got (my|a|an) (driving test|interview|exam|test|deadline|meeting|appointment)|my test is|interview is|exam is|deadline is|they moved|rescheduled|postponed|waiting to hear|trying to finish|need to decide whether|accept the offer|meeting \w+ tomorrow)\b/i;
 
-export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | null {
+const EVENT_TEMPORAL = /\b(tomorrow|today|tonight|this week|next week|this weekend|on friday|on monday|due tomorrow|interview is|exam is|deadline|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b/i;
+
+export function assessMemoryWrite(
+  userMessage: string,
+  writeContext?: MemoryWriteContext,
+): MemoryWriteDecision | null {
   const text = userMessage.trim();
   if (text.length < 8) return null;
 
   const lower = text.toLowerCase();
+  const ctx = normalizeWriteContext(writeContext);
   if (TRANSIENT_PATTERNS.some((pattern) => pattern.test(lower)) && !EXPLICIT_REMEMBER.test(lower)) {
     return null;
   }
+  if (SHORT_HEDGE.test(lower) && text.length < 40 && !EXPLICIT_EVENT.test(lower) && !EXPLICIT_REMEMBER.test(lower)) {
+    return null;
+  }
+  if (!isDurableEnoughToStore(text) && !EXPLICIT_REMEMBER.test(lower)) {
+    return null;
+  }
 
-  if (EXPLICIT_REMEMBER.test(lower)) {
+  const explicitRemember = EXPLICIT_REMEMBER.test(lower);
+  if (!shouldPersistSensitiveFact(text, explicitRemember)) {
+    return null;
+  }
+
+  if (explicitRemember) {
     const content = text.replace(/remember (that|this)/i, '').replace(/don't forget/i, '').trim();
     return buildDecision({
       content: content || text,
@@ -59,8 +86,9 @@ export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | nu
       category: 'moments',
       importance: 4,
       confidenceKind: 'explicit',
-      tags: [TAG_EXPLICIT],
+      tags: sensitiveTags(text, [TAG_EXPLICIT]),
       reason: 'explicit_remember_request',
+      ctx,
     });
   }
 
@@ -73,10 +101,11 @@ export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | nu
       confidenceKind: 'explicit',
       tags: [TAG_EXPLICIT, 'conversational_preference'],
       reason: 'explicit_conversational_preference',
+      ctx,
     });
   }
 
-  if (EXPLICIT_CORRECTION.test(lower)) {
+  if (EXPLICIT_CORRECTION.test(lower) || /\b(moved|reschedul|postponed)\b/i.test(lower)) {
     const category = inferCategoryFromText(lower);
     return buildDecision({
       content: text,
@@ -86,13 +115,14 @@ export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | nu
       confidenceKind: 'explicit',
       tags: [TAG_EXPLICIT],
       reason: 'explicit_correction',
+      ctx,
     });
   }
 
-  if (EXPLICIT_PREFERENCE.test(lower)) {
+  if (EXPLICIT_PREFERENCE.test(lower) || EXPLICIT_EVENT.test(lower)) {
     const category = inferCategoryFromText(lower);
     const importance: MemoryImportanceLevel =
-      /\bmy goal is|working on|trying to|applying for\b/.test(lower) ? 4 : 3;
+      /\bmy goal is|working on|trying to|applying for|building\b/.test(lower) ? 4 : 3;
     return buildDecision({
       content: text,
       title: inferTitleFromText(lower, category),
@@ -101,7 +131,8 @@ export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | nu
       confidenceKind: 'explicit',
       tags: [TAG_EXPLICIT],
       reason: 'explicit_statement',
-      temporal: EVENT_TEMPORAL.test(lower),
+      temporal: EVENT_TEMPORAL.test(lower) || EXPLICIT_EVENT.test(lower),
+      ctx,
     });
   }
 
@@ -111,43 +142,79 @@ export function assessMemoryWrite(userMessage: string): MemoryWriteDecision | nu
 export function enrichCandidateDecision(
   candidate: ExtractedMemoryCandidate,
   userMessage: string,
+  writeContext?: MemoryWriteContext,
 ): MemoryWriteDecision {
-  const explicit = assessMemoryWrite(userMessage);
+  const ctx = normalizeWriteContext(writeContext);
+  const explicit = assessMemoryWrite(userMessage, ctx);
   const importance = Math.max(
     explicit?.importance ?? 0,
     candidate.importance ?? 2,
   ) as MemoryImportanceLevel;
 
+  if (!isDurableEnoughToStore(userMessage) && !explicit) {
+    return skipDecision(candidate, 'ephemeral_chatter', importance);
+  }
+
+  if (!shouldPersistSensitiveFact(userMessage, Boolean(explicit && explicit.reason === 'explicit_remember_request'))) {
+    return skipDecision(candidate, 'sensitive_without_explicit_remember', importance);
+  }
+
   if (importance <= TRANSIENT_IMPORTANCE_THRESHOLD) {
-    return {
-      shouldPersist: false,
-      importance,
-      confidenceKind: 'inferred',
-      confidenceScore: 0.45,
-      tags: [TAG_INFERRED],
-      semanticSlot: inferSemanticSlot(candidate.category, candidate.content),
-      title: candidate.title,
-      category: candidate.category,
-      content: candidate.content,
-      reason: 'importance_too_low',
-    };
+    return skipDecision(candidate, 'importance_too_low', importance);
   }
 
   const confidenceKind: MemoryConfidenceKind = explicit ? 'explicit' : 'high';
-  const tags = mergeTags(candidate.tags, explicit?.tags ?? [TAG_EXPLICIT]);
+  const parsed = explicit?.occurredAt
+    ? parseUserTemporal(userMessage, ctx.now, ctx.timeZone)
+    : parseUserTemporal(candidate.content, ctx.now, ctx.timeZone) ??
+      parseUserTemporal(userMessage, ctx.now, ctx.timeZone);
+
+  let confidenceScore = confidenceKind === 'explicit' ? 0.92 : 0.78;
+  if (parsed?.temporalConfidence === 'medium') confidenceScore = Math.min(confidenceScore, 0.7);
+  if (parsed?.temporalConfidence === 'low') confidenceScore = Math.min(confidenceScore, 0.52);
+  if (/\b(i think|probably)\b/i.test(userMessage)) confidenceScore = Math.min(confidenceScore, 0.68);
+  if (/\b(maybe|might|sometime)\b/i.test(userMessage)) confidenceScore = Math.min(confidenceScore, 0.48);
+
+  const tags = mergeTemporalTags(
+    mergeTags(
+      mergeTags(candidate.tags, sensitiveTags(userMessage, explicit?.tags ?? [TAG_EXPLICIT])),
+      isOpenLoopEligible(userMessage) || isOpenLoopEligible(candidate.content) ? [TAG_OPEN_LOOP] : [],
+    ),
+    parsed,
+  );
 
   return {
     shouldPersist: true,
     importance,
     confidenceKind,
-    confidenceScore: confidenceKind === 'explicit' ? 0.92 : 0.78,
-    expiresAt: resolveExpiry(candidate.category, candidate.content),
+    confidenceScore,
+    expiresAt: parsed?.expiresAt ?? explicit?.expiresAt ?? resolveExpiry(candidate.category, candidate.content, ctx),
+    occurredAt: parsed?.occurredAt,
     tags,
     semanticSlot: inferSemanticSlot(candidate.category, candidate.content),
     title: candidate.title,
     category: candidate.category,
     content: candidate.content,
     reason: explicit ? 'explicit_enriched_candidate' : 'rule_candidate',
+  };
+}
+
+function skipDecision(
+  candidate: ExtractedMemoryCandidate,
+  reason: string,
+  importance: MemoryImportanceLevel,
+): MemoryWriteDecision {
+  return {
+    shouldPersist: false,
+    importance,
+    confidenceKind: 'inferred',
+    confidenceScore: 0.45,
+    tags: [TAG_INFERRED],
+    semanticSlot: inferSemanticSlot(candidate.category, candidate.content),
+    title: candidate.title,
+    category: candidate.category,
+    content: candidate.content,
+    reason,
   };
 }
 
@@ -160,17 +227,25 @@ function buildDecision(input: {
   tags: string[];
   reason: string;
   temporal?: boolean;
+  ctx: TemporalParseContext;
 }): MemoryWriteDecision {
   const slot = inferSemanticSlot(input.category, input.content);
-  const openLoopTags = input.temporal || slot === 'upcoming_event' ? [TAG_OPEN_LOOP] : [];
+  const parsed = parseUserTemporal(input.content, input.ctx.now, input.ctx.timeZone);
+  const openLoopTags = isOpenLoopEligible(input.content) ? [TAG_OPEN_LOOP] : [];
+  let confidenceScore = input.confidenceKind === 'explicit' ? 0.92 : 0.75;
+  if (parsed?.temporalConfidence === 'medium') confidenceScore = Math.min(confidenceScore, 0.7);
+  if (parsed?.temporalConfidence === 'low') confidenceScore = Math.min(confidenceScore, 0.5);
+  if (/\b(i think|probably)\b/i.test(input.content)) confidenceScore = Math.min(confidenceScore, 0.68);
+  if (/\b(maybe|might|sometime)\b/i.test(input.content)) confidenceScore = Math.min(confidenceScore, 0.48);
 
   return {
     shouldPersist: input.importance > TRANSIENT_IMPORTANCE_THRESHOLD,
     importance: input.importance,
     confidenceKind: input.confidenceKind,
-    confidenceScore: input.confidenceKind === 'explicit' ? 0.92 : 0.75,
-    expiresAt: resolveExpiry(input.category, input.content),
-    tags: [...input.tags, ...openLoopTags],
+    confidenceScore,
+    expiresAt: parsed?.expiresAt ?? resolveExpiry(input.category, input.content, input.ctx),
+    occurredAt: parsed?.occurredAt,
+    tags: mergeTemporalTags([...input.tags, ...openLoopTags], parsed),
     semanticSlot: slot,
     title: input.title,
     category: input.category,
@@ -180,15 +255,16 @@ function buildDecision(input: {
 }
 
 function inferCategoryFromText(lower: string): MemoryCategory {
-  if (/\b(goal|working toward|trying to)\b/.test(lower)) return 'goals';
-  if (/\b(train(?:ing|s|ed)?|gym|workout|exercise|switched to)\b/.test(lower)) return 'fitness';
+  if (/\b(goal|working toward|trying to|building)\b/.test(lower)) return 'goals';
+  if (/\b(train(?:ing|s|ed)?|gym|workout|exercise|switched to|i box|boxing)\b/.test(lower)) return 'fitness';
   if (/\b(study|exam|assignment|class)\b/.test(lower)) return 'study';
-  if (/\b(my mom|my dad|my friend|my partner)\b/.test(lower)) return 'people';
-  if (/\b(interview|deadline|tomorrow|next week)\b/.test(lower)) return 'moments';
+  if (/\b(my mom|my dad|my friend|my partner|my sister|my brother)\b/.test(lower)) return 'people';
+  if (/\b(interview|deadline|tomorrow|next week|driving test|friday|test is)\b/.test(lower)) return 'moments';
   return 'preferences';
 }
 
 function inferTitleFromText(lower: string, category: MemoryCategory): string {
+  if (/\bdriving test\b/.test(lower)) return 'Driving test';
   if (category === 'goals') return 'Personal goal';
   if (category === 'fitness') return 'Training preference';
   if (category === 'study') return 'Study context';
@@ -197,31 +273,13 @@ function inferTitleFromText(lower: string, category: MemoryCategory): string {
   return 'Preference';
 }
 
-function resolveExpiry(category: MemoryCategory, content: string): string | undefined {
-  const lower = content.toLowerCase();
-  const now = new Date();
-
-  if (/\b(tomorrow|due tomorrow|interview is tomorrow|exam is tomorrow)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 3);
-    return expiry.toISOString();
-  }
-
-  if (/\b(today|tonight|this evening)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 2);
-    return expiry.toISOString();
-  }
-
-  if (/\b(next week|this week)\b/.test(lower)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 14);
-    return expiry.toISOString();
-  }
+function resolveExpiry(category: MemoryCategory, content: string, ctx: TemporalParseContext): string | undefined {
+  const parsed = parseUserTemporal(content, ctx.now, ctx.timeZone);
+  if (parsed) return parsed.expiresAt;
 
   if (['work', 'business', 'productivity'].includes(category)) {
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 90);
+    const expiry = new Date(ctx.now);
+    expiry.setUTCDate(expiry.getUTCDate() + 90);
     return expiry.toISOString();
   }
 
@@ -232,9 +290,22 @@ function mergeTags(base: string[] = [], extra: string[] = []): string[] {
   return [...new Set([...base, ...extra].map((tag) => tag.trim()).filter(Boolean))];
 }
 
+function sensitiveTags(text: string, base: string[]): string[] {
+  if (detectMemorySensitivity(text) === 'none') return base;
+  return mergeTags(base, [TAG_SENSITIVE]);
+}
+
+function normalizeWriteContext(writeContext?: MemoryWriteContext): TemporalParseContext {
+  return {
+    now: writeContext?.now ?? new Date(),
+    timeZone: resolveDeviceTimeZone(writeContext?.timeZone),
+  };
+}
+
 export function decisionToCandidate(decision: MemoryWriteDecision): ExtractedMemoryCandidate & {
   confidence?: number;
   expiresAt?: string;
+  occurredAt?: string;
 } {
   return {
     category: decision.category,
@@ -245,5 +316,6 @@ export function decisionToCandidate(decision: MemoryWriteDecision): ExtractedMem
     tags: decision.tags,
     confidence: decision.confidenceScore,
     expiresAt: decision.expiresAt,
+    occurredAt: decision.occurredAt,
   };
 }

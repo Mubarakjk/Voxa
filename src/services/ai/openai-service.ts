@@ -205,6 +205,10 @@ export class OpenAIService implements IAIService {
         voxaReply: input.voxaReply,
         mode: input.mode,
         existingMemories: input.existingMemories,
+        writeContext: {
+          now: new Date(),
+          timeZone: input.userProfile.timezone,
+        },
       });
     }
   }
@@ -326,6 +330,11 @@ export class OpenAIService implements IAIService {
       upcomingReminders: input.upcomingReminders,
       currentTime: input.currentTime ?? new Date().toISOString(),
       companionContextExtension: input.companionContextExtension,
+      turnIntelligenceBlock: input.turnIntelligenceBlock,
+      talkIntent: input.talkIntent,
+      referencesRecentTurns: input.referencesRecentTurns,
+      conversationState: input.conversationState,
+      userMessage: input.userMessage,
     });
 
     const history = mapConversationHistory(input.conversationHistory);

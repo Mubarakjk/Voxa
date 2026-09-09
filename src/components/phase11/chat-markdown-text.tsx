@@ -6,10 +6,11 @@ import { VoxaText } from '../ui/voxa-text';
 type Props = {
   text: string;
   tint?: string;
+  selectable?: boolean;
 };
 
 /** Lightweight markdown-ish rendering for assistant replies. */
-export function ChatMarkdownText({ text, tint = colors.text }: Props) {
+export function ChatMarkdownText({ text, tint = colors.text, selectable }: Props) {
   const blocks = text.split(/\n\n+/);
 
   return (
@@ -22,7 +23,7 @@ export function ChatMarkdownText({ text, tint = colors.text }: Props) {
           const code = trimmed.replace(/^```\w*\n?/, '').replace(/```$/, '');
           return (
             <View key={i} style={styles.code}>
-              <VoxaText variant="caption" style={{ color: colors.primarySoft, fontFamily: 'Menlo' }}>{code}</VoxaText>
+              <VoxaText variant="caption" selectable={selectable} style={{ color: colors.primarySoft, fontFamily: 'Menlo' }}>{code}</VoxaText>
             </View>
           );
         }
@@ -32,7 +33,7 @@ export function ChatMarkdownText({ text, tint = colors.text }: Props) {
           return (
             <View key={i} style={styles.list}>
               {items.map((item, j) => (
-                <VoxaText key={j} variant="body" style={{ color: tint }}>• {item.replace(/^[-*]\s/, '')}</VoxaText>
+                <VoxaText key={j} variant="body" selectable={selectable} style={{ color: tint }}>• {item.replace(/^[-*]\s/, '')}</VoxaText>
               ))}
             </View>
           );
@@ -43,7 +44,7 @@ export function ChatMarkdownText({ text, tint = colors.text }: Props) {
           return (
             <View key={i} style={styles.list}>
               {items.map((item, j) => (
-                <VoxaText key={j} variant="body" style={{ color: tint }}>{item}</VoxaText>
+                <VoxaText key={j} variant="body" selectable={selectable} style={{ color: tint }}>{item}</VoxaText>
               ))}
             </View>
           );
@@ -54,14 +55,14 @@ export function ChatMarkdownText({ text, tint = colors.text }: Props) {
           return (
             <View key={i} style={styles.table}>
               {rows.slice(0, 6).map((row, j) => (
-                <VoxaText key={j} variant="caption" style={{ color: tint }}>{row.replace(/\|/g, ' · ')}</VoxaText>
+                <VoxaText key={j} variant="caption" selectable={selectable} style={{ color: tint }}>{row.replace(/\|/g, ' · ')}</VoxaText>
               ))}
             </View>
           );
         }
 
         return (
-          <VoxaText key={i} variant="body" style={{ color: tint }}>{trimmed}</VoxaText>
+          <VoxaText key={i} variant="body" selectable={selectable} style={{ color: tint }}>{trimmed}</VoxaText>
         );
       })}
     </View>

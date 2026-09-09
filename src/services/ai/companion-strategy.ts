@@ -213,6 +213,7 @@ function detectQuestionPolicy(input: {
   const lower = input.userMessage.toLowerCase();
 
   if (input.intent === 'factual_question' || input.depth === 'micro') return 'none';
+  if (input.intent === 'celebration') return 'none';
   if (/\bbored\b/i.test(lower) && input.intent === 'casual_conversation') return 'none';
   if (input.decisionMode && !/\?$/.test(input.userMessage.trim())) return 'none';
   if (/\b(just pick|just tell me|be honest|give me your recommendation)\b/i.test(lower)) return 'none';

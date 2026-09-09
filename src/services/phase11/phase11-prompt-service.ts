@@ -52,7 +52,6 @@ export function styleHintsFromPrefs(prefs?: {
   const hints: string[] = [];
   if (prefs.prefersShort) hints.push('Match their preferred reply length: keep it short.');
   if (prefs.prefersDeep) hints.push('They like detail — go deeper when it helps.');
-  if (prefs.prefersHumour) hints.push('Light humour is welcome when natural.');
   if (prefs.prefersBullets) hints.push('Use a short list only when they asked for structure.');
   if (prefs.prefersExamples) hints.push('Include a concrete example when explaining.');
   if (prefs.prefersStepByStep) hints.push('Break complex answers into clear steps.');

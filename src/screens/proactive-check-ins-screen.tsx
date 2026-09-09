@@ -85,43 +85,54 @@ export function ProactiveCheckInsScreen({ navigation }: Props) {
           Voxa notices when you have been quiet and sends a natural, unique check-in using your goals, routines, and memories.
         </VoxaText>
 
-        <GlassCard style={styles.card}>
+        <GlassCard style={styles.enabledCard}>
           <View style={styles.row}>
             <View style={styles.flex}>
               <VoxaText variant="subtitle">Enabled</VoxaText>
-              <VoxaText variant="caption" color="textMuted">Respects your notification and check-in preferences</VoxaText>
+              <VoxaText variant="caption" color="textMuted" style={styles.enabledCopy}>
+                Respects your notification and check-in preferences
+              </VoxaText>
             </View>
             <Switch
               value={settings.enabled}
               onValueChange={(enabled) => void saveSettings({ enabled })}
               trackColor={{ true: colors.primary, false: colors.surfaceStrong }}
+              style={styles.switch}
             />
           </View>
         </GlassCard>
 
-        <VoxaText variant="subtitle">Inactivity threshold</VoxaText>
-        <View style={styles.chips}>
-          {PROACTIVE_INACTIVITY_OPTIONS.map((option) => {
-            const active = settings.inactivityHours === option.hours;
-            return (
-              <Pressable
-                key={option.hours}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => void saveSettings({ inactivityHours: option.hours as ProactiveInactivityHours })}>
-                <VoxaText variant="caption" color={active ? 'primarySoft' : 'textSecondary'}>
-                  {option.label}
-                </VoxaText>
-              </Pressable>
-            );
-          })}
-        </View>
+        <GlassCard style={styles.thresholdCard}>
+          <VoxaText variant="subtitle">Inactivity threshold</VoxaText>
+          <View style={styles.chips}>
+            {PROACTIVE_INACTIVITY_OPTIONS.map((option) => {
+              const active = settings.inactivityHours === option.hours;
+              return (
+                <Pressable
+                  key={option.hours}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => void saveSettings({ inactivityHours: option.hours as ProactiveInactivityHours })}>
+                  <VoxaText
+                    variant="caption"
+                    color={active ? 'primarySoft' : 'textSecondary'}
+                    style={styles.chipLabel}
+                    numberOfLines={1}>
+                    {option.label}
+                  </VoxaText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </GlassCard>
 
         <PrimaryButton label={syncing ? 'Syncing…' : 'Sync schedule now'} onPress={() => void runSync()} disabled={syncing} />
 
-        <GlassCard style={styles.card}>
+        <GlassCard style={styles.historyCard}>
           <VoxaText variant="subtitle">Recent check-ins</VoxaText>
           {history.length === 0 ? (
-            <VoxaText variant="caption" color="textMuted">No proactive check-ins sent yet.</VoxaText>
+            <VoxaText variant="caption" color="textMuted" style={styles.emptyHistory}>
+              No proactive check-ins sent yet.
+            </VoxaText>
           ) : (
             history.slice(0, 8).map((entry) => (
               <View key={entry.id} style={styles.historyRow}>
@@ -139,25 +150,61 @@ export function ProactiveCheckInsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   scroll: {
     padding: layout.screenPadding,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl * 2,
     gap: spacing.md,
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  card: { gap: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  flex: { flex: 1, gap: 2 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  enabledCard: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  flex: { flex: 1, minWidth: 0, gap: spacing.sm },
+  enabledCopy: { lineHeight: 18 },
+  switch: { flexShrink: 0, marginTop: 2 },
+  thresholdCard: {
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    width: '100%',
+  },
   chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 96,
+    maxWidth: '100%',
+    paddingHorizontal: spacing.md12,
+    paddingVertical: 10,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
     borderColor: colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  historyRow: { gap: 4, paddingTop: spacing.sm },
+  chipLabel: { textAlign: 'center' },
+  historyCard: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyHistory: {
+    lineHeight: 18,
+    paddingVertical: spacing.sm,
+  },
+  historyRow: { gap: spacing.xs, paddingTop: spacing.sm },
 });

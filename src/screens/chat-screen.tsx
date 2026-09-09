@@ -34,6 +34,18 @@ import { ChatEmptyState } from '../components/chat/chat-empty-state';
 import { ChatInputBar } from '../components/chat/chat-input-bar';
 import { ChatMessageBubble } from '../components/chat/chat-message-bubble';
 import { ChatToolsSheet } from '../components/chat/chat-tools-sheet';
+import {
+  beginComposerEdit,
+  cancelComposerEdit,
+  ComposerEditState,
+  emptyEditMaySend,
+} from '../services/chat/message-actions';
+import {
+  beginTalkSend,
+  composerTextAfterFailedSend,
+  createTalkSendGuard,
+  endTalkSend,
+} from '../services/chat/talk-send-guard';
 import { ADAPTIVE_MODE_LABELS, AdaptiveModeLabel } from '../types/phase3-intelligence';
 import {
   ChatExperiencePayload,
@@ -180,6 +192,7 @@ export function ChatScreen() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [composerEdit, setComposerEdit] = useState<ComposerEditState | null>(null);
   const pendingStarterRef = useRef<{ text: string; autoSend: boolean } | null>(null);
   const listRef = useRef<FlatList>(null);
   const messagesRef = useRef<ChatMessageView[]>([]);
@@ -187,6 +200,7 @@ export function ChatScreen() {
   const isTypingRef = useRef(false);
   const messagesLengthRef = useRef(0);
   const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const sendGuardRef = useRef(createTalkSendGuard());
   const thinkingStageInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   messagesLengthRef.current = messages.length;
@@ -458,8 +472,23 @@ export function ChatScreen() {
   const sendMessage = async (attachments: PendingAttachmentInput[] = [], overrideText?: string) => {
     const sendTapAt = talkPerfNow();
     const trimmed = (overrideText ?? input).trim();
-    if ((!trimmed && attachments.length === 0) || isTyping || !profile || !conversationId) return;
+    if (composerEdit && !emptyEditMaySend(trimmed) && attachments.length === 0) return;
+    if ((!trimmed && attachments.length === 0) || !profile || !conversationId) return;
 
+    const fingerprintText = trimmed || `[attachment:${attachments.length}]`;
+    const decision = beginTalkSend(sendGuardRef.current, {
+      text: fingerprintText,
+      conversationId,
+    });
+    if (!decision.accepted) {
+      if (decision.reason === 'in_flight' && overrideText?.trim()) {
+        setInput((current) => (current.trim() ? current : overrideText.trim()));
+      }
+      return;
+    }
+
+    const idsAtStart = new Set(messagesRef.current.map((item) => item.id));
+    setComposerEdit(null);
     setInput('');
     setSuggestions([]);
     setSuggestionsDismissed(false);
@@ -618,14 +647,29 @@ export function ChatScreen() {
       if (!assistantVisible) {
         setMessages((current) => current.filter((item) => item.id !== optimisticId));
       }
+      let persistedNewUserTurn = false;
       if (!assistantVisible && conversationId) {
         try {
           const reloaded = await companion.loadChatMessages(conversationId);
           setMessages(reloaded);
+          persistedNewUserTurn = reloaded.some(
+            (item) =>
+              item.role === 'user' &&
+              item.text === trimmed &&
+              item.id !== optimisticId &&
+              !idsAtStart.has(item.id),
+          );
         } catch {
           // Keep reload failure secondary to send error
         }
       }
+      setInput((current) =>
+        composerTextAfterFailedSend({
+          sentText: trimmed,
+          persistedNewUserTurn,
+          currentComposer: current,
+        }),
+      );
       logFeature('chat.send', 'failure', err instanceof Error ? err.message : 'send failed', Date.now() - started);
       if (err instanceof FeatureLimitError && isPaywallEnabled()) {
         trackEvent('free_limit_reached', { feature: err.feature });
@@ -636,6 +680,7 @@ export function ChatScreen() {
         setError(formatTalkErrorForUser(err));
       }
     } finally {
+      endTalkSend(sendGuardRef.current);
       setIsTyping(false);
       setStreamingText(null);
     }
@@ -806,6 +851,8 @@ export function ChatScreen() {
     [services.repositories.messages],
   );
 
+  // Deferred: current regenerate deletes the Voxa row then re-sends the prior
+  // user text, which would persist a duplicate user message. Not in the V1 menu.
   const handleRegenerate = useCallback(
     async (voxaMessage: ChatMessageView) => {
       const index = messages.findIndex((m) => m.id === voxaMessage.id);
@@ -823,6 +870,28 @@ export function ChatScreen() {
     },
     [messages, services.repositories.messages, sendMessage],
   );
+
+  const handleEdit = useCallback((message: ChatMessageView) => {
+    const text = message.text?.trim();
+    if (!text) return;
+    setComposerEdit(
+      beginComposerEdit({
+        messageId: message.id,
+        messageText: text,
+        currentComposer: input,
+      }),
+    );
+    setInput(text);
+  }, [input]);
+
+  const handleCancelEdit = useCallback(() => {
+    if (!composerEdit) {
+      setComposerEdit(null);
+      return;
+    }
+    setInput(cancelComposerEdit(composerEdit).composer);
+    setComposerEdit(null);
+  }, [composerEdit]);
 
   const handleRetrySend = useCallback(
     async (message: ChatMessageView) => {
@@ -911,7 +980,7 @@ export function ChatScreen() {
             onBookmark={(message) => void handleBookmark(message)}
             onDelete={(message) => void handleDelete(message)}
             onRetrySend={(message) => void handleRetrySend(message)}
-            onRegenerate={(message) => void handleRegenerate(message)}
+            onEdit={handleEdit}
             onPlayAloud={(message) => void handlePlayAloud(message)}
             onSavePhotoMemory={(message) => void handleSavePhotoMemory(message)}
             onSaveVoiceMemory={(message) => void handleSaveVoiceMemory(message)}
@@ -932,7 +1001,7 @@ export function ChatScreen() {
       handleBookmark,
       handleDelete,
       handleRetrySend,
-      handleRegenerate,
+      handleEdit,
       handlePlayAloud,
       handleSavePhotoMemory,
       handleSaveVoiceMemory,
@@ -1233,6 +1302,8 @@ export function ChatScreen() {
           onSend={(attachments) => void sendMessage(attachments)}
           disabled={isTyping}
           voxaName={voxaName}
+          editing={Boolean(composerEdit)}
+          onCancelEdit={handleCancelEdit}
           onOpenTools={() => setToolsSheetOpen(true)}
           onVoiceNoteLimit={(message) => {
             setLimitMessage(message);

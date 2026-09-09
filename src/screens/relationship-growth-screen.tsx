@@ -55,19 +55,25 @@ export function RelationshipGrowthScreen({ navigation }: Props) {
         />
 
         <GlassCard style={styles.hero}>
-          <VoxaText variant="caption" color="textMuted">Together</VoxaText>
-          <VoxaText variant="title">{snapshot.daysTogether} days</VoxaText>
+          <VoxaText variant="caption" color="textMuted" style={styles.heroEyebrow}>
+            Together
+          </VoxaText>
+          <VoxaText variant="title" style={styles.heroTitle}>
+            {snapshot.daysTogether} days
+          </VoxaText>
           {snapshot.nextLevelLabel ? (
             <>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${snapshot.progressPercent}%` }]} />
               </View>
-              <VoxaText variant="caption" color="textSecondary">
+              <VoxaText variant="caption" color="textSecondary" style={styles.progressCaption}>
                 Growing toward {snapshot.nextLevelLabel} · {snapshot.progressPercent}%
               </VoxaText>
             </>
           ) : (
-            <VoxaText variant="caption" color="primarySoft">Inner Circle — you have earned this depth.</VoxaText>
+            <VoxaText variant="caption" color="primarySoft" style={styles.progressCaption}>
+              Inner Circle — you have earned this depth.
+            </VoxaText>
           )}
         </GlassCard>
 
@@ -137,15 +143,23 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.md },
-  hero: { gap: spacing.sm },
+  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl * 2, gap: spacing.md },
+  hero: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  heroEyebrow: { lineHeight: 18 },
+  heroTitle: { lineHeight: 32 },
   progressTrack: {
     height: 6,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
     overflow: 'hidden',
+    marginTop: spacing.xs,
   },
   progressFill: { height: '100%', backgroundColor: colors.primarySoft, borderRadius: radius.lg },
+  progressCaption: { lineHeight: 18, paddingBottom: spacing.xs },
   metrics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -157,7 +171,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '100%',
     gap: spacing.xs,
-    paddingVertical: spacing.md12,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceStrong,
@@ -171,8 +185,8 @@ const styles = StyleSheet.create({
   },
   convCard: {
     gap: spacing.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   convCardLocked: {
     opacity: 0.72,
@@ -185,7 +199,7 @@ const styles = StyleSheet.create({
   convCopy: {
     flex: 1,
     minWidth: 0,
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingRight: spacing.xs,
   },
   convTitle: { lineHeight: 22 },

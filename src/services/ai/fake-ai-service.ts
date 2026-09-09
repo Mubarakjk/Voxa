@@ -103,6 +103,10 @@ export class FakeAIService implements IAIService {
       voxaReply: input.voxaReply,
       mode: input.mode,
       existingMemories: input.existingMemories,
+      writeContext: {
+        now: new Date(),
+        timeZone: input.userProfile.timezone,
+      },
     });
   }
 

@@ -6,6 +6,7 @@ import {
   DailyReflectionEntry,
 } from '../../types/daily-reflection';
 import { IStorageService } from '../contracts';
+import { extractJournalSignal, formatJournalSignalsForTalk } from '../journal/journal-signal';
 import { getXpService } from '../phase10/xp-service';
 
 export class DailyReflectionService {
@@ -72,16 +73,22 @@ export class DailyReflectionService {
 
   formatForPrompt(entries: DailyReflectionEntry[], limit = 5): string {
     if (!entries.length) return '';
-    const lines = entries.slice(0, limit).flatMap((entry) => {
-      const parts: string[] = [];
-      if (entry.answers.smiled.trim()) parts.push(`smiled: ${entry.answers.smiled.trim()}`);
-      if (entry.answers.challenged.trim()) parts.push(`challenged: ${entry.answers.challenged.trim()}`);
-      if (entry.answers.grateful.trim()) parts.push(`grateful: ${entry.answers.grateful.trim()}`);
-      if (!parts.length) return [];
-      return [`${entry.date}: ${parts.join(' · ')}`];
+    const signals = entries.slice(0, limit).map((entry) =>
+      extractJournalSignal({
+        id: entry.id,
+        source: 'daily_reflection',
+        dateKey: entry.date,
+        text: [entry.answers.smiled, entry.answers.challenged, entry.answers.grateful].join(' '),
+        occurredAt: entry.updatedAt,
+      }),
+    );
+    return formatJournalSignalsForTalk({
+      signals,
+      patterns: [],
+      userMessage: 'reflection',
+      intent: 'journaling',
+      explicitRetrieval: false,
     });
-    if (!lines.length) return '';
-    return ['## Recent evening reflections (weave in naturally when relevant)', ...lines.map((l) => `- ${l}`)].join('\n');
   }
 }
 

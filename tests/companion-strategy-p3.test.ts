@@ -236,7 +236,7 @@ describe('companion strategy P3', () => {
       voxaReply: 'Alright.',
       strategy: strategyFor("I'm bored").state,
     });
-    assert.ok(planning.some((chip) => /focus session/i.test(chip.prompt)));
+    assert.ok(planning.some((chip) => /plan|prioritise|steps/i.test(chip.prompt)));
     assert.ok(!bored.some((chip) => /focus session/i.test(chip.prompt)));
   });
 

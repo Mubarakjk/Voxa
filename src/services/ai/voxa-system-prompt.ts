@@ -2,7 +2,6 @@ import { AI_GATEWAY_BUDGETS } from '../../config/ai-gateway-budgets';
 import { COMPANION_MODES } from '../../constants/companion-modes';
 import { personalityStylePromptBlock } from '../../constants/companion-identity';
 import { VOXA_SAFETY } from '../../constants/safety';
-import { getVoiceOption } from '../../constants/voice-options';
 import { buildOnboardingReasonContext } from '../../config/onboarding-flow';
 import { CompanionModeId, Goal, Memory, Reminder, UserProfile } from '../../types';
 import {
@@ -18,15 +17,28 @@ import {
   memoryConfidenceKind,
   resolveCompanionMemoryType,
 } from '../memory/memory-taxonomy';
+import { decideMemoryCallback, countTemporalAlignments, memoryTemporallyAligns } from '../memory/memory-callback-gate';
+import { formatActiveEventForPrompt, joinOpenLoops } from '../memory/open-loop-service';
+import { overlapScore, tokenize } from '../memory/memory-relevance';
+import { parseUserTemporal, readTemporalMeta } from '../memory/temporal-memory';
+import { resolveDeviceTimeZone } from '../memory/temporal-parse';
+import { resolveMemoryPolicy } from './turn-intelligence-plan';
 
 const MAX_MEMORIES_IN_PROMPT = AI_GATEWAY_BUDGETS.maxMemoriesInPrompt;
 
 const MEMORY_TRUST_BLOCK = `
 ## Memory trust levels
 - EXPLICIT USER FACT: said directly in this conversation.
-- STORED MEMORY: listed below — use naturally; do not say "you told me" unless it appears here or in recent turns.
+- STORED MEMORY: listed below — use naturally; never say "you told me", "you previously told me", or "according to my memory".
 - SHORT-TERM CONTEXT: recent chat turns — use for follow-ups like "it", "that", "the second one".
 - INFERENCE: never present as memory. If nothing relevant is stored, say you do not have that saved.
+- callback=mention: you may reference it if it genuinely helps.
+- callback=use_silently: use only to understand; do not mention it unless the user brings it up.
+- If temporal confidence is not high, do not make a strong callback.
+- If an Active event is listed, treat it as current context and speak naturally. Never say "you previously told me" or "according to my memory".
+- If no Active event is listed, do not guess which event the user means.
+- Do not invent memories or guess which event the user means.
+- You are AI. Be familiar with stored preferences. Do not claim human attachment, missing the user, waiting to hear from them, or shared emotional history you do not have.
 `.trim();
 
 export function buildVoxaSystemPrompt(input: {
@@ -37,9 +49,11 @@ export function buildVoxaSystemPrompt(input: {
   upcomingReminders?: Reminder[];
   currentTime?: string;
   companionContextExtension?: string;
+  turnIntelligenceBlock?: string;
   talkIntent?: TalkIntent;
   referencesRecentTurns?: boolean;
   conversationState?: import('./companion-strategy').ConversationState;
+  userMessage?: string;
 }): string {
   const mode = COMPANION_MODES[input.mode];
   const intent = input.talkIntent ?? 'unknown';
@@ -58,13 +72,13 @@ export function buildVoxaSystemPrompt(input: {
 
   const memoryBlock = includeMemories
     ? recentMemories.length > 0
-      ? recentMemories
-          .map((item) => {
-            const trust = confidenceKindForPrompt(memoryConfidenceKind(item));
-            const type = resolveCompanionMemoryType(item.category, item.tags);
-            return `- [${trust}] ${item.title} (${type}): ${item.content}`;
-          })
-          .join('\n')
+      ? formatMemoriesForPrompt({
+          memories: recentMemories,
+          userMessage: input.userMessage,
+          talkIntent: intent,
+          timeZone: input.userProfile.timezone,
+          nowIso: now,
+        })
       : '- No relevant stored memories for this message.'
     : '';
 
@@ -89,6 +103,8 @@ export function buildVoxaSystemPrompt(input: {
     `- You are NOT a licensed therapist, doctor, counselor, or emergency service. ${VOXA_SAFETY.notTherapist}`,
     `- ${VOXA_SAFETY.notEmergency}`,
     '- If someone mentions self-harm, abuse, or immediate danger, respond with compassion and urge them to contact local emergency services or a trusted person right now.',
+    '',
+    input.turnIntelligenceBlock?.trim() ?? '',
     '',
     buildResponseQualityBlock(intent, input.referencesRecentTurns ?? false, input.conversationState),
     '',
@@ -125,4 +141,59 @@ export function buildVoxaSystemPrompt(input: {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+export function formatMemoriesForPrompt(input: {
+  memories: Memory[];
+  userMessage?: string;
+  talkIntent: TalkIntent;
+  timeZone?: string;
+  nowIso: string;
+}): string {
+  const timeZone = resolveDeviceTimeZone(input.timeZone);
+  const now = new Date(input.nowIso);
+  const policy = resolveMemoryPolicy(input.talkIntent);
+  const queryTemporal = input.userMessage ? parseUserTemporal(input.userMessage, now, timeZone) : null;
+  const join = joinOpenLoops(input.memories, {
+    userMessage: input.userMessage ?? '',
+    now,
+    timeZone,
+  });
+  const alignCount = join.ambiguous
+    ? join.competing.length
+    : countTemporalAlignments(input.memories, queryTemporal, timeZone);
+
+  const lines: string[] = [];
+  for (const memory of input.memories) {
+    const keywordOverlap = input.userMessage
+      ? overlapScore(tokenize(input.userMessage), `${memory.title} ${memory.content}`)
+      : 0;
+    const callback = input.userMessage
+      ? decideMemoryCallback({
+          memory,
+          userMessage: input.userMessage,
+          intent: input.talkIntent,
+          memoryPolicy: policy,
+          now,
+          timeZone,
+          queryTemporal,
+          keywordOverlap,
+          temporalAlign: memoryTemporallyAligns(memory, queryTemporal, timeZone),
+          ambiguousTemporalMatch: join.ambiguous || Boolean(queryTemporal && alignCount > 1 && keywordOverlap < 0.2),
+          uniqueOpenLoop: join.unique && join.memory?.id === memory.id,
+        })
+      : 'use_silently';
+    if (callback === 'ignore') continue;
+    if (join.unique && join.memory?.id === memory.id && (callback === 'mention' || callback === 'use_silently')) {
+      lines.push(formatActiveEventForPrompt({ memory, callback, timeZone }));
+    }
+    const trust = confidenceKindForPrompt(memoryConfidenceKind(memory));
+    const type = resolveCompanionMemoryType(memory.category, memory.tags);
+    const meta = readTemporalMeta(memory, timeZone);
+    const when = meta.label ? ` · ${meta.label}` : '';
+    lines.push(
+      `- [${trust}] ${memory.title} (${type}): ${memory.content.slice(0, 120)}${when} · callback=${callback}`,
+    );
+  }
+  return lines.length > 0 ? lines.join('\n') : '- No relevant stored memories for this message.';
 }

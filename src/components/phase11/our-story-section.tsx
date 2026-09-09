@@ -17,11 +17,11 @@ export function OurStorySection({ entries, onOpenJourney }: Props) {
   return (
     <StaggerFade index={0}>
       <GlassCard style={styles.card}>
-        <VoxaText variant="caption" color="primarySoft">
+        <VoxaText variant="caption" color="primarySoft" style={styles.eyebrow}>
           Our Story
         </VoxaText>
-        {entries.slice(0, 4).map((e) => (
-          <View key={e.id} style={styles.row}>
+        {entries.slice(0, 4).map((e, index) => (
+          <View key={e.id} style={[styles.row, index > 0 && styles.rowSpaced]}>
             <VoxaText variant="subtitle" style={styles.title}>
               {e.milestone ? '✦ ' : ''}
               {e.title}
@@ -46,17 +46,22 @@ export function OurStorySection({ entries, onOpenJourney }: Props) {
 const styles = StyleSheet.create({
   card: {
     gap: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
+  eyebrow: { marginBottom: spacing.xs },
   row: {
-    gap: spacing.xs,
-    paddingBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  rowSpaced: {
+    marginTop: spacing.md12,
+    paddingTop: spacing.md12,
   },
   title: { lineHeight: 22 },
-  narrative: { lineHeight: 18 },
+  narrative: { lineHeight: 19 },
   link: {
-    paddingTop: spacing.xs,
-    minHeight: 32,
+    paddingTop: spacing.sm,
+    minHeight: 36,
     justifyContent: 'center',
   },
 });

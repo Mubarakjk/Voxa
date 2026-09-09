@@ -99,6 +99,11 @@ export type GenerateReplyInput = {
   upcomingReminders?: Reminder[];
   currentTime?: string;
   companionContextExtension?: string;
+  /**
+   * Authoritative turn plan. Must be placed after Safety in the system prompt
+   * and must never live only inside the truncatable context extension.
+   */
+  turnIntelligenceBlock?: string;
   talkIntent?: import('../ai/companion-intent').TalkIntent;
   referencesRecentTurns?: boolean;
   conversationState?: import('../ai/companion-strategy').ConversationState;

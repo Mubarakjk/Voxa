@@ -160,8 +160,8 @@ export class ContextEngine {
       ip.routines.length > 0 ? `Routines: ${ip.routines.slice(0, 3).join('; ')}` : '',
       ip.habits.length > 0 ? `Habits: ${ip.habits.slice(0, 3).join('; ')}` : '',
       '',
-      '## Evolving personality (adapt gradually — never swing dramatically)',
-      `Humour ${Math.round(personality.humourPreference * 100)}% · Length ${Math.round(personality.conversationLengthPreference * 100)}% · Emoji ${Math.round(personality.emojiPreference * 100)}% · Detail ${Math.round(personality.detailLevel * 100)}%`,
+      '## Evolving personality (background traits — follow Turn intelligence for this reply)',
+      `Length ${Math.round(personality.conversationLengthPreference * 100)}% · Emoji ${Math.round(personality.emojiPreference * 100)}% · Detail ${Math.round(personality.detailLevel * 100)}%`,
       personality.favouriteTopics.length > 0
         ? `Learned favourite topics: ${personality.favouriteTopics.slice(0, 6).join(', ')}`
         : '',
@@ -187,7 +187,7 @@ export class ContextEngine {
       recentConvos,
       varietyBlock ? `\n## Conversation variety\n${varietyBlock}` : '',
       context.adaptivePlan
-        ? `\n## Adaptive response plan\nMode: ${context.adaptiveModeLabel ?? context.adaptivePlan.modeLabel}\nTone: ${context.adaptivePlan.tone}\nLength: ${context.adaptivePlan.lengthHint}`
+        ? `\n## Adaptive signals\nInferred energy: ${context.adaptiveModeLabel ?? context.adaptivePlan.modeLabel}\nEmpathy length hint: ${context.adaptivePlan.lengthHint}`
         : '',
     ]
       .filter(Boolean)

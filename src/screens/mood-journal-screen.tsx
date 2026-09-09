@@ -1,14 +1,14 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { GlassCard } from '../components/ui/glass-card';
 import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { EmptyState, PremiumButton, ScreenHeader } from '../components/premium/premium-ui';
 import { LoadingState } from '../components/ui/screen-state';
-import { layout, spacing } from '../constants/theme';
+import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { getMoodInsightsEngine, getMoodJournalService } from '../services/phase12/mood-journal-service';
@@ -16,19 +16,39 @@ import { MoodEntry, MoodInsight, MoodLevel } from '../types/phase12-experiences'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MoodJournal'>;
 
-function MoodPicker({ label, value, onChange }: { label: string; value: MoodLevel; onChange: (v: MoodLevel) => void }) {
+function MoodPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: MoodLevel;
+  onChange: (v: MoodLevel) => void;
+}) {
   return (
     <View style={styles.pickerRow}>
-      <VoxaText variant="caption" color="textMuted">{label}</VoxaText>
+      <VoxaText variant="caption" color="textMuted" style={styles.pickerLabel}>
+        {label}
+      </VoxaText>
       <View style={styles.pickerBtns}>
-        {([1, 2, 3, 4, 5] as MoodLevel[]).map((n) => (
-          <PremiumButton
-            key={n}
-            label={String(n)}
-            variant={value === n ? 'primary' : 'ghost'}
-            onPress={() => onChange(n)}
-          />
-        ))}
+        {([1, 2, 3, 4, 5] as MoodLevel[]).map((n) => {
+          const selected = value === n;
+          return (
+            <Pressable
+              key={n}
+              onPress={() => onChange(n)}
+              style={[styles.scoreBtn, selected && styles.scoreBtnActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${label} ${n}`}>
+              <VoxaText
+                variant="caption"
+                style={selected ? styles.scoreLabelActive : styles.scoreLabel}>
+                {n}
+              </VoxaText>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -93,27 +113,53 @@ export function MoodJournalScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader showBack title="Mood journal" subtitle="Quick check-in — insights need enough data. Not medical advice." />
-        <PremiumButton label="View mood timeline" variant="ghost" onPress={() => navigation.navigate('MoodTimeline')} />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          showBack
+          title="Mood journal"
+          subtitle="Quick check-in — insights need enough data. Not medical advice."
+        />
+        <PremiumButton
+          label="View mood timeline"
+          variant="ghost"
+          onPress={() => navigation.navigate('MoodTimeline')}
+        />
         <GlassCard style={styles.card}>
           <MoodPicker label="Mood" value={mood} onChange={setMood} />
           <MoodPicker label="Energy" value={energy} onChange={setEnergy} />
           <MoodPicker label="Stress" value={stress} onChange={setStress} />
           <MoodPicker label="Confidence" value={confidence} onChange={setConfidence} />
           <MoodPicker label="Sleep" value={sleep} onChange={setSleep} />
-          <PremiumButton label={today ? 'Update today' : 'Save today'} onPress={() => void save()} />
+          <View style={styles.saveWrap}>
+            <PremiumButton label={today ? 'Update today' : 'Save today'} onPress={() => void save()} />
+          </View>
         </GlassCard>
 
         {insight ? (
-          <GlassCard style={styles.card}>
-            <VoxaText variant="caption" color="primarySoft">Insight · {insight.confidence} · {insight.dataPoints} data points</VoxaText>
-            <VoxaText variant="body" color="textSecondary">{insight.line}</VoxaText>
-            <VoxaText variant="caption" color="textMuted">{insight.nextStep}</VoxaText>
-            <PremiumButton label="Dismiss" variant="ghost" onPress={() => void insightsEngine.dismiss(insight.line).then(() => setInsight(null))} />
+          <GlassCard style={styles.insightCard}>
+            <VoxaText variant="caption" color="primarySoft" style={styles.insightMeta}>
+              Insight · {insight.confidence} · {insight.dataPoints} data points
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.insightLine}>
+              {insight.line}
+            </VoxaText>
+            <VoxaText variant="caption" color="textMuted" style={styles.insightNext}>
+              {insight.nextStep}
+            </VoxaText>
+            <PremiumButton
+              label="Dismiss"
+              variant="ghost"
+              onPress={() => void insightsEngine.dismiss(insight.line).then(() => setInsight(null))}
+            />
           </GlassCard>
         ) : (
-          <EmptyState icon="analytics-outline" title="Insights building" message="Log a few more days to unlock grounded correlations." />
+          <GlassCard style={styles.emptyCard}>
+            <EmptyState
+              icon="analytics-outline"
+              title="Insights building"
+              message="Log a few more days to unlock grounded correlations."
+            />
+          </GlassCard>
         )}
       </ScrollView>
     </ScreenShell>
@@ -121,8 +167,64 @@ export function MoodJournalScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.md },
-  card: { gap: spacing.md },
-  pickerRow: { gap: spacing.xs },
-  pickerBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  card: {
+    gap: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  pickerRow: {
+    gap: spacing.sm,
+  },
+  pickerLabel: {
+    lineHeight: 18,
+  },
+  pickerBtns: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: spacing.sm,
+  },
+  scoreBtn: {
+    flex: 1,
+    minWidth: 0,
+    aspectRatio: 1,
+    maxHeight: 48,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.28)',
+  },
+  scoreBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  scoreLabel: {
+    color: colors.primarySoft,
+    lineHeight: 18,
+  },
+  scoreLabelActive: {
+    color: colors.background,
+    lineHeight: 18,
+  },
+  saveWrap: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  insightCard: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  insightMeta: { lineHeight: 18 },
+  insightLine: { lineHeight: 22 },
+  insightNext: { lineHeight: 18 },
+  emptyCard: {
+    padding: 0,
+  },
 });

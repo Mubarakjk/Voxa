@@ -69,12 +69,10 @@ export class AdaptiveIntelligenceService {
 
   toPromptExtension(plan: ResponsePlan, graphPrompt: string): string {
     const lines = [
-      '## Adaptive intelligence (Phase 3)',
-      `Active mode: ${ADAPTIVE_MODE_LABELS[plan.modeLabel]} (${plan.tone})`,
-      `Response length: ${plan.lengthHint}`,
+      '## Adaptive signals (do not override the user-selected chat mode)',
+      `Inferred energy: ${ADAPTIVE_MODE_LABELS[plan.modeLabel]} (${plan.tone})`,
       `Empathy: ${plan.empathyLevel}`,
-      `Questions: ${plan.questionStyle}`,
-      ...plan.guidance.map((g) => `- ${g}`),
+      ...plan.guidance.filter((g) => !/humour/i.test(g)).map((g) => `- ${g}`),
     ];
 
     if (plan.memoryEmphasis) lines.push('- Weave in a relevant memory naturally if it fits.');
@@ -169,9 +167,6 @@ export class AdaptiveIntelligenceService {
     }
     if (signals.intent === 'venting') {
       guidance.push('Listen fully before offering perspective.');
-    }
-    if (bundle.personality.humourPreference > 0.6 && bundle.conversationStyle.humourAffinity > 0.55) {
-      guidance.push('Light humour is welcome if it fits the moment.');
     }
     if (bundle.conversationStyle.emojiAffinity > 0.55) {
       guidance.push('Occasional emoji is fine — match their style.');

@@ -163,15 +163,24 @@ export function classifyGatewayErrorMessage(message: string, code?: string): Tal
   return 'gateway_error';
 }
 
+const USER_UNSAFE_ERROR = /\[Voxa:|AI gateway|FAILURE \d+ms|stack|HTTP\/|status code|TalkAIError/i;
+
 export function formatTalkErrorForUser(err: unknown): string {
-  if (err instanceof TalkAIError) return err.userMessage;
-  if (err instanceof Error) {
+  let message = "Voxa couldn't send that message. Please try again.";
+  if (err instanceof TalkAIError) {
+    message = err.userMessage;
+  } else if (err instanceof Error) {
     const code = classifyGatewayErrorMessage(err.message);
-    if (code !== 'gateway_error') {
-      return new TalkAIError(code, err.message).userMessage;
-    }
+    message = new TalkAIError(code).userMessage;
   }
-  return "Voxa couldn't send that message. Please try again.";
+  if (USER_UNSAFE_ERROR.test(message)) {
+    return "Voxa couldn't send that message. Please try again.";
+  }
+  return message;
+}
+
+export function talkUserErrorLooksTechnical(message: string): boolean {
+  return USER_UNSAFE_ERROR.test(message);
 }
 
 export function isGatewayDeploymentError(err: unknown): boolean {

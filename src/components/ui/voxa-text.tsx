@@ -20,12 +20,24 @@ type Props = {
   color?: ColorKey;
   style?: TextStyle;
   numberOfLines?: number;
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
+  selectable?: boolean;
 };
 
-export function VoxaText({ children, variant = 'body', color = 'text', style, numberOfLines }: Props) {
+export function VoxaText({
+  children,
+  variant = 'body',
+  color = 'text',
+  style,
+  numberOfLines,
+  ellipsizeMode,
+  selectable,
+}: Props) {
   return (
     <Text
       numberOfLines={numberOfLines}
+      ellipsizeMode={ellipsizeMode}
+      selectable={selectable}
       maxFontSizeMultiplier={1.35}
       style={[typography[variant], { color: colorMap[color] }, style]}>
       {children}

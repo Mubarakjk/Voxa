@@ -4,6 +4,7 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   EmptyState,
@@ -56,6 +57,7 @@ type Props = CompositeScreenProps<
 export function JourneyScreen({ navigation }: Props) {
   const stackNav = useNavigation<NativeStackScreenProps<RootStackParamList>['navigation']>();
   const { profile, companion, services } = useVoxa();
+  const insets = useSafeAreaInsets();
 
   const fetchDashboard = useCallback(
     (userId: string) => companion.getHomeDashboard(userId),
@@ -207,7 +209,13 @@ export function JourneyScreen({ navigation }: Props) {
   return (
     <ScreenShell padded={false} safeBottom={false}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // Tab bar adds device inset separately; include both so last cards clear the bar.
+            paddingBottom: layout.tabBarHeight + Math.max(insets.bottom, 12) + spacing.xl,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={colors.primarySoft} />}>
         <FadeIn>
@@ -744,7 +752,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
-    paddingBottom: layout.tabBarHeight + spacing.xxl,
     gap: spacing.section,
   },
   streakCelebrate: { gap: spacing.sm },
@@ -778,8 +785,19 @@ const styles = StyleSheet.create({
   achievementTitle: { fontWeight: '600', lineHeight: 18 },
   achievementSubtitle: { lineHeight: 17, flexShrink: 1 },
   themeRow: { gap: spacing.sm, paddingBottom: spacing.md },
-  themeCard: { width: 128, gap: spacing.xs, marginRight: spacing.sm, paddingVertical: spacing.md12 },
-  card: { gap: spacing.md, marginBottom: spacing.md, paddingVertical: spacing.md },
+  themeCard: {
+    width: 128,
+    gap: spacing.xs,
+    marginRight: spacing.sm,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md12,
+  },
+  card: {
+    gap: spacing.md,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
   reflectionBody: { lineHeight: 22 },
   routineRow: {
     flexDirection: 'row',

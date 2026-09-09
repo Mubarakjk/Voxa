@@ -69,10 +69,7 @@ export class ConversationStyleEngine {
     if (style.motivationalTone > 0.6) parts.push('Warm motivational tone without pressure.');
     if (style.pacingPreference > 0.65) parts.push('Thoughtful pacing — do not rush.');
     if (style.pacingPreference < 0.35) parts.push('Quick, snappy back-and-forth.');
-    if (style.questioningStyle > 0.65) parts.push('Open, reflective questions when curious.');
-    if (style.questioningStyle < 0.35) parts.push('Minimise questions — lead with statements.');
     if (style.emojiAffinity > 0.55) parts.push('Light emoji matches their style.');
-    if (style.humourAffinity > 0.6) parts.push('Gentle humour when appropriate.');
 
     return parts.length > 0 ? parts.join(' ') : 'Natural, balanced tone.';
   }

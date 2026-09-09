@@ -54,6 +54,9 @@ export class LocalMemoryRepository implements IMemoryRepository {
       lastUsedAt: input.lastUsedAt,
       useCount: input.useCount ?? 0,
       pinned: input.pinned ?? false,
+      emotionalSignificance: input.emotionalSignificance,
+      confidence: input.confidence,
+      expiresAt: input.expiresAt,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -63,8 +66,11 @@ export class LocalMemoryRepository implements IMemoryRepository {
     await this.writeAll(memories);
     const userCount = memories.filter((m) => m.userId === input.userId).length;
     if (userCount === 1) {
-      const { getAchievementTriggersService } = await import('../phase10/achievement-triggers-service');
-      void getAchievementTriggersService(this.storage).onMemorySaved(input.userId);
+      void import('../phase10/achievement-triggers-service')
+        .then(({ getAchievementTriggersService }) =>
+          getAchievementTriggersService(this.storage).onMemorySaved(input.userId),
+        )
+        .catch(() => undefined);
     }
     return memory;
   }

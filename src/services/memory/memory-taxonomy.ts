@@ -49,6 +49,8 @@ export const TAG_EXPLICIT = 'explicit';
 export const TAG_INFERRED = 'inferred';
 export const TAG_SUPERSEDED = 'superseded';
 export const TAG_OPEN_LOOP = 'open_loop';
+export const TAG_RESOLVED = 'resolved';
+export const TAG_CANCELLED = 'cancelled';
 
 export function resolveCompanionMemoryType(category: MemoryCategory, tags: string[] = []): CompanionMemoryType {
   if (tags.includes('conversational_preference')) return 'conversational_preference';
@@ -104,7 +106,7 @@ export function inferSemanticSlot(category: MemoryCategory, content: string): Me
   }
   if (category === 'goals' || category === 'future_plans') return 'personal_goal';
   if (category === 'people') return 'person_reference';
-  if (category === 'moments' && /\b(tomorrow|today|next week|interview|exam|deadline)\b/.test(lower)) {
+  if (category === 'moments' && /\b(tomorrow|today|tonight|next week|this weekend|interview|exam|deadline|driving test|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b/.test(lower)) {
     return 'upcoming_event';
   }
   if (category === 'productivity' || category === 'business' || category === 'work') {

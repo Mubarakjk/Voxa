@@ -39,8 +39,10 @@ export function GlassCard({ children, style, onPress, variant = 'default' }: Pro
       backgroundColor: bg,
       borderColor,
       borderWidth,
-      padding: variant === 'flat' ? 0 : undefined,
       overflow: overflowStyle,
+      // Only override padding for flat/quiet. Never set `padding: undefined` —
+      // Object.assign-style merges wipe styles.card.padding and leave content flush to borders.
+      ...(variant === 'flat' || variant === 'quiet' ? { padding: 0 } : null),
     },
     style,
   ];

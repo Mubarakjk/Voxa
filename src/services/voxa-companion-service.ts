@@ -50,6 +50,7 @@ import { buildChallengeMePromptExtension } from './chat/challenge-me-prompt';
 import { getDailyCheckInService } from './check-in/daily-check-in-service';
 import { buildTodayCheckInPromptBlock } from '../utils/daily-mood';
 import { getCompanionJournalService } from './journal/companion-journal-service';
+import { loadJournalTalkContext } from './journal/journal-intelligence-service';
 import { getRitualService } from './ritual/ritual-service';
 import { Phase2DashboardData } from '../types/phase2-intelligence';
 import { Phase3DashboardData, AdaptiveModeLabel } from '../types/phase3-intelligence';
@@ -89,7 +90,6 @@ import { getSharedChallengesService } from './phase8/shared-challenges-service';
 import { buildLifeCalendar } from './phase8/life-calendar-service';
 import { buildPhase7PromptExtension } from './phase7/personality-v4-service';
 import { stagePromptBlock } from './phase7/relationship-evolution-service';
-import { getDailyReflectionService } from './reflection/daily-reflection-service';
 import {
   getRelationshipGrowthService,
   resolveFriendshipLevel,
@@ -115,6 +115,7 @@ import { TodayRoutineSummary } from '../types/routine';
 import { IStorageService } from './contracts';
 import { classifyTalkIntent } from './ai/companion-intent';
 import { buildCompanionStrategy, logCompanionStrategyDiagnostic } from './ai/companion-strategy';
+import { buildTurnIntelligencePlan } from './ai/turn-intelligence-plan';
 import {
   assembleRoutedContextExtension,
   ContextModule,
@@ -1256,7 +1257,6 @@ export class VoxaCompanionService {
       moodBlock,
       morningCheckIn,
       eveningCheckIn,
-      reflectionEntries,
       weatherBlock,
       nutritionBlock,
       notesBlock,
@@ -1294,9 +1294,6 @@ export class VoxaCompanionService {
           wants('check_in')
             ? getDailyCheckInService(storage).getTodayEntry('evening')
             : Promise.resolve(null),
-          wants('reflection')
-            ? getDailyReflectionService(storage).list(input.userId, 7)
-            : Promise.resolve([]),
           wants('weather')
             ? buildWeatherPromptBlock(getWeatherService(storage), effectiveUserText)
             : Promise.resolve(''),
@@ -1340,7 +1337,6 @@ export class VoxaCompanionService {
           '',
           null,
           null,
-          [],
           '',
           '',
           '',
@@ -1399,6 +1395,23 @@ export class VoxaCompanionService {
       recentVoxaReplies: recentVoxaTexts,
     });
 
+    const turnPlanStarted = talkPerfNow();
+    const turnPlan = buildTurnIntelligencePlan({
+      userMessage: effectiveUserText,
+      selectedMode: input.mode,
+      strategy: companionStrategy,
+      userProfile: profile,
+      stylePrefs,
+      relationship: {
+        conversationCount: unifiedContext.relationship.conversationCount,
+        daysTogether,
+      },
+      memories,
+      history,
+      recentVoxaReplies: recentVoxaTexts,
+    });
+    talkPerf('turn-plan', talkPerfNow() - turnPlanStarted);
+
     const responsePlan = planResponse({
       userMessage: effectiveUserText,
       memories,
@@ -1407,6 +1420,7 @@ export class VoxaCompanionService {
       recentVoxaReplies: recentVoxaTexts,
       moodTrend: moodHistory[0]?.label ?? null,
       strategy: companionStrategy,
+      turnPlan,
     });
 
     if (storage) {
@@ -1414,7 +1428,7 @@ export class VoxaCompanionService {
     }
 
     const phase9Block = buildPhase9PromptExtension(
-      [companionStrategy.promptBlock, responsePlan.promptBlock].filter(Boolean).join('\n\n'),
+      'Follow the Turn intelligence block placed after Safety. It is authoritative for this reply.',
     );
 
     let phase11Block = '';
@@ -1453,10 +1467,21 @@ export class VoxaCompanionService {
       checkInBlock = buildTodayCheckInPromptBlock({
         period: entry.period,
         moodLabel: entry.answers.mood ?? entry.mood,
-        focus: entry.answers.priority ?? entry.answers.focus,
-        worrying: entry.answers.worrying,
-        smiled: entry.answers.smiled ?? entry.answers.wentWell,
       });
+    }
+
+    let journalBlock = '';
+    if (storage && (wants('journal') || wants('reflection'))) {
+      const journalTalk = await loadJournalTalkContext({
+        storage,
+        repositories: this.repositories,
+        userId: input.userId,
+        userMessage: effectiveUserText,
+        intent: talkIntentResult.intent,
+        timeZone: profile.timezone,
+        memories,
+      });
+      journalBlock = journalTalk.block;
     }
 
     const wantsChallenge =
@@ -1465,9 +1490,7 @@ export class VoxaCompanionService {
       );
     const challengeBlock = wantsChallenge ? buildChallengeMePromptExtension(effectiveUserText) : '';
 
-    const reflectionBlock = storage
-      ? getDailyReflectionService(storage).formatForPrompt(reflectionEntries)
-      : '';
+    const reflectionBlock = '';
 
     const companionContextExtension = assembleRoutedContextExtension(selectedContextModules, {
       companion_core: this.companionIntelligence.getPromptExtension(unifiedContext, { includeMemories: false }),
@@ -1480,6 +1503,7 @@ export class VoxaCompanionService {
       check_in: checkInBlock,
       challenge: challengeBlock,
       reflection: reflectionBlock,
+      journal: journalBlock,
       weather: weatherBlock,
       nutrition: nutritionBlock,
       notes: notesBlock,
@@ -1497,9 +1521,10 @@ export class VoxaCompanionService {
       upcomingReminders,
       currentTime: unifiedContext.currentTime,
       companionContextExtension,
+      turnIntelligenceBlock: turnPlan.promptBlock,
       talkIntent: talkIntentResult.intent,
       referencesRecentTurns: talkIntentResult.referencesRecentTurns,
-      conversationState: companionStrategy.state,
+      conversationState: turnPlan.state,
       contextModules: selectedContextModules,
       imageUrlForVision,
       imageAnalysisSummary,
@@ -1679,6 +1704,9 @@ export class VoxaCompanionService {
       userMessage: effectiveUserText,
       voxaReply: voxaMessage.content,
       strategy: companionStrategy.state,
+      stance: turnPlan.stance,
+      humourSuppressed: turnPlan.humourSuppressed,
+      questionPolicy: turnPlan.questionPolicy,
     });
 
     if (this.storage && effectiveUserText.trim().length >= 4) {

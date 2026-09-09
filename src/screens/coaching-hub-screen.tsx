@@ -52,14 +52,25 @@ export function CoachingHubScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader showBack title="Specialist coaching" subtitle="Same Voxa memory — focused tone and boundaries per coach." />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          showBack
+          title="Specialist coaching"
+          subtitle="Same Voxa memory — focused tone and boundaries per coach."
+        />
         {COACH_DEFINITIONS.map((coach) => (
           <Pressable key={coach.id} onPress={() => void start(coach.id)}>
             <GlassCard style={styles.card}>
-              <VoxaText variant="subtitle">{coach.name}{activeId === coach.id ? ' · Active' : ''}</VoxaText>
-              <VoxaText variant="body" color="textSecondary">{coach.purpose}</VoxaText>
-              <VoxaText variant="caption" color="textMuted">{coach.boundaries}</VoxaText>
+              <VoxaText variant="subtitle" style={styles.title}>
+                {coach.name}
+                {activeId === coach.id ? ' · Active' : ''}
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.purpose}>
+                {coach.purpose}
+              </VoxaText>
+              <VoxaText variant="caption" color="textMuted" style={styles.boundaries}>
+                {coach.boundaries}
+              </VoxaText>
             </GlassCard>
           </Pressable>
         ))}
@@ -69,6 +80,17 @@ export function CoachingHubScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.sm },
-  card: { gap: spacing.xs },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  card: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  title: { lineHeight: 24 },
+  purpose: { lineHeight: 22 },
+  boundaries: { lineHeight: 19 },
 });
