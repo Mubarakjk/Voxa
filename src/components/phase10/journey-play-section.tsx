@@ -142,28 +142,34 @@ function Link({ label, onPress }: { label: string; onPress: () => void }) {
 const styles = StyleSheet.create({
   card: {
     gap: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   levelLine: { lineHeight: 22 },
   stats: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   stat: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
     minWidth: 0,
+    maxWidth: '100%',
     gap: spacing.xs,
+    paddingRight: spacing.xs,
   },
-  statLabel: { lineHeight: 16 },
+  statLabel: { lineHeight: 17, flexShrink: 1 },
   statValue: { lineHeight: 22 },
-  section: { gap: spacing.xs },
+  section: { gap: spacing.sm },
   line: { lineHeight: 18 },
   links: {
-    gap: spacing.sm,
-    paddingTop: spacing.xs,
+    gap: spacing.md12,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   link: {
-    minHeight: 28,
+    minHeight: 32,
     justifyContent: 'center',
   },
 });

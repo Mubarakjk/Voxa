@@ -1,9 +1,10 @@
 import { CompanionModeId, Memory, MemorySource, UserProfile } from '../../types';
 import { TalkIntent } from '../ai/companion-intent';
+import { resolveMemoryPolicy } from '../ai/turn-intelligence-plan';
 import { IMemoryRepository } from '../contracts';
 import { ExtractedMemoryCandidate, IAIService } from '../contracts';
 import {
-  findDuplicateMemory,
+  looksLikeReschedule,
   mergeMemoryContent,
   mergeTags,
   resolveImportance,
@@ -12,7 +13,9 @@ import { extractMemoriesLocally } from './local-memory-extractor';
 import {
   MemoryRetrievalContext,
   filterMemoriesForIntent,
+  overlapScore,
   rankMemories,
+  tokenize,
   TOP_MEMORY_LIMIT,
 } from './memory-relevance';
 import { memoryAgingEngine } from '../personality/memory-aging-engine';
@@ -33,6 +36,18 @@ import {
   executeUserMemoryCommand,
   parseUserMemoryCommand,
 } from './memory-user-commands';
+import {
+  countTemporalAlignments,
+  decideMemoryCallback,
+  memoryTemporallyAligns,
+} from './memory-callback-gate';
+import {
+  applyOpenLoopLifecycle,
+  joinOpenLoops,
+  keepOpenLoopTagsOnUpdate,
+} from './open-loop-service';
+import { parseUserTemporal, readTemporalMeta } from './temporal-memory';
+import { resolveDeviceTimeZone } from './temporal-parse';
 
 export type ProcessConversationInput = {
   userId: string;
@@ -67,24 +82,77 @@ export class MemoryIntelligenceService {
     const activeMemories = memoryAgingEngine.filterActive(allMemories);
     if (activeMemories.length === 0) return [];
 
-    const ranked = rankMemories(activeMemories, context, TOP_MEMORY_LIMIT);
-    const selected = options?.intent
-      ? filterMemoriesForIntent(ranked, options.intent, context.userMessage)
-      : ranked.map((item) => item.memory);
+    const intent = options?.intent;
+    const memoryPolicy = context.memoryPolicy ?? (intent ? resolveMemoryPolicy(intent) : 'recall');
+    if (memoryPolicy === 'skip') {
+      logMemoryRetrieveDiagnostic({
+        intent: intent ?? 'unknown',
+        candidates: allMemories.length,
+        active: activeMemories.length,
+        selected: [],
+      });
+      return [];
+    }
 
-    logMemoryRetrieveDiagnostic({
-      intent: options?.intent ?? 'unknown',
-      candidates: allMemories.length,
-      active: activeMemories.length,
-      selected,
+    const retrievalContext = { ...context, memoryPolicy };
+    const ranked = rankMemories(activeMemories, retrievalContext, TOP_MEMORY_LIMIT);
+    const timeZone = resolveDeviceTimeZone(context.timeZone);
+    const now = context.now ?? new Date();
+    const queryTemporal = parseUserTemporal(context.userMessage, now, timeZone);
+    const selectedBase = intent
+      ? filterMemoriesForIntent(ranked, intent, context.userMessage, memoryPolicy)
+      : ranked.map((item) => item.memory);
+    const join = joinOpenLoops(activeMemories, {
+      userMessage: context.userMessage,
+      now,
+      timeZone,
+      recentMessageTexts: context.recentMessageTexts,
+    });
+    const selected =
+      join.unique && join.memory && !selectedBase.some((memory) => memory.id === join.memory!.id)
+        ? [join.memory, ...selectedBase]
+        : selectedBase;
+    const alignCount = join.ambiguous
+      ? join.competing.length
+      : countTemporalAlignments(selected, queryTemporal, timeZone);
+    const gated = selected.filter((memory) => {
+      const recentOverlap = overlapScore(
+        tokenize([context.userMessage, ...(context.recentMessageTexts ?? [])].join(' ')),
+        `${memory.title} ${memory.content}`,
+      );
+      const keywordOverlap = Math.max(
+        overlapScore(tokenize(context.userMessage), `${memory.title} ${memory.content}`),
+        recentOverlap * 0.5,
+      );
+      const action = decideMemoryCallback({
+        memory,
+        userMessage: context.userMessage,
+        intent,
+        memoryPolicy,
+        now,
+        timeZone,
+        queryTemporal,
+        keywordOverlap,
+        temporalAlign: memoryTemporallyAligns(memory, queryTemporal, timeZone),
+        ambiguousTemporalMatch: join.ambiguous || Boolean(queryTemporal && alignCount > 1 && keywordOverlap < 0.2),
+        uniqueOpenLoop: join.unique && join.memory?.id === memory.id,
+      });
+      return action !== 'ignore';
     });
 
-    if (selected.length === 0) return [];
+    logMemoryRetrieveDiagnostic({
+      intent: intent ?? 'unknown',
+      candidates: allMemories.length,
+      active: activeMemories.length,
+      selected: gated,
+    });
+
+    if (gated.length === 0) return [];
 
     const timestamp = nowIso();
 
     const touched = await Promise.all(
-      selected.map(async (memory) =>
+      gated.map(async (memory) =>
         this.memories.updateMemory(memory.id, {
           lastUsedAt: timestamp,
           useCount: (memory.useCount ?? 0) + 1,
@@ -102,6 +170,17 @@ export class MemoryIntelligenceService {
     if (!input.userProfile.preferences.memoryEnabled) return [];
 
     const existing = await this.memories.listMemories(input.userId);
+    const writeContext = {
+      now: new Date(),
+      timeZone: resolveDeviceTimeZone(input.userProfile.timezone),
+    };
+
+    const lifecycle = applyOpenLoopLifecycle(existing, input.userMessage, writeContext);
+    if (lifecycle.target && lifecycle.patch) {
+      const updated = await this.memories.updateMemory(lifecycle.target.id, lifecycle.patch);
+      if (lifecycle.suppressExtract) return [updated];
+    }
+
     let candidates: ExtractedMemoryCandidate[] = [];
 
     try {
@@ -120,6 +199,7 @@ export class MemoryIntelligenceService {
         voxaReply: input.voxaReply,
         mode: input.mode,
         existingMemories: existing,
+        writeContext,
       });
     }
 
@@ -129,10 +209,11 @@ export class MemoryIntelligenceService {
         voxaReply: input.voxaReply,
         mode: input.mode,
         existingMemories: existing,
+        writeContext,
       });
     }
 
-    const explicitOnly = assessMemoryWrite(input.userMessage);
+    const explicitOnly = assessMemoryWrite(input.userMessage, writeContext);
     if (explicitOnly?.shouldPersist && candidates.length === 0) {
       candidates = [decisionToCandidate(explicitOnly)];
     }
@@ -141,7 +222,7 @@ export class MemoryIntelligenceService {
     const workingSet = [...existing];
 
     for (const candidate of candidates) {
-      const decision = enrichCandidateDecision(candidate, input.userMessage);
+      const decision = enrichCandidateDecision(candidate, input.userMessage, writeContext);
       if (!decision.shouldPersist) {
         logMemoryWriteDiagnostic({ action: 'skip', decision });
         continue;
@@ -159,17 +240,21 @@ export class MemoryIntelligenceService {
       }
 
       if (target && shouldReplaceInsteadOfMerge(decision, target)) {
+        const content = looksLikeReschedule(decision.content)
+          ? appendEarlierTemporal(target, decision.content, writeContext.timeZone)
+          : decision.content;
         const updated = await this.memories.updateMemory(target.id, {
           title: decision.title.length >= target.title.length ? decision.title : target.title,
-          content: decision.content,
+          content,
           importance: importanceFromLevel(decision.importance),
           mood: candidate.mood ?? target.mood,
-          tags: mergeTags(
+          tags: keepOpenLoopTagsOnUpdate(
             target.tags.filter((tag) => tag !== TAG_SUPERSEDED),
             decision.tags,
           ),
           confidence: decision.confidenceScore,
           expiresAt: decision.expiresAt ?? target.expiresAt,
+          occurredAt: decision.occurredAt ?? target.occurredAt,
           relatedMode: candidate.relatedMode ?? target.relatedMode,
         });
         const index = workingSet.findIndex((item) => item.id === target.id);
@@ -188,6 +273,7 @@ export class MemoryIntelligenceService {
           tags: mergeTags(target.tags, decision.tags),
           confidence: Math.max(target.confidence ?? 0.7, decision.confidenceScore),
           expiresAt: decision.expiresAt ?? target.expiresAt,
+          occurredAt: decision.occurredAt ?? target.occurredAt,
         });
         const index = workingSet.findIndex((item) => item.id === target.id);
         if (index >= 0) workingSet[index] = updated;
@@ -210,6 +296,7 @@ export class MemoryIntelligenceService {
           source: resolveMemorySource(input.mediaSource),
           confidence: enrichedCandidate.confidence,
           expiresAt: enrichedCandidate.expiresAt,
+          occurredAt: enrichedCandidate.occurredAt,
         }),
       );
       workingSet.unshift(created);
@@ -226,4 +313,10 @@ function resolveMemorySource(mediaSource?: MemorySource): MemorySource {
     return mediaSource;
   }
   return 'conversation';
+}
+
+function appendEarlierTemporal(existing: Memory, incoming: string, timeZone: string): string {
+  const meta = readTemporalMeta(existing, timeZone);
+  if (!meta.label || incoming.toLowerCase().includes('earlier:')) return incoming;
+  return `${incoming.trim()} (earlier: ${meta.label})`;
 }

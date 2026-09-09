@@ -158,3 +158,7 @@ export function getDailyCheckInService(storage: IStorageService): DailyCheckInSe
   if (!instance) instance = new DailyCheckInService(storage);
   return instance;
 }
+
+export function resetDailyCheckInService() {
+  instance = null;
+}

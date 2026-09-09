@@ -1,6 +1,7 @@
 import { CompanionModeId, Memory, MemoryCategory, MemoryMood } from '../../types';
 import { ExtractedMemoryCandidate } from '../contracts';
-import { assessMemoryWrite, decisionToCandidate } from './memory-write-policy';
+import { assessMemoryWrite, decisionToCandidate, MemoryWriteContext } from './memory-write-policy';
+import { isDurableEnoughToStore } from './memory-quality';
 
 type ExtractionRule = {
   category: MemoryCategory;
@@ -13,12 +14,28 @@ type ExtractionRule = {
 
 const RULES: ExtractionRule[] = [
   {
-    category: 'goals',
-    keywords: ['my goal', 'goal is', 'i want to', 'i hope to', 'working toward', 'trying to'],
-    titleBuilder: () => 'Personal goal',
+    category: 'fitness',
+    keywords: ['i box', 'boxing', 'times a week'],
+    titleBuilder: () => 'Fitness habit',
     importance: 4,
     mood: 'motivated',
-    tags: ['goals'],
+    tags: ['fitness', 'habit'],
+  },
+  {
+    category: 'goals',
+    keywords: ["i'm building", 'i am building', 'app called'],
+    titleBuilder: () => 'Personal project',
+    importance: 4,
+    mood: 'motivated',
+    tags: ['goals', 'project'],
+  },
+  {
+    category: 'moments',
+    keywords: ['driving test', 'my test is', "i've got my", 'interview is', 'exam is'],
+    titleBuilder: (text) => (/\bdriving test\b/i.test(text) ? 'Driving test' : 'Upcoming event'),
+    importance: 4,
+    mood: 'motivated',
+    tags: ['event'],
   },
   {
     category: 'future_plans',
@@ -189,18 +206,24 @@ export function extractMemoriesLocally(input: {
   voxaReply: string;
   mode: CompanionModeId;
   existingMemories: Memory[];
+  writeContext?: MemoryWriteContext;
 }): ExtractedMemoryCandidate[] {
   const text = input.userMessage.trim();
   if (text.length < 8) return [];
 
   const lower = text.toLowerCase();
+  if (!isDurableEnoughToStore(text) && !/\bremember (that|this)\b/i.test(lower)) return [];
   if (/^(lol|lmao|haha|just kidding|jk)\b/.test(lower)) return [];
   if (/^(yeah|yep|ok|okay|thanks|thank you|cool|nice)\b/.test(lower) && text.length < 40) return [];
-  if (/\b(maybe|probably|might|perhaps|whatever|nevermind|never mind)\b/.test(lower) && text.length < 60) {
+  if (
+    /\b(maybe|probably|might|perhaps|whatever|nevermind|never mind)\b/.test(lower) &&
+    text.length < 40 &&
+    !/\b(driving test|interview|exam|deadline|test is)\b/.test(lower)
+  ) {
     return [];
   }
 
-  const explicitDecision = assessMemoryWrite(text);
+  const explicitDecision = assessMemoryWrite(text, input.writeContext);
   if (explicitDecision?.shouldPersist) {
     return [decisionToCandidate(explicitDecision)];
   }

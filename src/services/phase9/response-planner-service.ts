@@ -7,6 +7,7 @@ import {
   strategyAllowsQuestion,
   strategyDepthToKeepShort,
 } from '../ai/companion-strategy';
+import { ResponseStance, TurnIntelligencePlan } from '../ai/turn-intelligence-plan';
 
 const BANNED_OPENERS = [
   /^(as an ai|i understand\.|how can i help)/i,
@@ -36,6 +37,7 @@ export function planResponse(input: {
   recentVoxaReplies?: string[];
   moodTrend?: string | null;
   strategy?: CompanionStrategy;
+  turnPlan?: TurnIntelligencePlan;
 }): ResponsePlan {
   const lower = input.userMessage.toLowerCase();
   const thinkingStyle = detectThinkingStyle(input.userMessage);
@@ -80,7 +82,11 @@ export function planResponse(input: {
     .filter((g) => g.status === 'active' && (lower.includes(g.title.toLowerCase().slice(0, 6)) || /\bgoal\b/i.test(lower)))
     .slice(0, 2);
 
-  if (intent === 'inform' && input.userMessage.length < 120) {
+  if (input.turnPlan) {
+    intent = stanceToResponseIntent(input.turnPlan.stance);
+  }
+
+  if (intent === 'inform' && input.userMessage.length < 120 && !input.turnPlan) {
     return {
       intent,
       thinkingStyle,
@@ -105,20 +111,25 @@ export function planResponse(input: {
     intent = 'support';
   }
 
-  const keepShort = input.strategy
-    ? strategyDepthToKeepShort(input.strategy.state.depth)
-    : input.stylePrefs?.prefersShort ?? (input.userMessage.length < 60 || intent === 'listen' || detectedEmotion === 'tired');
+  const keepShort = input.turnPlan
+    ? strategyDepthToKeepShort(input.turnPlan.depth)
+    : input.strategy
+      ? strategyDepthToKeepShort(input.strategy.state.depth)
+      : input.stylePrefs?.prefersShort ?? (input.userMessage.length < 60 || intent === 'listen' || detectedEmotion === 'tired');
   const useChecklist = detectedEmotion !== 'tired' && (intent === 'plan' || /\b(steps|checklist|list|tasks)\b/i.test(lower));
   const useTimeline = /\b(timeline|week|month|phase|roadmap)\b/i.test(lower);
-  const useHumour =
-    input.strategy?.state.tone === 'playful' ||
-    input.stylePrefs?.prefersHumour ||
-    (thinkingStyle === 'friend' && detectedEmotion === 'positive');
-  const shouldAskQuestion = input.strategy
-    ? strategyAllowsQuestion(input.strategy.state.questionPolicy)
-    : (intent === 'coach' || intent === 'listen') &&
-      !/\?/.test(input.userMessage) &&
-      input.userMessage.length > 20;
+  const useHumour = input.turnPlan
+    ? input.turnPlan.humour >= 2 && !input.turnPlan.humourSuppressed
+    : input.strategy?.state.tone === 'playful' ||
+      input.stylePrefs?.prefersHumour ||
+      (thinkingStyle === 'friend' && detectedEmotion === 'positive');
+  const shouldAskQuestion = input.turnPlan
+    ? input.turnPlan.questionPolicy === 'useful'
+    : input.strategy
+      ? strategyAllowsQuestion(input.strategy.state.questionPolicy)
+      : (intent === 'coach' || intent === 'listen') &&
+        !/\?/.test(input.userMessage) &&
+        input.userMessage.length > 20;
 
   const userGoal = inferUserGoal(lower, intent);
 
@@ -157,8 +168,29 @@ export function planResponse(input: {
     useHumour,
     relevantMemoryTitles: relevantMemories.map((m) => m.title),
     relevantGoalTitles: relevantGoals.map((g) => g.title),
-    promptBlock: lines.join('\n'),
+    promptBlock: input.turnPlan
+      ? '## Response plan\nFollow the Turn intelligence block for stance, depth, questions, and humour.'
+      : lines.join('\n'),
   };
+}
+
+function stanceToResponseIntent(stance: ResponseStance): ResponseIntent {
+  switch (stance) {
+    case 'listen':
+      return 'listen';
+    case 'inform':
+      return 'inform';
+    case 'support':
+      return 'support';
+    case 'celebrate':
+      return 'celebrate';
+    case 'coach':
+      return 'coach';
+    case 'plan':
+      return 'plan';
+    case 'challenge':
+      return 'challenge';
+  }
 }
 
 function inferUserGoal(lower: string, intent: ResponseIntent): string {

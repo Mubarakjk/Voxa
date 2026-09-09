@@ -78,8 +78,12 @@ export function MoodTimelineScreen(_props: Props) {
 const styles = StyleSheet.create({
   scroll: {
     padding: layout.screenPadding,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl * 2,
     gap: spacing.md,
   },
-  current: { gap: spacing.xs },
+  current: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
 });

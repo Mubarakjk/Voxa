@@ -98,173 +98,250 @@ export function DailyChallengeScreen() {
 
   return (
     <ScreenShell padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <ScreenHeader showBack title="Daily challenge" subtitle="One personalised challenge for today" />
 
         {loadError ? (
           <GlassCard style={styles.errorCard}>
-            <VoxaText variant="body" color="danger">{loadError}</VoxaText>
+            <VoxaText variant="body" color="danger">
+              {loadError}
+            </VoxaText>
             <PremiumButton label="Retry" disabled={busy} onPress={() => void refresh()} />
           </GlassCard>
         ) : null}
 
         {!challenge ? (
           <GlassCard style={styles.card}>
-            <VoxaText variant="subtitle">No challenge yet</VoxaText>
-            <VoxaText variant="body" color="textSecondary">
-              Voxa will pick something when your routine or goals are ready.
-            </VoxaText>
-            <PremiumButton label="Refresh" disabled={busy} onPress={() => void refresh()} />
-            <Pressable onPress={() => navigation.goBack()}>
-              <VoxaText variant="caption" color="primarySoft">Go back</VoxaText>
-            </Pressable>
+            <View style={styles.cardInner}>
+              <VoxaText variant="subtitle" style={styles.title}>
+                No challenge yet
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.body}>
+                Voxa will pick something when your routine or goals are ready.
+              </VoxaText>
+              <View style={styles.actions}>
+                <PremiumButton label="Refresh" disabled={busy} onPress={() => void refresh()} />
+                <Pressable onPress={() => navigation.goBack()} style={styles.secondaryBtn}>
+                  <VoxaText variant="caption" color="primarySoft">
+                    Go back
+                  </VoxaText>
+                </Pressable>
+              </View>
+            </View>
           </GlassCard>
         ) : status === 'skipped' || status === 'replaced' ? (
           <GlassCard style={styles.card}>
-            <VoxaText variant="caption" color="textMuted">SKIPPED</VoxaText>
-            <VoxaText variant="subtitle">That is okay</VoxaText>
-            <VoxaText variant="body" color="textSecondary">
-              Some days need rest, not another task. You can choose a different challenge or come back tomorrow.
-            </VoxaText>
-            <View style={styles.actions}>
-              <PremiumButton
-                label="Choose another challenge"
-                disabled={busy}
-                onPress={() =>
-                  void run(async () => {
-                    const dash = await companion.getHomeDashboard(profile.id);
-                    return service.replace(profile.id, { goals: dash.activeGoals, routine: dash.routineSummary });
-                  })
-                }
-              />
-              <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}>
-                <VoxaText variant="body" color="primarySoft">Come back tomorrow</VoxaText>
-              </Pressable>
-              <Pressable onPress={() => navigation.goBack()}>
-                <VoxaText variant="caption" color="textMuted">Back</VoxaText>
-              </Pressable>
+            <View style={styles.cardInner}>
+              <VoxaText variant="caption" color="textMuted" style={styles.status}>
+                SKIPPED
+              </VoxaText>
+              <VoxaText variant="subtitle" style={styles.title}>
+                That is okay
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.body}>
+                Some days need rest, not another task. You can choose a different challenge or come back tomorrow.
+              </VoxaText>
+              <View style={styles.actions}>
+                <PremiumButton
+                  label="Choose another challenge"
+                  disabled={busy}
+                  onPress={() =>
+                    void run(async () => {
+                      const dash = await companion.getHomeDashboard(profile.id);
+                      return service.replace(profile.id, { goals: dash.activeGoals, routine: dash.routineSummary });
+                    })
+                  }
+                />
+                <Pressable
+                  style={styles.secondaryBtn}
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}>
+                  <VoxaText variant="body" color="primarySoft">
+                    Come back tomorrow
+                  </VoxaText>
+                </Pressable>
+                <Pressable onPress={() => navigation.goBack()} style={styles.secondaryBtn}>
+                  <VoxaText variant="caption" color="textMuted">
+                    Back
+                  </VoxaText>
+                </Pressable>
+              </View>
             </View>
           </GlassCard>
         ) : status === 'completed' ? (
           <GlassCard style={styles.card}>
-            <VoxaText variant="caption" color="primarySoft">COMPLETED</VoxaText>
-            <VoxaText variant="subtitle">{challenge.title}</VoxaText>
-            {challenge.completedAt ? (
-              <VoxaText variant="caption" color="textMuted">
-                Finished {new Date(challenge.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            <View style={styles.cardInner}>
+              <VoxaText variant="caption" color="primarySoft" style={styles.status}>
+                COMPLETED
               </VoxaText>
-            ) : null}
-            <VoxaText variant="body" color="textSecondary">
-              +{challenge.xpReward} XP earned. Nice work today.
-            </VoxaText>
-            <VoxaText variant="body" color="textSecondary">
-              What felt different after you finished?
-            </VoxaText>
-            <View style={styles.actions}>
-              <PremiumButton
-                label="Reflect in Talk"
-                disabled={busy}
-                onPress={() =>
-                  navigation.navigate('MainTabs', {
-                    screen: 'Talk',
-                    params: { starterPrompt: `I completed "${challenge.title}". Help me reflect on it.` },
-                  })
-                }
-              />
-              <PremiumButton
-                label="Undo completion"
-                disabled={busy}
-                onPress={() =>
-                  confirm('Undo completion?', 'XP will be removed safely.', () =>
-                    run(() => service.undoComplete(profile.id)),
-                  )
-                }
-              />
-              <Pressable onPress={() => navigation.navigate('MainTabs', { screen: 'Journey' })}>
-                <VoxaText variant="caption" color="primarySoft">View in Journey</VoxaText>
-              </Pressable>
+              <VoxaText variant="subtitle" style={styles.title}>
+                {challenge.title}
+              </VoxaText>
+              {challenge.completedAt ? (
+                <VoxaText variant="caption" color="textMuted" style={styles.meta}>
+                  Finished{' '}
+                  {new Date(challenge.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </VoxaText>
+              ) : null}
+              <VoxaText variant="body" color="textSecondary" style={styles.body}>
+                +{challenge.xpReward} XP earned. Nice work today.
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.body}>
+                What felt different after you finished?
+              </VoxaText>
+              <View style={styles.actions}>
+                <PremiumButton
+                  label="Reflect in Talk"
+                  disabled={busy}
+                  onPress={() =>
+                    navigation.navigate('MainTabs', {
+                      screen: 'Talk',
+                      params: { starterPrompt: `I completed "${challenge.title}". Help me reflect on it.` },
+                    })
+                  }
+                />
+                <PremiumButton
+                  label="Undo completion"
+                  disabled={busy}
+                  onPress={() =>
+                    confirm('Undo completion?', 'XP will be removed safely.', () =>
+                      run(() => service.undoComplete(profile.id)),
+                    )
+                  }
+                />
+                <Pressable
+                  onPress={() => navigation.navigate('MainTabs', { screen: 'Journey' })}
+                  style={styles.secondaryBtn}>
+                  <VoxaText variant="caption" color="primarySoft">
+                    View in Journey
+                  </VoxaText>
+                </Pressable>
+              </View>
             </View>
           </GlassCard>
         ) : (
           <GlassCard style={styles.card}>
-            <VoxaText variant="caption" color="primarySoft">{status.toUpperCase()}</VoxaText>
-            <VoxaText variant="subtitle">{challenge.title}</VoxaText>
-            <VoxaText variant="body" color="textSecondary">{challenge.description}</VoxaText>
-            <VoxaText variant="caption" color="textMuted">{whyVoxaChose(challenge)}</VoxaText>
-            <View style={styles.metaRow}>
-              <View style={styles.badge}>
-                <VoxaText variant="caption" color="textSecondary">{difficultyLabel(challenge.xpReward)}</VoxaText>
+            <View style={styles.cardInner}>
+              <VoxaText variant="caption" color="primarySoft" style={styles.status}>
+                {status.toUpperCase()}
+              </VoxaText>
+              <VoxaText variant="subtitle" style={styles.title}>
+                {challenge.title}
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.body}>
+                {challenge.description}
+              </VoxaText>
+              <VoxaText variant="caption" color="textMuted" style={styles.support}>
+                {whyVoxaChose(challenge)}
+              </VoxaText>
+              <View style={styles.metaRow}>
+                <View style={styles.badge}>
+                  <VoxaText variant="caption" color="textSecondary">
+                    {difficultyLabel(challenge.xpReward)}
+                  </VoxaText>
+                </View>
+                <VoxaText variant="caption" color="textMuted">
+                  +{challenge.xpReward} XP
+                </VoxaText>
               </View>
-              <VoxaText variant="caption" color="textMuted">+{challenge.xpReward} XP</VoxaText>
-            </View>
-
-            {status === 'accepted' ? (
-              <VoxaText variant="caption" color="primarySoft">In progress — mark complete when you are done.</VoxaText>
-            ) : null}
-
-            <View style={styles.actions}>
-              {status === 'pending' ? (
-                <>
-                  <PremiumButton label="Accept" disabled={busy} onPress={() => void run(() => service.accept(profile.id))} />
-                  <PremiumButton
-                    label="Replace"
-                    disabled={busy}
-                    onPress={() =>
-                      confirm('Replace challenge?', 'Get a different challenge for today.', () =>
-                        run(async () => {
-                          const dash = await companion.getHomeDashboard(profile.id);
-                          return service.replace(profile.id, { goals: dash.activeGoals, routine: dash.routineSummary });
-                        }),
-                      )
-                    }
-                  />
-                  <Pressable style={styles.secondaryBtn} onPress={() => confirm('Skip today?', 'You can try again tomorrow.', () => run(() => service.skip(profile.id)))}>
-                    <VoxaText variant="body" color="textSecondary">Skip</VoxaText>
-                  </Pressable>
-                </>
-              ) : null}
 
               {status === 'accepted' ? (
-                <>
-                  <PremiumButton
-                    label="Mark complete"
-                    disabled={busy}
-                    onPress={() =>
-                      confirm('Complete challenge?', 'Award XP once for today.', () =>
-                        run(async () => {
-                          const r = await service.complete(profile.id);
-                          return r?.challenge;
-                        }),
-                      )
-                    }
-                  />
-                  <Pressable
-                    style={styles.secondaryBtn}
-                    onPress={() =>
-                      navigation.navigate('MainTabs', {
-                        screen: 'Talk',
-                        params: { starterPrompt: `Working on: ${challenge.title}. ${challenge.description}` },
-                      })
-                    }>
-                    <VoxaText variant="body" color="primarySoft">Add note in Talk</VoxaText>
-                  </Pressable>
-                  <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate('PhotoMemories')}>
-                    <VoxaText variant="body" color="primarySoft">Add photo memory</VoxaText>
-                  </Pressable>
-                  <Pressable
-                    style={styles.secondaryBtn}
-                    onPress={() =>
-                      confirm('Replace challenge?', 'You will lose progress on this one.', () =>
-                        run(async () => {
-                          const dash = await companion.getHomeDashboard(profile.id);
-                          return service.replace(profile.id, { goals: dash.activeGoals, routine: dash.routineSummary });
-                        }),
-                      )
-                    }>
-                    <VoxaText variant="body" color="textSecondary">Replace</VoxaText>
-                  </Pressable>
-                </>
+                <VoxaText variant="caption" color="primarySoft" style={styles.inProgress}>
+                  In progress — mark complete when you are done.
+                </VoxaText>
               ) : null}
+
+              <View style={styles.actions}>
+                {status === 'pending' ? (
+                  <>
+                    <PremiumButton
+                      label="Accept"
+                      disabled={busy}
+                      onPress={() => void run(() => service.accept(profile.id))}
+                    />
+                    <PremiumButton
+                      label="Replace"
+                      disabled={busy}
+                      onPress={() =>
+                        confirm('Replace challenge?', 'Get a different challenge for today.', () =>
+                          run(async () => {
+                            const dash = await companion.getHomeDashboard(profile.id);
+                            return service.replace(profile.id, {
+                              goals: dash.activeGoals,
+                              routine: dash.routineSummary,
+                            });
+                          }),
+                        )
+                      }
+                    />
+                    <Pressable
+                      style={styles.skipBtn}
+                      onPress={() =>
+                        confirm('Skip today?', 'You can try again tomorrow.', () =>
+                          run(() => service.skip(profile.id)),
+                        )
+                      }>
+                      <VoxaText variant="body" color="textSecondary">
+                        Skip
+                      </VoxaText>
+                    </Pressable>
+                  </>
+                ) : null}
+
+                {status === 'accepted' ? (
+                  <>
+                    <PremiumButton
+                      label="Mark complete"
+                      disabled={busy}
+                      onPress={() =>
+                        confirm('Complete challenge?', 'Award XP once for today.', () =>
+                          run(async () => {
+                            const r = await service.complete(profile.id);
+                            return r?.challenge;
+                          }),
+                        )
+                      }
+                    />
+                    <Pressable
+                      style={styles.secondaryBtn}
+                      onPress={() =>
+                        navigation.navigate('MainTabs', {
+                          screen: 'Talk',
+                          params: {
+                            starterPrompt: `Working on: ${challenge.title}. ${challenge.description}`,
+                          },
+                        })
+                      }>
+                      <VoxaText variant="body" color="primarySoft">
+                        Add note in Talk
+                      </VoxaText>
+                    </Pressable>
+                    <Pressable
+                      style={styles.secondaryBtn}
+                      onPress={() => navigation.navigate('PhotoMemories')}>
+                      <VoxaText variant="body" color="primarySoft">
+                        Add photo memory
+                      </VoxaText>
+                    </Pressable>
+                    <Pressable
+                      style={styles.secondaryBtn}
+                      onPress={() =>
+                        confirm('Replace challenge?', 'You will lose progress on this one.', () =>
+                          run(async () => {
+                            const dash = await companion.getHomeDashboard(profile.id);
+                            return service.replace(profile.id, {
+                              goals: dash.activeGoals,
+                              routine: dash.routineSummary,
+                            });
+                          }),
+                        )
+                      }>
+                      <VoxaText variant="body" color="textSecondary">
+                        Replace
+                      </VoxaText>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
             </View>
           </GlassCard>
         )}
@@ -274,23 +351,55 @@ export function DailyChallengeScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, gap: spacing.lg, paddingBottom: spacing.xxl },
-  card: { gap: spacing.md },
-  errorCard: { gap: spacing.sm },
-  actions: { gap: spacing.sm, marginTop: spacing.sm },
+  scroll: {
+    padding: layout.screenPadding,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl * 2,
+  },
+  card: {
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  cardInner: {
+    gap: spacing.md12,
+  },
+  errorCard: {
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  status: { lineHeight: 18 },
+  title: { lineHeight: 24 },
+  body: { lineHeight: 22 },
+  support: { lineHeight: 19 },
+  meta: { lineHeight: 18 },
+  inProgress: { lineHeight: 18, marginTop: spacing.xs },
+  actions: {
+    gap: spacing.md12,
+    marginTop: spacing.md,
+    paddingTop: spacing.xs,
+  },
   secondaryBtn: {
     minHeight: 44,
     justifyContent: 'center',
     paddingVertical: spacing.sm,
   },
+  skipBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   badge: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,

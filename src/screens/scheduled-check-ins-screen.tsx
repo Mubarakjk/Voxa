@@ -9,7 +9,7 @@ import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { EmptyState, PremiumButton, ScreenHeader } from '../components/premium/premium-ui';
 import { LoadingState } from '../components/ui/screen-state';
-import { colors, layout, spacing } from '../constants/theme';
+import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import {
@@ -103,7 +103,8 @@ export function ScheduledCheckInsScreen({ navigation }: Props) {
   return (
     <ScreenShell>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <ScreenHeader showBack
+        <ScreenHeader
+          showBack
           eyebrow="Not a phone call"
           title="Scheduled check-ins"
           subtitle="Local notifications that open Talk with context — labelled clearly as Scheduled Voxa check-in."
@@ -111,50 +112,68 @@ export function ScheduledCheckInsScreen({ navigation }: Props) {
 
         {permission === 'denied' ? (
           <GlassCard style={styles.banner}>
-            <VoxaText variant="body" color="textSecondary">
+            <VoxaText variant="body" color="textSecondary" style={styles.bannerCopy}>
               Notifications are off. Check-ins will still save — enable notifications in system settings for reminders.
             </VoxaText>
           </GlassCard>
         ) : null}
 
-        <GlassCard style={styles.banner}>
-          <VoxaText variant="body" color="textSecondary">
+        <GlassCard style={styles.proactiveCard}>
+          <VoxaText variant="body" color="textSecondary" style={styles.bannerCopy}>
             Want Voxa to notice when you have been quiet? Configure inactivity-based proactive check-ins.
           </VoxaText>
-          <PremiumButton label="Proactive check-ins" onPress={() => navigation.navigate('ProactiveCheckIns')} variant="ghost" />
+          <PremiumButton
+            label="Proactive check-ins"
+            onPress={() => navigation.navigate('ProactiveCheckIns')}
+            variant="ghost"
+          />
         </GlassCard>
 
         {error ? (
           <GlassCard style={styles.banner}>
-            <VoxaText variant="body" color="textSecondary">{error}</VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.bannerCopy}>
+              {error}
+            </VoxaText>
             <PremiumButton label="Retry" onPress={() => void load()} variant="ghost" />
           </GlassCard>
         ) : null}
 
-        <VoxaText variant="caption" color="primarySoft">Quick schedule</VoxaText>
+        <VoxaText variant="caption" color="primarySoft" style={styles.quickLabel}>
+          Quick schedule
+        </VoxaText>
         <View style={styles.templates}>
           {CHECK_IN_TEMPLATES.slice(0, 4).map((t) => (
             <Pressable key={t.id} style={styles.templateChip} onPress={() => void addQuick(t)}>
-              <VoxaText variant="caption" color="primarySoft">{t.label}</VoxaText>
+              <VoxaText variant="caption" color="primarySoft" style={styles.templateLabel} numberOfLines={2}>
+                {t.label}
+              </VoxaText>
             </Pressable>
           ))}
         </View>
 
         {items.length === 0 ? (
-          <EmptyState icon="notifications-outline" title="No check-ins yet" message="Schedule when Voxa should reach out with a personalised notification." />
+          <GlassCard style={styles.emptyCard}>
+            <EmptyState
+              icon="notifications-outline"
+              title="No check-ins yet"
+              message="Schedule when Voxa should reach out with a personalised notification."
+            />
+          </GlassCard>
         ) : (
           items.map((item) => (
             <GlassCard key={item.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <VoxaText variant="subtitle">{item.title}</VoxaText>
+                <VoxaText variant="subtitle" style={styles.cardTitle}>
+                  {item.title}
+                </VoxaText>
                 <Switch value={item.enabled} onValueChange={() => void toggle(item)} />
               </View>
-              <VoxaText variant="caption" color="textMuted">
+              <VoxaText variant="caption" color="textMuted" style={styles.cardMeta}>
                 {new Date(item.scheduledAt).toLocaleString()} · {item.recurrence} · {item.style}
               </VoxaText>
               <View style={styles.actions}>
                 <PremiumButton label="Open in Talk" onPress={() => openTalk(item)} />
-                <Pressable onPress={() => remove(item)} hitSlop={8}>
+                <Pressable onPress={() => remove(item)} hitSlop={8} style={styles.deleteBtn}>
                   <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
                 </Pressable>
               </View>
@@ -167,20 +186,71 @@ export function ScheduledCheckInsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.md },
-  banner: { gap: spacing.sm },
-  templates: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  banner: {
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  proactiveCard: {
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  bannerCopy: { lineHeight: 22 },
+  quickLabel: { marginTop: spacing.xs },
+  templates: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   templateChip: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 0,
+    maxWidth: '100%',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 999,
+    paddingVertical: spacing.md12,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    minHeight: 44,
+    minHeight: 48,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  card: { gap: spacing.sm },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  templateLabel: { textAlign: 'center', lineHeight: 18 },
+  emptyCard: {
+    padding: 0,
+  },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  cardTitle: { flex: 1, minWidth: 0, lineHeight: 22 },
+  cardMeta: { lineHeight: 18 },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  deleteBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

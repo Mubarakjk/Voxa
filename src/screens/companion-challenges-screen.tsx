@@ -55,26 +55,48 @@ export function CompanionChallengesScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader showBack title="Companion challenges" subtitle="Shared experience — accept, pause, skip, or complete days." />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          showBack
+          title="Companion challenges"
+          subtitle="Shared experience — accept, pause, skip, or complete days."
+        />
         {active ? (
           <GlassCard style={styles.card}>
-            <VoxaText variant="subtitle">{active.title}</VoxaText>
-            <VoxaText variant="body" color="textSecondary">{active.dailyTarget}</VoxaText>
-            <VoxaText variant="caption" color="textMuted">
+            <VoxaText variant="subtitle" style={styles.title}>
+              {active.title}
+            </VoxaText>
+            <VoxaText variant="body" color="textSecondary" style={styles.body}>
+              {active.dailyTarget}
+            </VoxaText>
+            <VoxaText variant="caption" color="textMuted" style={styles.meta}>
               {active.completedDays}/{active.durationDays} days · streak {active.currentStreak} · {active.adherencePercent}%
             </VoxaText>
             <PremiumButton label="Complete today" onPress={() => void completeToday()} />
-            <PremiumButton label="Skip today" variant="ghost" onPress={() => active && profile && void svc.skipDay(profile.id, active.id).then(load)} />
+            <PremiumButton
+              label="Skip today"
+              variant="ghost"
+              onPress={() => active && profile && void svc.skipDay(profile.id, active.id).then(load)}
+            />
           </GlassCard>
         ) : (
           <>
-            <EmptyState icon="flag-outline" title="No active challenge" message="Pick a template to start." />
+            <GlassCard style={styles.emptyCard}>
+              <EmptyState
+                icon="flag-outline"
+                title="No active challenge"
+                message="Pick a template to start."
+              />
+            </GlassCard>
             {CHALLENGE_TEMPLATES.slice(0, 6).map((t) => (
               <Pressable key={t.id} onPress={() => void start(t.id)}>
-                <GlassCard style={styles.card}>
-                  <VoxaText variant="subtitle">{t.title}</VoxaText>
-                  <VoxaText variant="caption" color="textMuted">{t.days} days · {t.target}</VoxaText>
+                <GlassCard style={styles.templateCard}>
+                  <VoxaText variant="subtitle" style={styles.title}>
+                    {t.title}
+                  </VoxaText>
+                  <VoxaText variant="caption" color="textMuted" style={styles.meta}>
+                    {t.days} days · {t.target}
+                  </VoxaText>
                 </GlassCard>
               </Pressable>
             ))}
@@ -86,6 +108,25 @@ export function CompanionChallengesScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.sm },
-  card: { gap: spacing.sm },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  templateCard: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyCard: {
+    padding: 0,
+  },
+  title: { lineHeight: 24 },
+  body: { lineHeight: 22 },
+  meta: { lineHeight: 19 },
 });

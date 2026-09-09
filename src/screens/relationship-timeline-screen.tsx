@@ -40,16 +40,33 @@ export function RelationshipTimelineScreen(_props: Props) {
 
   return (
     <ScreenShell>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader showBack title="Our story" subtitle="Verified milestones only — no invented romance." />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          showBack
+          title="Our story"
+          subtitle="Verified milestones only — no invented romance."
+        />
         {milestones.length === 0 ? (
-          <EmptyState icon="heart-outline" title="Story growing" message="Keep chatting and achieving — milestones appear from real events." />
+          <GlassCard style={styles.emptyCard}>
+            <EmptyState
+              icon="heart-outline"
+              title="Story growing"
+              message="Keep chatting and achieving — milestones appear from real events."
+            />
+          </GlassCard>
         ) : (
           milestones.map((m) => (
             <GlassCard key={m.id} style={styles.card}>
-              <VoxaText variant="caption" color="primarySoft">{new Date(m.occurredAt).toLocaleDateString()} · {m.confidence}</VoxaText>
-              <VoxaText variant="subtitle">{m.favourite ? '★ ' : ''}{m.title}</VoxaText>
-              <VoxaText variant="body" color="textSecondary">{m.description}</VoxaText>
+              <VoxaText variant="caption" color="primarySoft" style={styles.eyebrow}>
+                {new Date(m.occurredAt).toLocaleDateString()} · {m.confidence}
+              </VoxaText>
+              <VoxaText variant="subtitle" style={styles.title}>
+                {m.favourite ? '★ ' : ''}
+                {m.title}
+              </VoxaText>
+              <VoxaText variant="body" color="textSecondary" style={styles.description}>
+                {m.description}
+              </VoxaText>
             </GlassCard>
           ))
         )}
@@ -59,6 +76,20 @@ export function RelationshipTimelineScreen(_props: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: layout.screenPadding, paddingBottom: spacing.xxl, gap: spacing.sm },
-  card: { gap: spacing.xs },
+  scroll: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  card: {
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyCard: {
+    padding: 0,
+  },
+  eyebrow: { lineHeight: 18 },
+  title: { lineHeight: 24 },
+  description: { lineHeight: 22 },
 });

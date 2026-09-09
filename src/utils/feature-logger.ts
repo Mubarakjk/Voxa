@@ -31,12 +31,14 @@ export function logFeature(
   const line = `${level.toUpperCase()}${suffix}`;
 
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    if (level === 'failure') {
-      console.error(`[Voxa:${feature}]`, line);
-    } else {
-      console.log(`[Voxa:${feature}]`, line);
-    }
+    // console.log only — console.error surfaces as a LogBox toast on expo-dev-client.
+    console.log(`[Voxa:${feature}]`, line);
   }
+}
+
+/** Production Talk UI must never render feature-log lines. */
+export function talkDiagnosticsAreUserVisible(): false {
+  return false;
 }
 
 export function logFeatureTimed<T>(

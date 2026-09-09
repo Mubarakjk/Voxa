@@ -105,13 +105,17 @@ export class CompanionIntelligenceService {
       online: input.online,
     });
 
-    const effectiveMode = plan.companionMode;
+    // User-selected chat mode is authoritative. Adaptive signals may shape
+    // stance/depth/humour later — they must not replace the explicit mode.
+    const effectiveMode = input.mode;
 
     const topMemories = await this.memoryEngine.retrieveForPrompt(input.userId, {
       userMessage: input.userMessage,
       mode: effectiveMode,
       recentMessageTexts: messages.slice(-6).map((m) => m.content),
       memoryLevel: input.userProfile.preferences.companionControls?.memoryLevel ?? 'balanced',
+      timeZone: input.userProfile.timezone,
+      now: new Date(),
     }, { intent: input.talkIntent });
 
     const base = contextEngine.build({

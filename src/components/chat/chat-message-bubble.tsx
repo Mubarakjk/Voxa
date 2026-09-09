@@ -5,14 +5,21 @@ import {
   Image,
   Modal,
   Pressable,
-  Share,
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isFeatureVisible } from '../../config/feature-status';
 import { colors, radius, spacing } from '../../constants/theme';
+import {
+  messageActionsForRole,
+  sharePayloadForMessage,
+  shouldCloseMessageActionMenu,
+} from '../../services/chat/message-actions';
 import { ChatMessageView } from '../../types';
+import { shareMessageText } from '../../utils/copy-text';
+import { hapticLight } from '../../utils/haptics';
 import { VoxaText } from '../ui/voxa-text';
 import { ChatMarkdownText } from '../phase11/chat-markdown-text';
 import { LiveCompanionOrb } from '../live-companion/live-companion-orb';
@@ -30,7 +37,7 @@ type ChatMessageBubbleProps = {
   onBookmark?: (message: ChatMessageView) => void;
   onDelete?: (message: ChatMessageView) => void;
   onRetrySend?: (message: ChatMessageView) => void;
-  onRegenerate?: (message: ChatMessageView) => void;
+  onEdit?: (message: ChatMessageView) => void;
   onPlayAloud?: (message: ChatMessageView) => void;
   onSavePhotoMemory?: (message: ChatMessageView) => void;
   onSaveVoiceMemory?: (message: ChatMessageView) => void;
@@ -49,16 +56,17 @@ function ChatMessageBubbleComponent({
   onBookmark,
   onDelete,
   onRetrySend,
-  onRegenerate,
+  onEdit,
   onPlayAloud,
   onSavePhotoMemory,
   onSaveVoiceMemory,
-  onCopyTranscript,
 }: ChatMessageBubbleProps) {
   const isUser = message.role === 'user';
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(4)).current;
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     Animated.parallel([
@@ -71,12 +79,27 @@ function ChatMessageBubbleComponent({
   const hasPhoto = message.attachments?.some((item) => item.type === 'image');
   const hasVoice = Boolean(audioAttachment);
   const transcript = audioAttachment?.transcription ?? message.text;
+  const exactText = transcript?.trim() ?? '';
+  const primaryActions = messageActionsForRole(isUser ? 'user' : 'voxa', {
+    canSpeak: Boolean(onPlayAloud && isFeatureVisible('playAloud') && exactText),
+  });
 
-  const copyText = async () => {
-    const text = transcript?.trim();
-    if (!text) return;
-    await Share.share({ message: text });
-    setActionsOpen(false);
+  const closeMenu = (event: 'outside_press' | 'action_selected') => {
+    if (shouldCloseMessageActionMenu(event)) {
+      setActionsOpen(false);
+    }
+  };
+
+  const shareText = async () => {
+    if (!exactText) return;
+    await shareMessageText(sharePayloadForMessage(exactText).message);
+    closeMenu('action_selected');
+  };
+
+  const openActions = () => {
+    if (selectMode) return;
+    void hapticLight();
+    setActionsOpen(true);
   };
 
   return (
@@ -99,18 +122,27 @@ function ChatMessageBubbleComponent({
         ) : null}
         <Pressable
           onPress={() => {
+            if (selectMode) {
+              setSelectMode(false);
+              return;
+            }
             if (message.status === 'failed' && isUser && onRetrySend) {
               onRetrySend(message);
             }
           }}
-          onLongPress={() => setActionsOpen(true)}
+          onLongPress={openActions}
+          delayLongPress={320}
+          accessibilityRole="text"
+          accessibilityHint="Long press for message actions"
+          accessibilityLabel={isUser ? 'Your message' : `${voxaName} message`}
           style={({ pressed }) => [
             styles.bubble,
             isUser ? styles.bubbleUser : styles.bubbleVoxa,
             message.status === 'failed' && styles.failed,
             bookmarked && styles.bookmarked,
             hasVoice && styles.voiceBubble,
-            pressed && styles.bubblePressed,
+            selectMode && styles.selectMode,
+            pressed && !selectMode && styles.bubblePressed,
           ]}>
           {message.attachments?.map((attachment) => {
             if (attachment.type === 'image' && (attachment.remoteUrl ?? attachment.localUri)) {
@@ -140,11 +172,11 @@ function ChatMessageBubbleComponent({
           })}
           {message.text && !hasVoice ? (
             isUser ? (
-              <VoxaText variant="body" style={styles.messageText}>
+              <VoxaText variant="body" selectable={selectMode} style={styles.messageText}>
                 {message.text}
               </VoxaText>
             ) : (
-              <ChatMarkdownText text={message.text} />
+              <ChatMarkdownText text={message.text} selectable={selectMode} />
             )
           ) : null}
           <View style={styles.footer}>
@@ -155,7 +187,9 @@ function ChatMessageBubbleComponent({
                 ? ' · Failed — tap to retry'
                 : message.status === 'pending'
                   ? ' · Sending…'
-                  : ''}
+                  : selectMode
+                    ? ' · Select text'
+                    : ''}
             </VoxaText>
             {!isUser && isFeatureVisible('playAloud') && message.text ? (
               <Pressable
@@ -175,28 +209,62 @@ function ChatMessageBubbleComponent({
         </Pressable>
       </Animated.View>
 
-      <Modal visible={actionsOpen} transparent animationType="fade">
-        <Pressable style={styles.backdrop} onPress={() => setActionsOpen(false)}>
-          <View style={styles.sheet}>
-            {hasVoice && onCopyTranscript ? (
+      <Modal
+        visible={actionsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => closeMenu('outside_press')}
+        accessibilityViewIsModal>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => closeMenu('outside_press')}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss message actions">
+          <Pressable
+            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+            onPress={(event) => event.stopPropagation()}
+            accessibilityRole="menu"
+            accessibilityLabel="Message actions">
+            {isUser && primaryActions.includes('edit') && onEdit && exactText ? (
               <ActionRow
-                icon="copy-outline"
-                label="Copy transcript"
+                icon="create-outline"
+                label="Edit"
                 onPress={() => {
-                  onCopyTranscript(message);
-                  setActionsOpen(false);
+                  onEdit(message);
+                  closeMenu('action_selected');
                 }}
               />
-            ) : (
-              <ActionRow icon="copy-outline" label="Copy" onPress={() => void copyText()} />
-            )}
+            ) : null}
+            {primaryActions.includes('select_text') && exactText ? (
+              <ActionRow
+                icon="document-text-outline"
+                label="Select text"
+                onPress={() => {
+                  setSelectMode(true);
+                  closeMenu('action_selected');
+                }}
+              />
+            ) : null}
+            {!isUser && primaryActions.includes('speak') && onPlayAloud ? (
+              <ActionRow
+                icon={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+                label={isSpeaking ? 'Stop speaking' : 'Speak'}
+                onPress={() => {
+                  onPlayAloud(message);
+                  closeMenu('action_selected');
+                }}
+              />
+            ) : null}
+            {primaryActions.includes('share') && exactText ? (
+              <ActionRow icon="share-outline" label="Share" onPress={() => void shareText()} />
+            ) : null}
             {onRemember ? (
               <ActionRow
                 icon="sparkles-outline"
                 label="Remember this"
                 onPress={() => {
                   onRemember(message);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
@@ -206,7 +274,7 @@ function ChatMessageBubbleComponent({
                 label="Save to Journey"
                 onPress={() => {
                   onSaveVoiceMemory(message);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
@@ -216,7 +284,7 @@ function ChatMessageBubbleComponent({
                 label="Save to Journey"
                 onPress={() => {
                   onSavePhotoMemory(message);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
@@ -226,7 +294,7 @@ function ChatMessageBubbleComponent({
                 label="Retry upload"
                 onPress={() => {
                   onRetryUpload(audioAttachment.id);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
@@ -236,27 +304,7 @@ function ChatMessageBubbleComponent({
                 label={bookmarked ? 'Remove bookmark' : 'Bookmark'}
                 onPress={() => {
                   onBookmark(message);
-                  setActionsOpen(false);
-                }}
-              />
-            ) : null}
-            {!isUser && onRegenerate ? (
-              <ActionRow
-                icon="refresh-outline"
-                label="Regenerate"
-                onPress={() => {
-                  onRegenerate(message);
-                  setActionsOpen(false);
-                }}
-              />
-            ) : null}
-            {transcript && onPlayAloud && isFeatureVisible('playAloud') ? (
-              <ActionRow
-                icon="volume-high-outline"
-                label="Play aloud transcript"
-                onPress={() => {
-                  onPlayAloud(message);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
@@ -266,11 +314,11 @@ function ChatMessageBubbleComponent({
                 label="Delete"
                 onPress={() => {
                   onDelete(message);
-                  setActionsOpen(false);
+                  closeMenu('action_selected');
                 }}
               />
             ) : null}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </>
@@ -287,7 +335,11 @@ function ActionRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.actionRow} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
       <Ionicons name={icon} size={18} color={colors.primarySoft} />
       <VoxaText variant="body">{label}</VoxaText>
     </Pressable>
@@ -337,6 +389,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chatUser,
     borderBottomRightRadius: 6,
   },
+  selectMode: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primarySoft}66`,
+  },
   bookmarked: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.primarySoft}55` },
   failed: { borderWidth: 1, borderColor: colors.danger },
   messageText: { lineHeight: 23, fontSize: 16 },
@@ -355,15 +411,23 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 11, opacity: 0.85 },
   image: { width: 220, height: 160, borderRadius: radius.md, backgroundColor: colors.surface },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(6,6,14,0.72)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#12121E',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
     gap: spacing.xs,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.glassBorder,
   },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 48,
+    paddingVertical: spacing.sm,
+  },
+  actionPressed: { opacity: 0.7 },
 });

@@ -14,6 +14,8 @@ import {
   trimHistoryMessages,
 } from '../src/services/ai/gateway-context-budget';
 import { TalkAIError } from '../src/services/ai/talk-ai-errors';
+import { buildTurnIntelligencePlan } from '../src/services/ai/turn-intelligence-plan';
+import { buildVoxaSystemPrompt } from '../src/services/ai/voxa-system-prompt';
 import { GenerateReplyInput } from '../src/services/contracts';
 import { createDefaultCompanionIdentity } from '../src/constants/companion-identity';
 import { createDefaultSubscription } from '../src/types/subscription';
@@ -228,6 +230,54 @@ describe('gateway context budget', () => {
 
   it('exports history limit aligned with gateway budgets', () => {
     assert.equal(MAX_HISTORY_MESSAGES, AI_GATEWAY_BUDGETS.maxHistoryMessages);
+  });
+
+  it('keeps the turn intelligence block after Safety even when companion_core overflows', () => {
+    const plan = buildTurnIntelligencePlan({
+      userMessage: 'Yo you wont believe what just happened',
+      selectedMode: 'friend',
+    });
+    const hugeCore = `## Companion core\n${'X'.repeat(4_000)}`;
+    const { messages } = buildBoundedGatewayChatMessages(
+      makeInput({
+        userMessage: 'Yo you wont believe what just happened',
+        companionContextExtension: hugeCore,
+        turnIntelligenceBlock: plan.promptBlock,
+      }),
+    );
+    const system = messages.find((message) => message.role === 'system')?.content ?? '';
+    const safetyAt = system.indexOf('## Safety');
+    const turnAt = system.indexOf('## Turn intelligence');
+    const endAt = system.indexOf('## End turn intelligence');
+    assert.ok(safetyAt >= 0);
+    assert.ok(turnAt > safetyAt);
+    assert.ok(endAt > turnAt);
+    assert.match(system, /Question policy is NONE/i);
+    assert.match(system, /Mode voice \(Friend\)/i);
+  });
+
+  it('does not keep a trailing turn plan if it is only in the truncatable extension', () => {
+    const buried = `${'Y'.repeat(AI_GATEWAY_BUDGETS.maxContextExtensionChars)}\n## Turn intelligence buried`;
+    const trimmed = trimContextExtension(buried);
+    assert.ok(!trimmed.includes('## Turn intelligence buried'));
+  });
+
+  it('places the turn block immediately after Safety in the assembled system prompt', () => {
+    const plan = buildTurnIntelligencePlan({
+      userMessage: 'I finally passed my driving test',
+      selectedMode: 'friend',
+    });
+    const prompt = buildVoxaSystemPrompt({
+      userProfile: makeProfile(),
+      mode: 'friend',
+      memories: [],
+      turnIntelligenceBlock: plan.promptBlock,
+    });
+    const safetyAt = prompt.indexOf('## Safety');
+    const turnAt = prompt.indexOf('## Turn intelligence');
+    const qualityAt = prompt.indexOf('## Response quality');
+    assert.ok(safetyAt >= 0 && turnAt > safetyAt);
+    assert.ok(qualityAt < 0 || qualityAt > turnAt);
   });
 
   it('computes aggregate diagnostics from bounded messages', () => {

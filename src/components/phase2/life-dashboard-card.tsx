@@ -17,7 +17,7 @@ function Metric({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; 
       <VoxaText variant="caption" color="textMuted">
         {label}
       </VoxaText>
-      <VoxaText variant="body" color="textSecondary" numberOfLines={1}>
+      <VoxaText variant="body" color="textSecondary" style={styles.metricValue}>
         {value}
       </VoxaText>
     </View>
@@ -47,7 +47,7 @@ export function LifeDashboardCard({ data }: LifeDashboardCardProps) {
         />
       </View>
       {data.journalSnippet ? (
-        <VoxaText variant="caption" color="textMuted" style={styles.journal}>
+        <VoxaText variant="caption" color="textMuted" style={styles.journal} numberOfLines={3} ellipsizeMode="tail">
           Journal: {data.journalSnippet}
         </VoxaText>
       ) : null}
@@ -56,7 +56,24 @@ export function LifeDashboardCard({ data }: LifeDashboardCardProps) {
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  metric: { width: '47%', gap: 2 },
-  journal: { marginTop: spacing.sm, lineHeight: 18 },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  metric: {
+    width: '47%',
+    minWidth: 0,
+    gap: spacing.xs,
+  },
+  metricValue: {
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  journal: {
+    marginTop: spacing.md12,
+    lineHeight: 20,
+    paddingBottom: spacing.xs,
+  },
 });

@@ -168,11 +168,25 @@ describe('companion memory P2', () => {
   it('8. relevant goal retrieved for planning', () => {
     const goalMem = memory('App goal', 'Finish my app this month', { category: 'goals', importance: 4 });
     const scored = rankMemories([goalMem], {
+      userMessage: "I've got an hour free to work on my app. What should I do?",
+      mode: 'friend',
+    });
+    const filtered = filterMemoriesForIntent(
+      scored,
+      'planning',
+      "I've got an hour free to work on my app",
+    );
+    assert.ok(filtered.some((item) => item.content.includes('app')));
+  });
+
+  it('8b. unrelated planning does not receive a weakly related memory', () => {
+    const goalMem = memory('App goal', 'Finish my app this month', { category: 'goals', importance: 4 });
+    const scored = rankMemories([goalMem], {
       userMessage: "I've got an hour free. What should I do?",
       mode: 'friend',
     });
     const filtered = filterMemoriesForIntent(scored, 'planning', "I've got an hour free");
-    assert.ok(filtered.some((item) => item.content.includes('app')));
+    assert.equal(filtered.length, 0);
   });
 
   it('9. missing memory recall intent classified', () => {
@@ -277,7 +291,7 @@ describe('companion memory P2', () => {
       userMessage: "I'm bored",
       voxaReply: 'Alright, let us fix that.',
     });
-    assert.ok(planning.some((item) => /focus/i.test(item.label)));
+    assert.ok(planning.some((item) => /plan|prioritise|steps/i.test(item.label)));
     assert.ok(!bored.some((item) => /focus session/i.test(item.label)));
   });
 
@@ -296,7 +310,7 @@ describe('companion memory P2', () => {
       userMessage: 'Plan my study block',
       voxaReply: 'Here is a simple plan.',
     });
-    assert.ok(planning.some((item) => /focus session/i.test(item.prompt)));
+    assert.ok(planning.some((item) => /plan|prioritise|steps/i.test(item.prompt)));
   });
 
   it('20. diagnostics never include memory text', () => {

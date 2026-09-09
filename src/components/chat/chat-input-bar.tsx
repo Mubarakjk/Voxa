@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +19,12 @@ import { checkVoiceNoteGate } from '../../services/voice-notes/voice-note-access
 import { voiceNotePlaybackService } from '../../services/voice-notes/voice-note-playback-service';
 import { voiceNoteLog } from '../../services/voice-notes/voice-note-logger';
 import { voiceNoteRecordingService } from '../../services/voice-notes/voice-note-recording-service';
+import {
+  TALK_EDIT_BANNER,
+  talkComposerEditPlaceholder,
+  talkComposerPlaceholder,
+} from '../../constants/talk-copy';
+import { VoxaText } from '../ui/voxa-text';
 import { AttachmentPreviewTray } from './attachment-preview-tray';
 import { VoiceNoteRecorder } from './voice-note-recorder';
 
@@ -30,6 +36,8 @@ type ChatInputBarProps = {
   voxaName: string;
   onOpenTools?: () => void;
   onVoiceNoteLimit?: (message: string) => void;
+  editing?: boolean;
+  onCancelEdit?: () => void;
 };
 
 export function ChatInputBar({
@@ -40,6 +48,8 @@ export function ChatInputBar({
   voxaName,
   onOpenTools,
   onVoiceNoteLimit,
+  editing,
+  onCancelEdit,
 }: ChatInputBarProps) {
   const insets = useSafeAreaInsets();
   const { profile, services } = useVoxa();
@@ -48,6 +58,8 @@ export function ChatInputBar({
   const [voiceNoteBusy, setVoiceNoteBusy] = useState(false);
   const [focused, setFocused] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+  const submitLockRef = useRef(false);
 
   const showCamera = isFeatureVisible('cameraPhoto');
   const showVoiceNote = isVoiceNotesEnabled() && isMicrophoneChatEnabled() && isFeatureVisible('voiceNote');
@@ -58,6 +70,12 @@ export function ChatInputBar({
       voiceNoteLog('BUTTON_RENDERED');
     }
   }, [showVoiceNote]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const timer = setTimeout(() => inputRef.current?.focus(), 40);
+    return () => clearTimeout(timer);
+  }, [editing]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -152,7 +170,8 @@ export function ChatInputBar({
   const canSend = (value.trim().length > 0 || pendingAttachments.length > 0) && !disabled && !recordingMode;
 
   const handleSend = () => {
-    if (!canSend) return;
+    if (!canSend || submitLockRef.current) return;
+    submitLockRef.current = true;
     const hasVoiceNote = pendingAttachments.some((item) => item.type === 'audio');
     if (hasVoiceNote) {
       voiceNoteLog('SEND_SUCCESS');
@@ -160,14 +179,33 @@ export function ChatInputBar({
     onSend(pendingAttachments);
     setPendingAttachments([]);
     setRecordingMode(false);
+    queueMicrotask(() => {
+      submitLockRef.current = false;
+    });
   };
 
-  // When the keyboard is open it covers the home indicator — don't keep that inset
+  // When the keyboard is open it covers the home indicator, do not keep that inset
   // under the composer (it created a large dead zone above the keyboard).
   const bottomPad = keyboardVisible ? spacing.xs : Math.max(insets.bottom, spacing.sm);
 
   return (
     <View style={[styles.wrap, { paddingBottom: bottomPad }]}>
+      {editing ? (
+        <View style={styles.editBanner} accessibilityRole="text" accessibilityLabel="Editing message">
+          <VoxaText variant="caption" color="primarySoft">
+            {TALK_EDIT_BANNER}
+          </VoxaText>
+          <Pressable
+            onPress={onCancelEdit}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel edit">
+            <VoxaText variant="caption" color="textSecondary">
+              Cancel
+            </VoxaText>
+          </Pressable>
+        </View>
+      ) : null}
       <AttachmentPreviewTray
         attachments={pendingAttachments}
         onRemove={(index) =>
@@ -196,7 +234,7 @@ export function ChatInputBar({
             />
           </View>
         ) : (
-          <View style={[styles.composerShell, focused && styles.composerFocused]}>
+          <View style={[styles.composerShell, (focused || editing) && styles.composerFocused]}>
             {onOpenTools ? (
               <Pressable
                 style={({ pressed }) => [styles.inlineIcon, pressed && styles.iconPressed]}
@@ -221,9 +259,10 @@ export function ChatInputBar({
             ) : null}
 
             <TextInput
+              ref={inputRef}
               value={value}
               onChangeText={onChangeText}
-              placeholder={`Message ${voxaName}…`}
+              placeholder={editing ? talkComposerEditPlaceholder() : talkComposerPlaceholder(voxaName)}
               placeholderTextColor={colors.textMuted}
               style={styles.input}
               returnKeyType="send"
@@ -287,6 +326,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle,
+    paddingTop: spacing.xs,
+  },
+  editBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.xs,
   },
   inputBar: {

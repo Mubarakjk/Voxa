@@ -13,8 +13,6 @@ export const CONVERSATION_QUALITY_BLOCK = `
 - No long introductions. Start with the point.
 - Avoid repeating recent greetings, questions, or phrases.
 - Use specific callbacks to shared history when natural.
-- Small humour only when it fits — never forced.
-- Follow-up questions only when they add real value.
 - Prefer warm, specific language over abstract advice.
 - Use natural pauses (short paragraphs) instead of walls of text.
 - No bullet lists unless the user asked or the topic needs steps.

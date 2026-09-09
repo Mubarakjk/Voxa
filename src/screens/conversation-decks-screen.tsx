@@ -8,7 +8,7 @@ import { ScreenShell } from '../components/ui/screen-shell';
 import { VoxaText } from '../components/ui/voxa-text';
 import { GlassCard } from '../components/ui/glass-card';
 import { FadeIn, ScreenHeader } from '../components/premium/premium-ui';
-import { colors, layout, spacing } from '../constants/theme';
+import { colors, layout, radius, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import {
@@ -64,7 +64,8 @@ export function ConversationDecksScreen() {
               onPress={() => setCategory(item.id)}
               style={[styles.chip, category === item.id && styles.chipActive]}>
               <VoxaText variant="caption" color={category === item.id ? 'primarySoft' : 'textMuted'}>
-                {locked ? '🔒 ' : ''}{item.emoji} {item.label}
+                {locked ? '🔒 ' : ''}
+                {item.emoji} {item.label}
               </VoxaText>
             </Pressable>
           );
@@ -83,7 +84,9 @@ export function ConversationDecksScreen() {
             </VoxaText>
           </View>
           <Pressable onPress={() => navigation.navigate('RelationshipGrowth')}>
-            <VoxaText variant="caption" color="primarySoft">View growth</VoxaText>
+            <VoxaText variant="caption" color="primarySoft">
+              View growth
+            </VoxaText>
           </Pressable>
         </GlassCard>
       ) : (
@@ -95,8 +98,14 @@ export function ConversationDecksScreen() {
             <FadeIn delay={index * 40}>
               <Pressable onPress={() => openCard(item.prompt)}>
                 <GlassCard style={styles.card}>
-                  <VoxaText variant="body" color="textSecondary">{item.prompt}</VoxaText>
-                  <VoxaText variant="caption" color="primarySoft">Tap to talk →</VoxaText>
+                  <View style={styles.cardInner}>
+                    <VoxaText variant="body" color="textSecondary" style={styles.question}>
+                      {item.prompt}
+                    </VoxaText>
+                    <VoxaText variant="caption" color="primarySoft" style={styles.cta}>
+                      Tap to talk →
+                    </VoxaText>
+                  </View>
                 </GlassCard>
               </Pressable>
             </FadeIn>
@@ -109,22 +118,52 @@ export function ConversationDecksScreen() {
 
 const styles = StyleSheet.create({
   headerWrap: { paddingHorizontal: layout.screenPadding, paddingTop: spacing.lg },
-  categories: { paddingHorizontal: layout.screenPadding, gap: spacing.sm, paddingBottom: spacing.md },
+  categories: {
+    paddingHorizontal: layout.screenPadding,
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+  },
   chip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 999,
+    paddingVertical: spacing.md12,
+    borderRadius: radius.full,
     backgroundColor: colors.surfaceStrong,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipActive: { borderWidth: 1, borderColor: colors.primarySoft },
-  list: { padding: layout.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
-  card: { gap: spacing.md, minHeight: 120, justifyContent: 'space-between' },
+  list: {
+    padding: layout.screenPadding,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl * 2,
+  },
+  card: {
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    minHeight: 128,
+  },
+  cardInner: {
+    flexGrow: 1,
+    minHeight: 88,
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  question: {
+    lineHeight: 24,
+    flexShrink: 1,
+  },
+  cta: {
+    lineHeight: 18,
+    paddingTop: spacing.sm,
+  },
   lockedBanner: {
     marginHorizontal: layout.screenPadding,
     marginBottom: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
-  flex: { flex: 1, gap: 2 },
+  flex: { flex: 1, minWidth: 0, gap: spacing.xs },
 });

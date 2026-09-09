@@ -1,4 +1,5 @@
 import { TalkIntent, intentWantsLifeModules } from './companion-intent';
+import { isExplicitJournalRetrieval } from '../journal/journal-signal';
 
 export type ContextModule =
   | 'companion_core'
@@ -10,6 +11,7 @@ export type ContextModule =
   | 'mood'
   | 'check_in'
   | 'reflection'
+  | 'journal'
   | 'weather'
   | 'nutrition'
   | 'notes'
@@ -55,6 +57,13 @@ export function selectContextModules(intent: TalkIntent, userMessage: string): C
     modules.push('reflection');
   }
 
+  if (
+    ['emotional_support', 'reflection', 'journaling'].includes(intent) ||
+    isExplicitJournalRetrieval(userMessage)
+  ) {
+    modules.push('journal');
+  }
+
   if (/\b(weather|rain|cold|hot outside|forecast)\b/i.test(lower) || intent === 'planning') {
     modules.push('weather');
   }
@@ -78,7 +87,7 @@ export function selectContextModules(intent: TalkIntent, userMessage: string): C
   if (intent === 'casual_conversation' && !intentWantsLifeModules(intent)) {
     return modules.filter(
       (module) =>
-        !['phase11_dashboard', 'nutrition', 'reflection', 'notes', 'faith', 'check_in'].includes(module),
+        !['phase11_dashboard', 'nutrition', 'reflection', 'notes', 'faith', 'check_in', 'journal'].includes(module),
     );
   }
 

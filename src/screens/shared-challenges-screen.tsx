@@ -80,8 +80,12 @@ export function SharedChallengesScreen() {
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xxl * 2,
     gap: spacing.md,
   },
-  card: { gap: spacing.sm, marginBottom: spacing.sm },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
 });

@@ -16,6 +16,18 @@ import {
 } from './life-timeline-service';
 import { summarizeMemoryThemes } from '../memory/memory-theme-service';
 
+/** Word-aware preview so Life at a Glance never chops mid-word. */
+function snippetPreview(text: string | undefined | null, maxChars = 140): string | null {
+  if (!text) return null;
+  const cleaned = text.trim().replace(/\s+/g, ' ');
+  if (!cleaned) return null;
+  if (cleaned.length <= maxChars) return cleaned;
+  const cut = cleaned.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(' ');
+  const base = lastSpace > Math.floor(maxChars * 0.55) ? cut.slice(0, lastSpace) : cut;
+  return `${base}…`;
+}
+
 export type BuildPhase2DashboardInput = {
   profile: UserProfile;
   bundle: CompanionIntelligenceBundle;
@@ -61,7 +73,7 @@ export function buildPhase2Dashboard(input: BuildPhase2DashboardInput): Phase2Da
     routineStreak: input.routine.streakDays,
     activeGoals: input.goals.length,
     topGoalTitle: input.goals[0]?.title ?? null,
-    journalSnippet: input.journalEntry?.body?.slice(0, 120) ?? null,
+    journalSnippet: snippetPreview(input.journalEntry?.body, 140),
     habits,
     checkInStreak: input.ritualStreaks.combined,
   };

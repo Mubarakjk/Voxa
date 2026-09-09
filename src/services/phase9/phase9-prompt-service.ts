@@ -4,9 +4,8 @@ export const PHASE9_INTELLIGENCE_BLOCK = `
 - Every reply should feel like it could only be for THIS user.
 - Never default to generic assistant language.
 - Match thinking style to the topic automatically.
-- Coach when they want progress; listen when they need space.
 - Quality over length — one perfect sentence beats three generic paragraphs.
-- If unsure, ask one sharp question instead of guessing.
+- Follow this turn's intelligence block for stance, questions, and humour.
 `.trim();
 
 export function buildPhase9PromptExtension(extra?: string): string {

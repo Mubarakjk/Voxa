@@ -1,7 +1,18 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DailyReflectionTimeline } from '../components/reflection/daily-reflection-timeline';
 import { GlassCard } from '../components/ui/glass-card';
@@ -15,6 +26,7 @@ import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { getDailyReflectionService } from '../services/reflection/daily-reflection-service';
 import { getRelationshipGrowthService } from '../services/relationship/relationship-growth-service';
+import { suggestReflectionPrompts } from '../services/journal/journal-signal';
 import {
   DAILY_REFLECTION_QUESTIONS,
   DAILY_REFLECTION_XP,
@@ -26,6 +38,7 @@ import { hapticCelebrate } from '../utils/haptics';
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyReflection'>;
 
 export function DailyReflectionScreen(_props: Props) {
+  const insets = useSafeAreaInsets();
   const { profile, services } = useVoxa();
   const reflectionSvc = getDailyReflectionService(services.storage);
   const growthSvc = getRelationshipGrowthService(services.storage, services.repositories);
@@ -34,16 +47,19 @@ export function DailyReflectionScreen(_props: Props) {
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [placeholders, setPlaceholders] = useState<Partial<Record<keyof DailyReflectionAnswers, string>>>({});
 
   const load = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     try {
-      const [list, today] = await Promise.all([
+      const [list, today, memories] = await Promise.all([
         reflectionSvc.list(profile.id, 60),
         reflectionSvc.getToday(profile.id),
+        services.repositories.memories.listMemories(profile.id).catch(() => []),
       ]);
       setEntries(list);
+      setPlaceholders(suggestReflectionPrompts({ memories, timeZone: profile.timezone }));
       if (!editingDate && today) {
         setAnswers(today.answers);
         setEditingDate(today.date);
@@ -51,7 +67,7 @@ export function DailyReflectionScreen(_props: Props) {
     } finally {
       setLoading(false);
     }
-  }, [editingDate, profile, reflectionSvc]);
+  }, [editingDate, profile, reflectionSvc, services.repositories.memories]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -63,6 +79,7 @@ export function DailyReflectionScreen(_props: Props) {
     }
     setSaving(true);
     try {
+      Keyboard.dismiss();
       const { entry, xpAwarded } = await reflectionSvc.save(profile.id, answers, editingDate ?? undefined);
       if (xpAwarded > 0) {
         await growthSvc.recordReflectionCompleted(profile.id);
@@ -81,6 +98,7 @@ export function DailyReflectionScreen(_props: Props) {
   };
 
   const startEdit = (entry: DailyReflectionEntry) => {
+    Keyboard.dismiss();
     setAnswers(entry.answers);
     setEditingDate(entry.date);
   };
@@ -94,46 +112,66 @@ export function DailyReflectionScreen(_props: Props) {
   }
 
   return (
-    <ScreenShell padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <ScreenHeader showBack
-          eyebrow="Evening ritual"
-          title="Daily reflection"
-          subtitle={`Three gentle questions · +${DAILY_REFLECTION_XP} XP when you complete tonight`}
-        />
+    <ScreenShell padded={false} safeBottom={false}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={insets.top}>
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + spacing.xxxl }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}>
+          <Pressable style={styles.formBody} onPress={Keyboard.dismiss} accessible={false}>
+            <ScreenHeader
+              showBack
+              eyebrow="Evening ritual"
+              title="Daily reflection"
+              subtitle={`Three gentle questions · +${DAILY_REFLECTION_XP} XP when you complete tonight`}
+            />
 
-        <GlassCard style={styles.form}>
-          {DAILY_REFLECTION_QUESTIONS.map((question) => (
-            <View key={question.id} style={styles.field}>
-              <VoxaText variant="subtitle">{question.label}</VoxaText>
-              <TextInput
-                value={answers[question.id]}
-                onChangeText={(text) => setAnswers((prev) => ({ ...prev, [question.id]: text }))}
-                placeholder={question.placeholder}
-                placeholderTextColor={colors.textMuted}
-                multiline
-                style={styles.input}
+            <GlassCard style={styles.form}>
+              {DAILY_REFLECTION_QUESTIONS.map((question) => (
+                <View key={question.id} style={styles.field}>
+                  <VoxaText variant="subtitle">{question.label}</VoxaText>
+                  <TextInput
+                    value={answers[question.id]}
+                    onChangeText={(text) => setAnswers((prev) => ({ ...prev, [question.id]: text }))}
+                    placeholder={placeholders[question.id] ?? question.placeholder}
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    blurOnSubmit={false}
+                    textAlignVertical="top"
+                    style={styles.input}
+                    accessibilityLabel={question.label}
+                  />
+                </View>
+              ))}
+              <PrimaryButton
+                label={saving ? 'Saving…' : editingDate ? 'Update reflection' : 'Save tonight'}
+                onPress={() => void save()}
+                disabled={saving}
               />
-            </View>
-          ))}
-          <PrimaryButton
-            label={saving ? 'Saving…' : editingDate ? 'Update reflection' : 'Save tonight'}
-            onPress={() => void save()}
-            disabled={saving}
-          />
-        </GlassCard>
+            </GlassCard>
 
-        <VoxaText variant="subtitle">Your timeline</VoxaText>
-        <DailyReflectionTimeline entries={entries} onEdit={startEdit} />
-      </ScrollView>
+            <VoxaText variant="subtitle">Your timeline</VoxaText>
+            <DailyReflectionTimeline entries={entries} onEdit={startEdit} />
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   scroll: {
-    padding: layout.screenPadding,
-    paddingBottom: spacing.xxl,
+    flexGrow: 1,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: layout.screenPadding,
+  },
+  formBody: {
+    flexGrow: 1,
     gap: spacing.lg,
   },
   form: {

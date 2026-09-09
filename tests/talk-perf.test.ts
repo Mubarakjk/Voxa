@@ -50,6 +50,7 @@ describe('Talk performance QA guards', () => {
     assert.ok(!modules.includes('nutrition'));
     assert.ok(!modules.includes('weather'));
     assert.ok(!modules.includes('notes'));
+    assert.ok(!modules.includes('journal'));
     assert.ok(!modules.includes('faith'));
   });
 

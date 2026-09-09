@@ -74,7 +74,9 @@ export function GamesHubScreen() {
                   <View style={[styles.accent, { backgroundColor: game.accent }]} />
                   <View style={styles.cardBody}>
                     <View style={styles.cardTop}>
-                      <VoxaText variant="subtitle">{game.title}</VoxaText>
+                      <VoxaText variant="subtitle" style={styles.gameTitle} numberOfLines={2}>
+                        {game.title}
+                      </VoxaText>
                       {resumable[game.id] ? (
                         <View style={styles.resumePill}>
                           <VoxaText variant="caption" color="primarySoft">
@@ -83,13 +85,13 @@ export function GamesHubScreen() {
                         </View>
                       ) : null}
                     </View>
-                    <VoxaText variant="body" color="textSecondary">
+                    <VoxaText variant="body" color="textSecondary" style={styles.tagline}>
                       {game.tagline}
                     </VoxaText>
-                    <VoxaText variant="caption" color="textMuted">
+                    <VoxaText variant="caption" color="textMuted" style={styles.meta}>
                       {game.players} · {game.duration}
                     </VoxaText>
-                    <VoxaText variant="caption" color="textMuted">
+                    <VoxaText variant="caption" color="textMuted" style={styles.description}>
                       {game.description}
                     </VoxaText>
                   </View>
@@ -131,20 +133,35 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.88 },
   card: { flexDirection: 'row', overflow: 'hidden', padding: 0 },
   accent: { width: 4 },
-  cardBody: { flex: 1, gap: spacing.xs, padding: spacing.md },
+  cardBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
+  gameTitle: { flex: 1, minWidth: 0, lineHeight: 22 },
+  tagline: { lineHeight: 22 },
+  meta: { lineHeight: 18 },
+  description: { lineHeight: 19 },
   resumePill: {
+    flexShrink: 0,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: spacing.xs,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceStrong,
     borderWidth: 1,
     borderColor: colors.glassBorder,
   },
-  secondary: { gap: spacing.sm },
+  secondary: {
+    gap: spacing.md12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
 });
