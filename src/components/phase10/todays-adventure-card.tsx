@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
-import { PremiumButton } from '../premium/premium-ui';
 import { colors, spacing } from '../../constants/theme';
 import { DailyChallenge, Phase10DashboardData } from '../../types/phase10-play';
 import { StaggerFade } from '../premium/premium-ui';
@@ -19,12 +18,13 @@ type Props = {
 
 function challengeStatusLine(c: DailyChallenge | null): string {
   if (!c) return 'No challenge today';
-  if (c.status === 'completed') return 'Challenge done ✓';
+  if (c.status === 'completed') return 'Challenge done';
   if (c.status === 'skipped') return 'Skipped — fresh start tomorrow';
   if (c.status === 'accepted') return c.title;
   return c.title;
 }
 
+/** Visually demoted play/challenges block — kept below core companion content. */
 export function TodaysAdventureCard({
   data,
   onPrimary,
@@ -33,65 +33,47 @@ export function TodaysAdventureCard({
   onSecondary,
   secondaryLabel,
 }: Props) {
-  const { adventure, xp, dailyChallenge, weeklyMission } = data;
-  const xpPct = Math.min(100, Math.max(0, (xp.totalXp / Math.max(1, xp.xpToNextLevel)) * 100));
+  const { adventure, dailyChallenge, weeklyMission } = data;
 
   return (
-    <StaggerFade index={0}>
-      <GlassCard style={styles.card}>
+    <StaggerFade index={4}>
+      <GlassCard style={styles.card} variant="quiet">
         <View style={styles.header}>
-          <VoxaText variant="caption" color="primarySoft" style={styles.headerTitle} numberOfLines={1}>
-            Today's Adventure
-          </VoxaText>
-          <VoxaText variant="caption" color="textMuted" style={styles.level} numberOfLines={1}>
-            Lv {xp.level}
-          </VoxaText>
-        </View>
-
-        <View style={styles.xpRow}>
-          <View style={styles.xpTrack}>
-            <View style={[styles.xpFill, { width: `${xpPct}%` }]} />
-          </View>
-          <VoxaText variant="caption" color="textMuted" style={styles.xpLabel} numberOfLines={1}>
-            {xp.totalXp}/{xp.xpToNextLevel}
+          <VoxaText variant="caption" color="textMuted" style={styles.headerTitle} numberOfLines={1}>
+            Play & challenges
           </VoxaText>
         </View>
 
         <Pressable onPress={onChallengeDetails} style={styles.challengeRow} hitSlop={4}>
-          <Ionicons name="flag-outline" size={16} color={colors.primarySoft} style={styles.rowIcon} />
-          <VoxaText variant="body" color="textSecondary" numberOfLines={2} style={styles.rowBody}>
+          <Ionicons name="flag-outline" size={15} color={colors.textMuted} style={styles.rowIcon} />
+          <VoxaText variant="body" color="textMuted" numberOfLines={2} style={styles.rowBody}>
             {challengeStatusLine(dailyChallenge)}
           </VoxaText>
         </Pressable>
 
         {adventure.missionProgress && weeklyMission?.status !== 'abandoned' ? (
           <Pressable onPress={onMission} style={styles.metaRow} hitSlop={4}>
-            <Ionicons name="shield-outline" size={15} color={colors.textMuted} style={styles.rowIcon} />
+            <Ionicons name="shield-outline" size={14} color={colors.textMuted} style={styles.rowIcon} />
             <VoxaText variant="caption" color="textMuted" numberOfLines={1} style={styles.rowBody}>
               Mission {adventure.missionProgress}
             </VoxaText>
           </Pressable>
         ) : null}
 
-        {adventure.featuredGame && dailyChallenge?.status !== 'completed' ? (
-          <VoxaText variant="caption" color="textMuted" numberOfLines={1} style={styles.hint}>
-            Suggested: {adventure.featuredGame.emoji} {adventure.featuredGame.title}
-          </VoxaText>
-        ) : adventure.spinAvailable ? (
-          <VoxaText variant="caption" color="textMuted" numberOfLines={1} style={styles.hint}>
-            Daily spin ready
-          </VoxaText>
-        ) : adventure.spinCountdownLabel ? (
-          <VoxaText variant="caption" color="textMuted" numberOfLines={1} style={styles.hint}>
-            Next spin in {adventure.spinCountdownLabel}
-          </VoxaText>
-        ) : null}
-
         <View style={styles.actions}>
-          <PremiumButton label={adventure.primaryLabel} onPress={onPrimary} />
+          <Pressable
+            onPress={onPrimary}
+            style={({ pressed }) => [styles.primaryLink, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={adventure.primaryLabel}>
+            <VoxaText variant="caption" color="primarySoft">
+              {adventure.primaryLabel}
+            </VoxaText>
+            <Ionicons name="chevron-forward" size={14} color={colors.primarySoft} />
+          </Pressable>
           {onSecondary && secondaryLabel ? (
             <Pressable onPress={onSecondary} style={styles.secondary} hitSlop={8}>
-              <VoxaText variant="caption" color="primarySoft">
+              <VoxaText variant="caption" color="textMuted">
                 {secondaryLabel}
               </VoxaText>
             </Pressable>
@@ -104,9 +86,12 @@ export function TodaysAdventureCard({
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.md12,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',
@@ -114,32 +99,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  headerTitle: { flex: 1, minWidth: 0 },
-  level: { flexShrink: 0 },
-  xpRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  xpTrack: {
-    flex: 1,
-    minWidth: 0,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.surfaceStrong,
-    overflow: 'hidden',
-  },
-  xpFill: {
-    height: '100%',
-    backgroundColor: colors.primarySoft,
-    borderRadius: 3,
-  },
-  xpLabel: {
-    flexShrink: 0,
-    minWidth: 44,
-    textAlign: 'right',
-    fontVariant: ['tabular-nums'],
-  },
+  headerTitle: { flex: 1, minWidth: 0, letterSpacing: 0.4 },
   challengeRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -152,13 +112,25 @@ const styles = StyleSheet.create({
   },
   rowIcon: { flexShrink: 0, marginTop: 2 },
   rowBody: { flex: 1, minWidth: 0 },
-  hint: { marginLeft: 24 },
-  actions: { gap: spacing.sm, marginTop: spacing.xs },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  primaryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 36,
+    paddingVertical: spacing.xs,
+  },
   secondary: {
-    alignSelf: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     minHeight: 36,
     justifyContent: 'center',
   },
+  pressed: { opacity: 0.8 },
 });

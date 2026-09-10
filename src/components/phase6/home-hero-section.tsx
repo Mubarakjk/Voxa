@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { LiveCompanionOrb, CompanionOrbMood, CompanionOrbState } from '../live-companion/live-companion-orb';
 import { PremiumButton } from '../premium/premium-ui';
@@ -22,6 +23,8 @@ type Props = {
   onOrbPress?: () => void;
   onCheckIn?: () => void;
   onRoutine?: () => void;
+  /** Subtle top-right settings control (You / preferences). */
+  onSettings?: () => void;
 };
 
 export function HomeHeroSection({
@@ -37,6 +40,7 @@ export function HomeHeroSection({
   onOrbPress,
   onCheckIn,
   onRoutine,
+  onSettings,
 }: Props) {
   const orb = (
     <LiveCompanionOrb
@@ -51,9 +55,26 @@ export function HomeHeroSection({
 
   return (
     <View style={styles.hero}>
-      <VoxaText variant="label" color="textMuted" style={styles.eyebrow}>
-        {greeting}
-      </VoxaText>
+      <View style={styles.topRow}>
+        <VoxaText variant="label" color="textMuted" style={styles.eyebrow} numberOfLines={1}>
+          {greeting}
+        </VoxaText>
+        {onSettings ? (
+          <Pressable
+            onPress={() => {
+              void hapticLight();
+              onSettings();
+            }}
+            hitSlop={14}
+            style={({ pressed }) => [styles.settingsHit, pressed && styles.settingsPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings">
+            <Ionicons name="settings-outline" size={20} color={colors.primarySoft} style={styles.settingsIcon} />
+          </Pressable>
+        ) : (
+          <View style={styles.settingsSpacer} />
+        )}
+      </View>
 
       <View style={styles.orbWrap}>
         {onOrbPress ? (
@@ -109,15 +130,52 @@ const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
     gap: spacing.md12,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
-  eyebrow: { letterSpacing: 1.1 },
-  orbWrap: { marginVertical: spacing.sm },
+  topRow: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
+  },
+  eyebrow: {
+    flex: 1,
+    letterSpacing: 1.1,
+    paddingRight: spacing.sm,
+  },
+  settingsHit: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: 'transparent',
+  },
+  settingsIcon: {
+    opacity: 0.72,
+  },
+  settingsPressed: {
+    opacity: 0.55,
+  },
+  settingsSpacer: { width: 44, height: 44 },
+  orbWrap: { marginTop: spacing.xs, marginBottom: spacing.sm },
   orbPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
-  headline: { textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
-  subline: { textAlign: 'center', alignSelf: 'stretch', paddingHorizontal: spacing.sm, marginBottom: spacing.xs },
-  primaryWrap: { width: '100%', marginTop: spacing.sm },
-  secondaryRow: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.xs },
-  secondaryLink: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  headline: {
+    textAlign: 'center',
+    alignSelf: 'stretch',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  subline: {
+    textAlign: 'center',
+    alignSelf: 'stretch',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  primaryWrap: { width: '100%', marginTop: spacing.xs },
+  secondaryRow: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.sm },
+  secondaryLink: { minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.sm },
 });

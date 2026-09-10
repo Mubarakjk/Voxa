@@ -2,6 +2,7 @@ import { HomeIntelligenceSnapshot } from '../../types/companion-intelligence';
 import { CompanionIntelligenceBundle } from '../../types/companion-intelligence';
 import { Goal, Memory, Reminder, UserProfile } from '../../types';
 import { conversationQualityEngine } from './conversation-quality-engine';
+import { resolveGreetingFirstName } from '../../utils/greeting-name';
 
 export type HomeIntelligenceInput = {
   profile: UserProfile;
@@ -44,7 +45,8 @@ export class HomeIntelligenceEngine {
       input.bundle.conversationQuality,
       GREETING_POOL[timeSlot],
     );
-    const personalGreeting = `${greetingBase}, ${input.profile.displayName}`;
+    const firstName = resolveGreetingFirstName(input.profile.displayName);
+    const personalGreeting = firstName ? `${greetingBase}, ${firstName}` : greetingBase;
 
     const dailyFocus = this.buildDailyFocus(input, dayKey);
     const progressUpdate = this.buildProgressUpdate(input.goals, input.bundle);
@@ -83,7 +85,7 @@ export class HomeIntelligenceEngine {
     if (input.upcomingReminders[0]) options.push(`Prep for ${input.upcomingReminders[0].title}`);
 
     options.push('Check in with yourself emotionally');
-    options.push('One small win before the day ends');
+    options.push('Take one clear step on what matters most');
 
     return options[hashString(dayKey) % options.length];
   }
