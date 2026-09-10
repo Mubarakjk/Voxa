@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { GreetingStyle } from '../../constants/companion-studio-extended';
 import { Goal, Memory, UserProfile } from '../../types';
+import { resolveGreetingFirstName } from '../../utils/greeting-name';
 import { formatHomeHeroSubline } from '../../utils/home-hero-copy';
 import { dailyPersonalityEngine } from '../personality/daily-personality-engine';
 import { CompanionFocusState, getCompanionFocusState, upsertCompanionFocusState } from './companion-focus-state';
@@ -52,7 +53,12 @@ export async function getDaysSinceLastVisit(): Promise<number> {
   return Math.floor(diff / 86_400_000);
 }
 
-function timeGreetingPool(hour: number, firstName: string, style?: GreetingStyle): string[] {
+function timeGreetingPool(hour: number, firstName: string | null, style?: GreetingStyle): string[] {
+  if (!firstName) {
+    if (hour < 12) return ['Good morning', 'Morning', 'Welcome back'];
+    if (hour < 17) return ['Good afternoon', 'Welcome back', 'Hey'];
+    return ['Good evening', 'Welcome back', 'Evening'];
+  }
   if (style === 'minimal') return [firstName, `Hi ${firstName}`, firstName];
   if (style === 'formal') {
     if (hour < 12) return [`Good morning, ${firstName}`, `Morning, ${firstName}`];
@@ -84,34 +90,60 @@ function pickRotated(options: string[], seed: number, avoid?: string | null): st
   return options[start];
 }
 
-function moodAwareHeadline(firstName: string, moodLabel?: string | null, seed = 0): string | null {
+function moodAwareHeadline(firstName: string | null, moodLabel?: string | null, seed = 0): string | null {
   const mood = (moodLabel ?? '').toLowerCase();
   if (!mood) return null;
+  const withName = (named: string, plain: string) => (firstName ? named : plain);
   if (/stress|anx|overwhelm/.test(mood)) {
     return pickRotated(
-      [`I'm with you, ${firstName}`, `Slow day — I've got you`, `We'll take it gently`],
+      [
+        withName(`I'm with you, ${firstName}`, "I'm with you"),
+        'Slow day — I\'ve got you',
+        "We'll take it gently",
+      ],
       seed,
     );
   }
   if (/tired|exhaust|drain/.test(mood)) {
     return pickRotated(
-      [`Rest is allowed, ${firstName}`, `Easy pace today`, `Glad you showed up`],
+      [
+        withName(`Rest is allowed, ${firstName}`, 'Rest is allowed'),
+        'Easy pace today',
+        'Glad you showed up',
+      ],
       seed,
     );
   }
   if (/motivat|great|good|excit|energ/.test(mood)) {
     return pickRotated(
-      [`Love this energy, ${firstName}`, `Let's use this momentum`, `You're on today`],
+      [
+        withName(`Love this energy, ${firstName}`, 'Love this energy'),
+        "Let's use this momentum",
+        "You're on today",
+      ],
       seed,
     );
   }
   if (/okay|ok|fine|calm|meh/.test(mood)) {
-    return pickRotated([`Steady is good, ${firstName}`, `I'm here with you`, `How's the middle feeling?`], seed);
+    return pickRotated(
+      [
+        withName(`Steady is good, ${firstName}`, 'Steady is good'),
+        "I'm here with you",
+        "How's the middle feeling?",
+      ],
+      seed,
+    );
   }
   return null;
 }
 
-function timeGreeting(hour: number, firstName: string, style?: GreetingStyle, seed = 0, avoid?: string | null): string {
+function timeGreeting(
+  hour: number,
+  firstName: string | null,
+  style?: GreetingStyle,
+  seed = 0,
+  avoid?: string | null,
+): string {
   return pickRotated(timeGreetingPool(hour, firstName, style), seed, avoid);
 }
 
@@ -142,7 +174,7 @@ function buildHeroSubline(input: PresenceContext, todayFocus: string | null): st
 }
 
 export function buildCompanionGreeting(input: PresenceContext): CompanionGreeting {
-  const firstName = input.profile.displayName.split(' ')[0];
+  const firstName = resolveGreetingFirstName(input.profile.displayName);
   const voxaName = input.voxaName ?? input.profile.companionIdentity?.voxaName ?? 'Voxa';
   const hour = new Date().getHours();
   const daysAway = input.daysAway ?? 0;
@@ -165,12 +197,14 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
   if (/motivat|great|excit/.test(moodLower)) mood = 'energetic';
   if (/stress|tired|overwhelm/.test(moodLower)) mood = 'warm';
 
-  const welcomeHeadlines = [
-    `Welcome back, ${firstName}`,
-    `Good to see you, ${firstName}`,
-    `Hey ${firstName}`,
-    `${firstName} — I'm here`,
-  ];
+  const welcomeHeadlines = firstName
+    ? [
+        `Welcome back, ${firstName}`,
+        `Good to see you, ${firstName}`,
+        `Hey ${firstName}`,
+        `${firstName} — I'm here`,
+      ]
+    : ['Welcome back', 'Good to see you', "I'm here", 'Hey — glad you opened Voxa'];
 
   const finish = (partial: Omit<CompanionGreeting, 'greeting'> & { greeting?: string }): CompanionGreeting => ({
     ...partial,
@@ -179,7 +213,7 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
 
   if (daysAway >= 30) {
     return finish({
-      headline: `${firstName} — you're back`,
+      headline: firstName ? `${firstName} — you're back` : "You're back",
       subline: heroSubline || "I'm really happy you came back. Your memories are safe, and I'm here.",
       todayFocus,
       mood: 'warm',
@@ -190,7 +224,13 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
 
   if (daysAway >= 7) {
     return finish({
-      headline: pickRotated([`Good to see you, ${firstName}`, `Missed this, ${firstName}`], daySeed, lastParts[1]),
+      headline: pickRotated(
+        firstName
+          ? [`Good to see you, ${firstName}`, `Missed this, ${firstName}`]
+          : ['Good to see you', 'Welcome back'],
+        daySeed,
+        lastParts[1],
+      ),
       subline: heroSubline || "I've been wondering how you've been. No pressure — just glad you're here.",
       todayFocus,
       mood: 'warm',
@@ -201,7 +241,11 @@ export function buildCompanionGreeting(input: PresenceContext): CompanionGreetin
 
   if (daysAway >= 3) {
     return finish({
-      headline: pickRotated([`Welcome back, ${firstName}`, `Nice to have you back`], daySeed, lastParts[1]),
+      headline: pickRotated(
+        firstName ? [`Welcome back, ${firstName}`, 'Nice to have you back'] : ['Welcome back', 'Nice to have you back'],
+        daySeed,
+        lastParts[1],
+      ),
       subline: heroSubline || "It's good to have you back. Want to ease in together?",
       todayFocus,
       mood: 'warm',
