@@ -4,14 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { GlassCard } from '../ui/glass-card';
 import { VoxaText } from '../ui/voxa-text';
 import { StaggerFade } from '../premium/premium-ui';
-import { CountUpNumber } from '../premium/count-up-number';
-import { colors, radius, spacing } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 import { DailyBriefing } from '../../types/daily-briefing';
 import { Reminder } from '../../types';
 import { Phase11DashboardData } from '../../types/phase11-living-companion';
 import { Phase12DashboardData } from '../../types/phase12-experiences';
 import { TodayRoutineSummary } from '../../types/routine';
 import { WeatherBundle } from '../../types/weather';
+import { areSimilarInsights } from '../../utils/home-hero-copy';
 import { formatReminderDateTime } from '../../utils/reminders';
 
 type Props = {
@@ -22,6 +22,7 @@ type Props = {
   routineSummary: TodayRoutineSummary;
   reflectionPending: boolean;
   weatherBundle?: WeatherBundle | null;
+  /** Kept for API compatibility — Home no longer surfaces friendship progress. */
   showRelationship?: boolean;
   onFollowUp: () => void;
   onReflection: () => void;
@@ -31,36 +32,57 @@ type Props = {
   onReminder?: () => void;
 };
 
+type BriefItem = {
+  key: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  onPress?: () => void;
+};
+
+/** Cap Home "Today" at three genuinely useful contextual rows. */
+const MAX_HOME_BRIEF_ITEMS = 3;
+
 export function HomeMorningBriefCard({
   dailyBriefing,
   phase11,
   phase12,
   upcomingReminder,
-  routineSummary,
   reflectionPending,
   weatherBundle,
-  showRelationship = true,
   onFollowUp,
   onReflection,
   onNews,
-  onRelationship,
-  onRoutine,
   onReminder,
 }: Props) {
-  const { relationship, rhythm, followUp } = phase11;
+  const { followUp } = phase11;
   const digest = phase12.dailyNews;
-  const routineLine =
-    rhythm.routineHint ??
-    (routineSummary.nextBlock
-      ? `Next: ${routineSummary.nextBlock.title} · ${routineSummary.completedCount}/${routineSummary.totalCount} today`
-      : routineSummary.totalCount > 0
-        ? `${routineSummary.completedCount}/${routineSummary.totalCount} routine blocks today`
-        : null);
+  const focus = phase11.todayFocus?.trim() || '';
+  const suggestion = dailyBriefing.suggestedAction?.trim() || '';
+  const personal = dailyBriefing.personalMessage?.trim() || '';
+  const digestLine = (digest?.companionTake || digest?.headline || '').trim();
 
   const showFollowUp = Boolean(followUp && followUp.prompt !== phase11.emotionalMessage);
+
   const headerMeta = weatherBundle?.current
     ? `${Math.round(weatherBundle.current.temperatureC)}° · ${weatherBundle.current.conditionLabel}`
-    : relationship.stageLabel;
+    : null;
+
+  const items = selectHomeBriefItems({
+    focus,
+    personal,
+    suggestion,
+    digestLine,
+    showFollowUp,
+    followUpPrompt: followUp?.prompt,
+    followUpLabel: followUp?.dueLabel,
+    upcomingReminder,
+    reflectionPending,
+    onFollowUp,
+    onReflection,
+    onNews,
+    onReminder,
+  });
 
   return (
     <StaggerFade index={1}>
@@ -69,91 +91,121 @@ export function HomeMorningBriefCard({
           <VoxaText variant="label" color="textMuted" style={styles.headerLabel}>
             Today
           </VoxaText>
-          <View style={styles.headerMeta}>
-            <VoxaText variant="caption" color="textMuted" style={styles.headerMetaText}>
-              {headerMeta}
-            </VoxaText>
-          </View>
+          {headerMeta ? (
+            <View style={styles.headerMeta}>
+              <VoxaText variant="caption" color="textMuted" style={styles.headerMetaText}>
+                {headerMeta}
+              </VoxaText>
+            </View>
+          ) : null}
         </View>
 
-        <VoxaText variant="supporting" color="textSecondary" style={styles.personalMessage}>
-          {dailyBriefing.personalMessage}
-        </VoxaText>
-
-        {showRelationship && relationship.progressPercent > 0 ? (
-          <Pressable
-            style={styles.relationshipRow}
-            onPress={onRelationship}
-            accessibilityRole="button"
-            accessibilityLabel={`${relationship.stageLabel}, ${relationship.progressPercent} percent toward next stage`}>
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${relationship.progressPercent}%` }]} />
-            </View>
-            <View style={styles.relMeta}>
-              <View style={styles.relCount}>
-                <CountUpNumber value={relationship.progressPercent} style={styles.relCountText} />
-                <VoxaText variant="caption" color="textMuted" style={styles.relCountLabel}>
-                  % toward {relationship.nextStageLabel ?? 'Inner Circle'}
-                </VoxaText>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} style={styles.rowChevron} />
-            </View>
-          </Pressable>
-        ) : null}
-
-        <BriefRow icon="compass-outline" label="Focus" value={phase11.todayFocus} />
-
-        {digest ? (
+        {items.map((item) => (
           <BriefRow
-            icon="newspaper-outline"
-            label="Your digest"
-            value={digest.companionTake || digest.headline}
-            onPress={onNews}
+            key={item.key}
+            icon={item.icon}
+            label={item.label}
+            value={item.value}
+            onPress={item.onPress}
           />
-        ) : null}
-
-        {upcomingReminder ? (
-          <BriefRow
-            icon="alarm-outline"
-            label="Coming up"
-            value={`${upcomingReminder.title} · ${formatReminderDateTime(upcomingReminder.scheduledAt)}`}
-            onPress={onReminder}
-          />
-        ) : null}
-
-        {routineLine ? (
-          <BriefRow icon="calendar-outline" label="Routine" value={routineLine} onPress={onRoutine} />
-        ) : null}
-
-        {dailyBriefing.suggestedAction ? (
-          <BriefRow
-            icon="sparkles-outline"
-            label="Suggestion"
-            value={dailyBriefing.suggestedAction}
-            onPress={onFollowUp}
-          />
-        ) : null}
-
-        {showFollowUp && followUp ? (
-          <BriefRow
-            icon="chatbubble-ellipses-outline"
-            label={followUp.dueLabel}
-            value={followUp.prompt}
-            onPress={onFollowUp}
-          />
-        ) : null}
-
-        {reflectionPending ? (
-          <BriefRow
-            icon="moon-outline"
-            label="Evening reflection"
-            value="What made you smile today?"
-            onPress={onReflection}
-          />
-        ) : null}
+        ))}
       </GlassCard>
     </StaggerFade>
   );
+}
+
+function selectHomeBriefItems(input: {
+  focus: string;
+  personal: string;
+  suggestion: string;
+  digestLine: string;
+  showFollowUp: boolean;
+  followUpPrompt?: string;
+  followUpLabel?: string;
+  upcomingReminder: Reminder | null;
+  reflectionPending: boolean;
+  onFollowUp: () => void;
+  onReflection: () => void;
+  onNews: () => void;
+  onReminder?: () => void;
+}): BriefItem[] {
+  const items: BriefItem[] = [];
+  const seen: string[] = [];
+
+  const push = (item: BriefItem) => {
+    if (items.length >= MAX_HOME_BRIEF_ITEMS) return;
+    if (!item.value.trim()) return;
+    if (seen.some((existing) => areSimilarInsights(existing, item.value))) return;
+    if (input.focus && areSimilarInsights(input.focus, item.value) && item.key !== 'focus') return;
+    if (input.personal && areSimilarInsights(input.personal, item.value) && item.key !== 'focus') {
+      // Skip suggestion/digest that merely restate the personal coaching line.
+      if (item.key === 'suggestion' || item.key === 'digest') return;
+    }
+    seen.push(item.value);
+    items.push(item);
+  };
+
+  if (input.focus) {
+    push({
+      key: 'focus',
+      icon: 'compass-outline',
+      label: 'Focus',
+      value: input.focus,
+    });
+  }
+
+  if (input.showFollowUp && input.followUpPrompt) {
+    push({
+      key: 'follow-up',
+      icon: 'chatbubble-ellipses-outline',
+      label: input.followUpLabel || 'Follow-up',
+      value: input.followUpPrompt,
+      onPress: input.onFollowUp,
+    });
+  } else if (input.upcomingReminder) {
+    push({
+      key: 'reminder',
+      icon: 'alarm-outline',
+      label: 'Coming up',
+      value: `${input.upcomingReminder.title} · ${formatReminderDateTime(input.upcomingReminder.scheduledAt)}`,
+      onPress: input.onReminder,
+    });
+  } else if (input.digestLine) {
+    push({
+      key: 'digest',
+      icon: 'sparkles-outline',
+      label: 'Worth noting',
+      value: input.digestLine,
+      onPress: input.onNews,
+    });
+  }
+
+  if (input.reflectionPending) {
+    push({
+      key: 'reflection',
+      icon: 'moon-outline',
+      label: 'Evening reflection',
+      value: 'What made you smile today?',
+      onPress: input.onReflection,
+    });
+  } else if (input.suggestion) {
+    push({
+      key: 'suggestion',
+      icon: 'chatbubbles-outline',
+      label: 'Talk about',
+      value: input.suggestion,
+      onPress: input.onFollowUp,
+    });
+  } else if (!input.focus && input.personal) {
+    push({
+      key: 'personal',
+      icon: 'sparkles-outline',
+      label: 'For you',
+      value: input.personal,
+    });
+  }
+
+  return items;
 }
 
 function BriefRow({
@@ -193,7 +245,11 @@ function BriefRow({
 }
 
 const styles = StyleSheet.create({
-  card: { gap: spacing.md },
+  card: {
+    gap: spacing.md12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -209,37 +265,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flexShrink: 1,
   },
-  personalMessage: {
-    flexShrink: 1,
-  },
-  relationshipRow: { gap: spacing.xs },
-  track: {
-    height: 6,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceStrong,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.lg,
-  },
-  relMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  relCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    flex: 1,
-    minWidth: 0,
-    flexWrap: 'wrap',
-  },
-  relCountText: { fontSize: 13, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  relCountLabel: { flexShrink: 1 },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,

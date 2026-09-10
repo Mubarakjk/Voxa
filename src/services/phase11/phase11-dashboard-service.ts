@@ -14,6 +14,7 @@ import { buildDailyLifeRhythm } from './daily-life-rhythm-service';
 import { buildPersonalityGrowth, relationshipProgress } from './personality-growth-service';
 import { detectLivingWow, getLivingWowService } from './living-wow-service';
 import { buildLivingConversationBlock } from './phase11-prompt-service';
+import { resolveGreetingFirstName } from '../../utils/greeting-name';
 
 export type BuildPhase11Input = {
   userId: string;
@@ -79,7 +80,7 @@ export async function buildPhase11Dashboard(input: BuildPhase11Input): Promise<P
     stage,
   });
 
-  const firstName = (input.profile.displayName ?? 'friend').trim().split(/\s+/)[0] || 'friend';
+  const firstName = resolveGreetingFirstName(input.profile.displayName);
 
   const rhythm = buildDailyLifeRhythm({
     firstName,
@@ -109,7 +110,7 @@ export async function buildPhase11Dashboard(input: BuildPhase11Input): Promise<P
     followUp?.prompt ??
     personality.insideJokeLine ??
     rhythm.reflectionLine ??
-    stageGreeting(stage, firstName);
+    (firstName ? stageGreeting(stage, firstName) : 'Welcome back');
 
   const talkStarter = followUp?.prompt ?? recall?.line ?? wowMoment?.actionPrompt ?? null;
 

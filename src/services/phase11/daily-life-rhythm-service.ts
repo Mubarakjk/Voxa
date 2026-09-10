@@ -7,7 +7,8 @@ const QUOTES = [
 ];
 
 export function buildDailyLifeRhythm(input: {
-  firstName: string;
+  /** Valid first name only — never pass placeholder QA names. */
+  firstName: string | null;
   todayFocus: string;
   routineNext: string | null;
   routineDone: number;
@@ -16,11 +17,12 @@ export function buildDailyLifeRhythm(input: {
 }): DailyLifeRhythm {
   const hour = input.hour ?? new Date().getHours();
   const seed = new Date().getDate();
+  const name = input.firstName?.trim() || null;
 
   if (hour >= 5 && hour < 12) {
     return {
       period: 'morning',
-      greeting: `Good morning, ${input.firstName}.`,
+      greeting: name ? `Good morning, ${name}.` : 'Good morning.',
       focusLine: input.todayFocus,
       routineHint: input.routineNext ? `Next up: ${input.routineNext}` : null,
       weatherPlaceholder: '',
@@ -34,7 +36,13 @@ export function buildDailyLifeRhythm(input: {
   if (hour >= 17 || hour < 5) {
     return {
       period: hour < 5 ? 'night' : 'evening',
-      greeting: hour < 5 ? `Still up, ${input.firstName}?` : `Good evening, ${input.firstName}.`,
+      greeting: hour < 5
+        ? name
+          ? `Still up, ${name}?`
+          : 'Still up?'
+        : name
+          ? `Good evening, ${name}.`
+          : 'Good evening.',
       focusLine: input.todayFocus,
       routineHint: null,
       weatherPlaceholder: '',
@@ -47,7 +55,7 @@ export function buildDailyLifeRhythm(input: {
 
   return {
     period: 'afternoon',
-    greeting: `Good afternoon, ${input.firstName}.`,
+    greeting: name ? `Good afternoon, ${name}.` : 'Good afternoon.',
     focusLine: input.todayFocus,
     routineHint: input.routineNext,
     weatherPlaceholder: '',

@@ -80,4 +80,37 @@ describe('home hero copy', () => {
     assert.equal(greeting.headline.includes('Hello'), true);
     assert.equal(greeting.subline, 'You normally train after work. Ready when you are.');
   });
+
+  it('never greets with placeholder TEST / invalid display names', () => {
+    const greeting = buildCompanionGreeting({
+      profile: { id: 'u1', displayName: 'TEST' } as never,
+      memories: [],
+    });
+    assert.ok(!/TEST/i.test(greeting.greeting));
+    assert.ok(!/TEST/i.test(greeting.headline));
+    assert.match(greeting.headline, /Welcome back|Good to see you|I'm here|Hey/i);
+  });
+
+  it('phase11 rhythm greets without invalid first names', async () => {
+    const { buildDailyLifeRhythm } = await import('../src/services/phase11/daily-life-rhythm-service');
+    const named = buildDailyLifeRhythm({
+      firstName: 'Alex',
+      todayFocus: 'Ship Home polish',
+      routineNext: null,
+      routineDone: 0,
+      routineTotal: 0,
+      hour: 9,
+    });
+    assert.match(named.greeting, /Alex/);
+    const anon = buildDailyLifeRhythm({
+      firstName: null,
+      todayFocus: 'Ship Home polish',
+      routineNext: null,
+      routineDone: 0,
+      routineTotal: 0,
+      hour: 9,
+    });
+    assert.equal(anon.greeting, 'Good morning.');
+    assert.ok(!/TEST|friend\./i.test(anon.greeting));
+  });
 });

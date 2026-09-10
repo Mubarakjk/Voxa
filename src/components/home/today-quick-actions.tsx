@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, layout, radius, spacing } from '../../constants/theme';
+import { colors, radius, spacing } from '../../constants/theme';
 import {
   TODAY_QUICK_ACTIONS,
   TodayQuickActionId,
@@ -13,7 +12,9 @@ import { VoxaText } from '../ui/voxa-text';
 export type { TodayQuickActionId };
 export { getTodayQuickActionStarter };
 
-const VISIBLE_ACTIONS = TODAY_QUICK_ACTIONS.slice(0, 4);
+const CORE_HOME_ACTIONS = TODAY_QUICK_ACTIONS.filter(
+  (action) => action.id === 'brainstorm' || action.id === 'explain' || action.id === 'plan_day',
+);
 
 type Props = {
   onAction: (starter: string, id: TodayQuickActionId) => void;
@@ -25,37 +26,44 @@ export function TodayQuickActions({ onAction }: Props) {
       <VoxaText variant="label" color="textMuted">
         Quick actions
       </VoxaText>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {VISIBLE_ACTIONS.map((action) => (
+      <View style={styles.row}>
+        {CORE_HOME_ACTIONS.map((action) => (
           <Pressable
             key={action.id}
             onPress={() => onAction(action.starter, action.id)}
             style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
             accessibilityRole="button"
             accessibilityLabel={action.label}>
-            <Ionicons name={action.icon} size={16} color={colors.primarySoft} />
-            <VoxaText variant="caption" color="textSecondary">
+            <Ionicons name={action.icon} size={15} color={colors.primarySoft} />
+            <VoxaText variant="caption" color="textSecondary" numberOfLines={1}>
               {action.label}
             </VoxaText>
           </Pressable>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  row: { gap: spacing.sm, paddingVertical: 2 },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   chip: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'center',
+    gap: spacing.xs,
     minHeight: 40,
-    paddingHorizontal: spacing.md12,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceQuiet,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
   },
   chipPressed: { opacity: 0.85, backgroundColor: colors.surface },
 });

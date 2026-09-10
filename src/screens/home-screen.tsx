@@ -358,6 +358,7 @@ export function HomeScreen({ navigation }: Props) {
             primaryLabel={`Talk to ${voxaName}`}
             onPrimary={() => openTalk(phase11.talkStarter ?? undefined)}
             onOrbPress={() => openTalk(phase11.talkStarter ?? undefined)}
+            onSettings={() => navigation.navigate('You')}
             onCheckIn={
               ritualState?.pendingPeriod
                 ? () => navigation.navigate('DailyCheckIn', { period: ritualState.pendingPeriod! })
@@ -402,9 +403,7 @@ export function HomeScreen({ navigation }: Props) {
             routineSummary={dashboard.routineSummary}
             reflectionPending={reflectionPending}
             weatherBundle={weatherBundle}
-            showRelationship={
-              (profile.preferences.companionControls?.showRelationshipInsights ?? true) !== false
-            }
+            showRelationship={false}
             onFollowUp={respondFollowUp}
             onReflection={() => navigation.navigate('DailyReflection')}
             onNews={() => navigation.navigate('DailyNews')}
@@ -492,7 +491,9 @@ export function HomeScreen({ navigation }: Props) {
                 <VoxaText variant="caption" color="textMuted">
                   Notes
                 </VoxaText>
-                <VoxaText variant="body">Capture ideas and plans</VoxaText>
+                <VoxaText variant="caption" color="textSecondary">
+                  Capture ideas and plans
+                </VoxaText>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </Pressable>
@@ -500,6 +501,7 @@ export function HomeScreen({ navigation }: Props) {
         ) : null}
 
         {isFeatureVisible('socialGames') ? (
+        <View style={styles.adventureWrap}>
         <TodaysAdventureCard
           data={phase10}
           onPrimary={() => {
@@ -542,6 +544,7 @@ export function HomeScreen({ navigation }: Props) {
                   : undefined
           }
         />
+        </View>
         ) : null}
       </ScrollView>
       <CommandBarSheet
@@ -556,9 +559,9 @@ export function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: layout.tabBarHeight + spacing.xxxl,
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   skeletonWrap: {
     paddingHorizontal: layout.screenPadding,
@@ -569,22 +572,26 @@ const styles = StyleSheet.create({
   notesShortcut: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+    gap: spacing.md12,
+    paddingVertical: spacing.md12,
+    paddingHorizontal: spacing.md12,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.surfaceStrong,
-    minHeight: 72,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceQuiet,
+    minHeight: 56,
   },
   notesIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(45, 212, 191, 0.12)',
+    backgroundColor: 'rgba(45, 212, 191, 0.08)',
   },
-  notesCopy: { flex: 1, gap: 2 },
+  notesCopy: { flex: 1, gap: 1 },
+  adventureWrap: {
+    marginTop: spacing.md,
+    opacity: 0.92,
+  },
 });
