@@ -2,7 +2,7 @@
 // Deploy: supabase functions deploy ai-gateway
 // Secrets: OPENAI_API_KEY, SUPABASE_SERVICE_ROLE_KEY (auto)
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import {
   ABUSE_LIMITS,
   checkUsageAllowance,
@@ -112,23 +112,34 @@ Deno.serve(async (req) => {
     return jsonError(405, 'method_not_allowed', 'Method not allowed');
   }
 
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  // Accept Authorization case-insensitively (HTTP headers are case-insensitive).
+  const authHeader = req.headers.get('Authorization') ?? req.headers.get('authorization');
+  if (!authHeader || !/^Bearer\s+\S+/i.test(authHeader)) {
     return jsonError(401, 'unauthorized', 'Unauthorized');
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  );
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !anonKey || !serviceKey) {
+    return jsonError(500, 'gateway_error', 'AI gateway error');
+  }
 
-  const token = authHeader.replace('Bearer ', '');
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  // Validate the caller with the user JWT on an anon-scoped client.
+  // Do NOT use service-role + getUser(jwt): with modern JWT signing keys that path
+  // can reject valid new sessions (same secure pattern as delete-account).
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) {
     return jsonError(401, 'invalid_session', 'Invalid session');
   }
 
   const userId = authData.user.id;
+  // Privileged DB / usage tracking still uses the service-role client.
+  const supabase = createClient(supabaseUrl, serviceKey);
+
   let rawPayload: unknown;
   try {
     rawPayload = await req.json();

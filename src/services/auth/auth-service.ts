@@ -2,6 +2,7 @@ import { AuthError, Session } from '@supabase/supabase-js';
 
 import { AuthUser } from '../../types';
 import { hasSupabaseConfig } from '../../config/env';
+import { clearGatewayAccessTokenCache } from '../ai/ai-gateway-client';
 import { getSupabaseClient } from '../supabase/client';
 
 export type SignUpInput = {
@@ -130,6 +131,7 @@ export class AuthService {
   }
 
   async signOut() {
+    clearGatewayAccessTokenCache();
     const { error } = await getSupabaseClient().auth.signOut();
     if (error) throw error;
   }

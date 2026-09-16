@@ -2,6 +2,7 @@ import { getAiGatewayUrlFromEnv } from '../../config/ai-gateway-env';
 import { getSupabaseAnonKey, hasSupabaseConfig } from '../../config/env';
 import { getSupabaseClient } from '../supabase/client';
 import { talkPerf, talkPerfNow } from '../../utils/talk-perf';
+import { isGatewayAuthFailure } from './ai-gateway-auth';
 import {
   classifyGatewayErrorMessage,
   TalkAIError,
@@ -12,6 +13,8 @@ import {
   sanitizeGatewayFailure,
   getGatewayProviderLabel,
 } from './gateway-diagnostics';
+
+export { isGatewayAuthFailure } from './ai-gateway-auth';
 
 export type GatewayChatRequest = {
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
@@ -39,12 +42,40 @@ type CachedAccessToken = { token: string; expiresAtSec: number };
 
 let cachedAccessToken: CachedAccessToken | null = null;
 
-async function resolveAccessToken(): Promise<string | null> {
-  if (cachedAccessToken && cachedAccessToken.expiresAtSec * 1000 > Date.now() + 60_000) {
+/** Clear module-level token cache (e.g. on sign-out or after auth failure). */
+export function clearGatewayAccessTokenCache(): void {
+  cachedAccessToken = null;
+}
+
+async function resolveAccessToken(options?: {
+  forceRefresh?: boolean;
+}): Promise<string | null> {
+  const forceRefresh = options?.forceRefresh === true;
+
+  if (
+    !forceRefresh &&
+    cachedAccessToken &&
+    cachedAccessToken.expiresAtSec * 1000 > Date.now() + 60_000
+  ) {
     return cachedAccessToken.token;
   }
 
   const client = getSupabaseClient();
+
+  if (forceRefresh) {
+    clearGatewayAccessTokenCache();
+    const { data: refreshed, error } = await client.auth.refreshSession();
+    if (!error && refreshed.session?.access_token) {
+      const token = refreshed.session.access_token;
+      const expiresAt = refreshed.session.expires_at;
+      if (typeof expiresAt === 'number') {
+        cachedAccessToken = { token, expiresAtSec: expiresAt };
+      }
+      return token;
+    }
+    // Refresh failed — fall through to getSession for whatever is still stored.
+  }
+
   const { data: sessionData } = await client.auth.getSession();
   let token = sessionData.session?.access_token ?? null;
   let expiresAt = sessionData.session?.expires_at;
@@ -119,13 +150,48 @@ function mapGatewayFailure(
   return { ok: false, code, message, httpStatus };
 }
 
+function finalizeGatewayResult(
+  payload: GatewayErrorPayload,
+  httpStatus: number,
+): GatewayChatResponse {
+  if (httpStatus >= 200 && httpStatus < 300) {
+    if (typeof payload.content === 'string' && payload.content.trim()) {
+      return { ok: true, content: payload.content };
+    }
+    return mapGatewayFailure(payload, httpStatus, 'AI gateway returned an empty response.');
+  }
+
+  const failure = mapGatewayFailure(
+    payload,
+    httpStatus,
+    httpStatus === 404 ? 'Requested function was not found' : 'Gateway error',
+  );
+
+  if (!failure.ok) {
+    logGatewayDiagnostic({
+      provider: getGatewayProviderLabel(),
+      gatewayUrl: resolveGatewayUrl(),
+      hasSession: true,
+      httpStatus,
+      gatewayCode: failure.code,
+      sanitizedMessage: sanitizeGatewayFailure({
+        httpStatus,
+        message: failure.message,
+        code: failure.code,
+      }).code,
+    });
+  }
+
+  return failure;
+}
+
 export async function invokeAiGatewayChat(request: GatewayChatRequest): Promise<GatewayChatResponse> {
   if (!hasSupabaseConfig()) {
     return { ok: false, code: 'gateway_not_configured', message: 'AI gateway URL not configured' };
   }
 
   const authStarted = talkPerfNow();
-  const token = await resolveAccessToken();
+  let token = await resolveAccessToken();
   talkPerf('auth-session', talkPerfNow() - authStarted);
   if (!token) {
     return { ok: false, code: 'not_authenticated', message: 'Not authenticated' };
@@ -133,38 +199,28 @@ export async function invokeAiGatewayChat(request: GatewayChatRequest): Promise<
 
   try {
     const httpStarted = talkPerfNow();
-    const { payload, httpStatus } = await postToGateway(request, token);
+    let { payload, httpStatus } = await postToGateway(request, token);
     talkPerf('gateway-http', talkPerfNow() - httpStarted);
 
-    if (httpStatus >= 200 && httpStatus < 300) {
-      if (typeof payload.content === 'string' && payload.content.trim()) {
-        return { ok: true, content: payload.content };
+    let result = finalizeGatewayResult(payload, httpStatus);
+
+    // At most one refresh + retry on authentication failure (never loop).
+    if (
+      !result.ok &&
+      isGatewayAuthFailure(result.httpStatus, result.code)
+    ) {
+      clearGatewayAccessTokenCache();
+      const refreshedToken = await resolveAccessToken({ forceRefresh: true });
+      if (refreshedToken) {
+        token = refreshedToken;
+        const retryStarted = talkPerfNow();
+        ({ payload, httpStatus } = await postToGateway(request, token));
+        talkPerf('gateway-http-retry', talkPerfNow() - retryStarted);
+        result = finalizeGatewayResult(payload, httpStatus);
       }
-      return mapGatewayFailure(payload, httpStatus, 'AI gateway returned an empty response.');
     }
 
-    const failure = mapGatewayFailure(
-      payload,
-      httpStatus,
-      httpStatus === 404 ? 'Requested function was not found' : 'Gateway error',
-    );
-
-    if (!failure.ok) {
-      logGatewayDiagnostic({
-        provider: getGatewayProviderLabel(),
-        gatewayUrl: resolveGatewayUrl(),
-        hasSession: true,
-        httpStatus,
-        gatewayCode: failure.code,
-        sanitizedMessage: sanitizeGatewayFailure({
-          httpStatus,
-          message: failure.message,
-          code: failure.code,
-        }).code,
-      });
-    }
-
-    return failure;
+    return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Network error';
     logGatewayDiagnostic({
