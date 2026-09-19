@@ -15,6 +15,7 @@ import { TalkAIError } from './talk-ai-errors';
 import { invokeAiGatewayChatOrThrow } from './ai-gateway-client';
 import { buildGatewayChatMessagesWithDiagnostics } from './chat-message-builder';
 import { FakeAIService } from './fake-ai-service';
+import { uriToVisionDataUrl } from './image-data-url';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const MAX_OUTPUT_TOKENS = 500;
@@ -74,7 +75,13 @@ export class GatewayAIService implements IAIService {
   }
 
   private async completeTalk(input: GenerateReplyInput): Promise<string> {
-    const { messages } = buildGatewayChatMessagesWithDiagnostics(input);
+    let gatewayInput = input;
+    if (input.imageUrlForVision) {
+      const dataUrl = await uriToVisionDataUrl(input.imageUrlForVision);
+      gatewayInput = { ...input, imageUrlForVision: dataUrl };
+    }
+
+    const { messages } = buildGatewayChatMessagesWithDiagnostics(gatewayInput);
     let idempotencyKey = createUuid();
 
     for (let attempt = 0; attempt < 2; attempt += 1) {

@@ -117,8 +117,14 @@ describe('gateway context budget', () => {
 
     const historyMessages = messages.filter((message) => message.role !== 'system' && message.role !== 'user');
     assert.ok(historyMessages.length <= AI_GATEWAY_BUDGETS.maxHistoryMessages);
-    assert.ok(historyMessages.at(-1)?.content.includes('History turn 29'));
-    assert.ok(!historyMessages.some((message) => message.content.includes('History turn 0')));
+    const lastHistory = historyMessages.at(-1)?.content;
+    assert.equal(typeof lastHistory, 'string');
+    assert.ok(typeof lastHistory === 'string' && lastHistory.includes('History turn 29'));
+    assert.ok(
+      !historyMessages.some(
+        (message) => typeof message.content === 'string' && message.content.includes('History turn 0'),
+      ),
+    );
   });
 
   it('bounds huge memory collections in the system prompt', () => {
@@ -169,8 +175,10 @@ describe('gateway context budget', () => {
     );
 
     assert.equal(messages.filter((message) => message.role === 'system').length, 1);
-    const systemCount = messages.filter((message) =>
-      message.content.includes('You are Voxa, a premium AI life companion'),
+    const systemCount = messages.filter(
+      (message) =>
+        typeof message.content === 'string' &&
+        message.content.includes('You are Voxa, a premium AI life companion'),
     ).length;
     assert.equal(systemCount, 1);
   });
@@ -218,8 +226,10 @@ describe('gateway context budget', () => {
 
     assert.equal(history.at(-1)?.content.startsWith('recent-'), true);
     assert.ok(
-      history.reduce((sum, message) => sum + message.content.length, 0) <=
-        AI_GATEWAY_BUDGETS.maxHistoryChars,
+      history.reduce(
+        (sum, message) => sum + (typeof message.content === 'string' ? message.content.length : 0),
+        0,
+      ) <= AI_GATEWAY_BUDGETS.maxHistoryChars,
     );
   });
 

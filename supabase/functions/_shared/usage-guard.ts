@@ -97,20 +97,183 @@ export const ABUSE_LIMITS = {
   maxTotalPayloadChars: 28_000,
   maxAudioSeconds: 180,
   maxImageBytes: 12 * 1024 * 1024,
+  /** Decoded vision image payload bound for ai-gateway multimodal turns. */
+  maxVisionImageBytes: 4 * 1024 * 1024,
   maxRetryCount: 3,
 } as const;
+
+export const ALLOWED_VISION_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+] as const;
+
+export type GatewayTextPart = { type: 'text'; text: string };
+export type GatewayImageUrlPart = { type: 'image_url'; image_url: { url: string } };
+export type GatewayContentPart = GatewayTextPart | GatewayImageUrlPart;
+export type GatewayMessageContent = string | GatewayContentPart[];
 
 export type ChatPayloadSizeResult =
   | { allowed: true }
   | { allowed: false; plan: 'free' | 'pro'; code: string; message: string };
 
+/** Count only textual characters — ignore base64 image payloads for text budgets. */
+export function textCharsFromContent(content: GatewayMessageContent): number {
+  if (typeof content === 'string') return content.length;
+  let total = 0;
+  for (const part of content) {
+    if (part.type === 'text') total += part.text.length;
+  }
+  return total;
+}
+
+const VISION_DATA_URL_RE =
+  /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/i;
+
+export function validateVisionImageDataUrl(url: string): ChatPayloadSizeResult {
+  if (typeof url !== 'string' || !url.trim()) {
+    return { allowed: false, plan: 'free', code: 'invalid_image', message: 'Invalid image payload.' };
+  }
+  if (/^https?:\/\//i.test(url)) {
+    return {
+      allowed: false,
+      plan: 'free',
+      code: 'invalid_image',
+      message: 'Remote image URLs are not allowed.',
+    };
+  }
+  if (url.length > ABUSE_LIMITS.maxVisionImageBytes * 2) {
+    // Fast reject before regex on huge strings (base64 ≈ 4/3 decoded size).
+    return { allowed: false, plan: 'free', code: 'image_too_large', message: 'Image exceeds maximum size.' };
+  }
+
+  const match = VISION_DATA_URL_RE.exec(url.trim());
+  if (!match) {
+    return { allowed: false, plan: 'free', code: 'invalid_image', message: 'Invalid image payload.' };
+  }
+
+  const mime = match[1].toLowerCase();
+  if (!(ALLOWED_VISION_MIME_TYPES as readonly string[]).includes(mime)) {
+    return { allowed: false, plan: 'free', code: 'invalid_image', message: 'Invalid image payload.' };
+  }
+
+  const base64 = match[2].replace(/\s+/g, '');
+  if (!base64 || base64.length % 4 !== 0) {
+    return { allowed: false, plan: 'free', code: 'invalid_image', message: 'Invalid image payload.' };
+  }
+
+  // Approximate decoded size: base64 length * 3/4.
+  const decodedBytes = Math.floor((base64.length * 3) / 4);
+  if (decodedBytes > ABUSE_LIMITS.maxVisionImageBytes) {
+    return { allowed: false, plan: 'free', code: 'image_too_large', message: 'Image exceeds maximum size.' };
+  }
+
+  return { allowed: true };
+}
+
+export function validateGatewayMessageContent(
+  role: string,
+  content: unknown,
+): { ok: true; content: GatewayMessageContent } | { ok: false; code: string; message: string } {
+  if (typeof content === 'string') {
+    if (content.trim().length === 0) {
+      return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+    }
+    return { ok: true, content };
+  }
+
+  if (!Array.isArray(content) || content.length === 0) {
+    return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+  }
+
+  if (role !== 'user') {
+    return {
+      ok: false,
+      code: 'invalid_request',
+      message: 'Multipart content is only allowed on user messages.',
+    };
+  }
+
+  const parts: GatewayContentPart[] = [];
+  let hasText = false;
+  let imageCount = 0;
+
+  for (const rawPart of content) {
+    if (!rawPart || typeof rawPart !== 'object' || Array.isArray(rawPart)) {
+      return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+    }
+    const part = rawPart as Record<string, unknown>;
+    const keys = Object.keys(part);
+
+    if (part.type === 'text') {
+      if (keys.some((key) => key !== 'type' && key !== 'text')) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      if (typeof part.text !== 'string' || part.text.trim().length === 0) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      hasText = true;
+      parts.push({ type: 'text', text: part.text });
+      continue;
+    }
+
+    if (part.type === 'image_url') {
+      if (keys.some((key) => key !== 'type' && key !== 'image_url')) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      const imageUrl = part.image_url;
+      if (!imageUrl || typeof imageUrl !== 'object' || Array.isArray(imageUrl)) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      const imageObj = imageUrl as Record<string, unknown>;
+      if (Object.keys(imageObj).some((key) => key !== 'url')) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      if (typeof imageObj.url !== 'string') {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      const imageCheck = validateVisionImageDataUrl(imageObj.url);
+      if (!imageCheck.allowed) {
+        return { ok: false, code: imageCheck.code, message: imageCheck.message };
+      }
+      imageCount += 1;
+      if (imageCount > 1) {
+        return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+      }
+      parts.push({ type: 'image_url', image_url: { url: imageObj.url } });
+      continue;
+    }
+
+    return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+  }
+
+  if (!hasText || imageCount !== 1) {
+    return { ok: false, code: 'invalid_request', message: 'Invalid chat request' };
+  }
+
+  return { ok: true, content: parts };
+}
+
 export function validateChatPayloadSize(
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: GatewayMessageContent }[],
 ): ChatPayloadSizeResult {
-  const totalChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  for (const message of messages) {
+    const validated = validateGatewayMessageContent(message.role, message.content);
+    if (!validated.ok) {
+      return {
+        allowed: false,
+        plan: 'free',
+        code: validated.code,
+        message: validated.message,
+      };
+    }
+  }
+
+  const totalChars = messages.reduce((sum, message) => sum + textCharsFromContent(message.content), 0);
   const userMessages = messages.filter((message) => message.role === 'user');
   const largestUserMessageChars = userMessages.reduce(
-    (max, message) => Math.max(max, message.content.length),
+    (max, message) => Math.max(max, textCharsFromContent(message.content)),
     0,
   );
 
@@ -124,7 +287,8 @@ export function validateChatPayloadSize(
   }
 
   const lastUserMessage = userMessages[userMessages.length - 1];
-  const contextChars = totalChars - (lastUserMessage?.content.length ?? 0);
+  const lastUserChars = lastUserMessage ? textCharsFromContent(lastUserMessage.content) : 0;
+  const contextChars = totalChars - lastUserChars;
 
   if (contextChars > ABUSE_LIMITS.maxContextPayloadChars) {
     return {

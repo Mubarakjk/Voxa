@@ -14,7 +14,7 @@ import { MEMORY_EXTRACTION_CATEGORIES } from '../../constants/memory-categories'
 import { extractMemoriesLocally } from '../memory/local-memory-extractor';
 import { buildVoxaSystemPrompt } from './voxa-system-prompt';
 import { mapConversationHistory } from './gateway-context-budget';
-import * as FileSystem from 'expo-file-system/legacy';
+import { uriToVisionDataUrl } from './image-data-url';
 
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions';
@@ -273,7 +273,7 @@ export class OpenAIService implements IAIService {
   }
 
   async analyzeImage(input: { uri: string; mimeType?: string }): Promise<string | null> {
-    const dataUrl = await uriToDataUrl(input.uri, input.mimeType ?? 'image/jpeg');
+    const dataUrl = await uriToDataUrl(input.uri);
     const content = await this.completeChat(
       [
         {
@@ -402,10 +402,10 @@ export class OpenAIService implements IAIService {
   }
 }
 
-async function uriToDataUrl(uri: string, mimeType = 'image/jpeg'): Promise<string> {
+async function uriToDataUrl(uri: string): Promise<string> {
+  // Direct OpenAI client (dev only) may already have a data URL or remote URL.
   if (uri.startsWith('data:') || uri.startsWith('http')) return uri;
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  return `data:${mimeType};base64,${base64}`;
+  return uriToVisionDataUrl(uri);
 }
 
 const VALID_MOODS: MemoryMood[] = [

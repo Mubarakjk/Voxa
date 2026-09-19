@@ -14,10 +14,14 @@ import {
   getGatewayProviderLabel,
 } from './gateway-diagnostics';
 
+import {
+  type GatewayChatMessage,
+} from './gateway-context-budget';
+
 export { isGatewayAuthFailure } from './ai-gateway-auth';
 
 export type GatewayChatRequest = {
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  messages: GatewayChatMessage[];
   model?: string;
   maxTokens?: number;
   metric?: string;

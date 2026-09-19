@@ -10,8 +10,11 @@ import {
   getMonthKey,
   resolveAiGatewayMetric,
   resolvePlanFromSubscription,
+  textCharsFromContent,
   validateChatPayloadSize,
+  validateGatewayMessageContent,
   validatePayloadSize,
+  type GatewayMessageContent,
 } from '../_shared/usage-guard.ts';
 
 const corsHeaders = {
@@ -25,7 +28,10 @@ const MAX_OUTPUT_TOKENS = 500;
 const DEFAULT_MODEL = 'gpt-4o-mini';
 
 type ChatRequest = {
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  messages: {
+    role: 'system' | 'user' | 'assistant';
+    content: GatewayMessageContent;
+  }[];
   model?: string;
   maxTokens?: number;
   metric?: string;
@@ -80,8 +86,9 @@ function parseChatRequest(payload: unknown): ChatRequest | null {
     const role = (item as { role?: unknown }).role;
     const content = (item as { content?: unknown }).content;
     if (role !== 'system' && role !== 'user' && role !== 'assistant') return null;
-    if (typeof content !== 'string' || content.trim().length === 0) return null;
-    messages.push({ role, content });
+    const validated = validateGatewayMessageContent(role, content);
+    if (!validated.ok) return null;
+    messages.push({ role, content: validated.content });
   }
 
   const metricRaw = typeof raw.metric === 'string' ? raw.metric.trim() : undefined;
@@ -177,7 +184,10 @@ async function handleGatewayChat(input: {
     return jsonError(400, 'missing_idempotency_key', 'Missing or invalid x-idempotency-key');
   }
 
-  const messageChars = payload.messages.reduce((sum, msg) => sum + msg.content.length, 0);
+  const messageChars = payload.messages.reduce(
+    (sum, msg) => sum + textCharsFromContent(msg.content),
+    0,
+  );
   const sizeCheck = validateChatPayloadSize(payload.messages);
   if (!sizeCheck.allowed) {
     return new Response(JSON.stringify({ ok: false, ...sizeCheck }), {

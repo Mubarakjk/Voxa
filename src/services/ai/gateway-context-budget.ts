@@ -6,10 +6,18 @@ import { logFeature } from '../../utils/feature-logger';
 import { buildVoxaSystemPrompt } from './voxa-system-prompt';
 import { TalkAIError } from './talk-ai-errors';
 import { TURN_INTELLIGENCE_END } from './turn-intelligence-plan';
+import {
+  textCharsFromContent,
+  validateVisionImageDataUrl,
+  type GatewayContentPart,
+  type GatewayMessageContent,
+} from './gateway-content';
+
+export type { GatewayContentPart, GatewayMessageContent };
 
 export type GatewayChatMessage = {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: GatewayMessageContent;
 };
 
 export type GatewayPayloadDiagnostics = {
@@ -26,6 +34,11 @@ export type GatewayPayloadDiagnostics = {
 };
 
 const BASE64_DATA_URL = /data:[a-z0-9/+.-]+;base64,[a-z0-9+/=\s]+/gi;
+const PHOTO_FALLBACK = 'What do you see in this image?';
+
+/** Appended only when this turn includes a validated image_url part. */
+export const IMAGE_TURN_VISION_INSTRUCTION =
+  'An image is attached to this turn and is available for visual inspection. Answer questions about what is actually visible in the attached image. Do not claim that you cannot see, view, or access the image. If something is unclear, say what is uncertain rather than inventing visual details.';
 
 export function truncateText(text: string, maxChars: number, suffix = '…'): string {
   if (maxChars <= 0) return '';
@@ -106,34 +119,59 @@ export function trimHistoryMessages(history: GatewayChatMessage[]): GatewayChatM
 
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const message = history[index];
-    const content = truncateText(message.content, Math.min(message.content.length, 1_200));
+    const asText =
+      typeof message.content === 'string'
+        ? message.content
+        : message.content
+            .filter((part): part is Extract<GatewayContentPart, { type: 'text' }> => part.type === 'text')
+            .map((part) => part.text)
+            .join('\n');
+    const content = truncateText(asText, Math.min(asText.length, 1_200));
     const nextChars = usedChars + content.length;
     if (retained.length >= AI_GATEWAY_BUDGETS.maxHistoryMessages) break;
     if (retained.length > 0 && nextChars > AI_GATEWAY_BUDGETS.maxHistoryChars) break;
-    retained.unshift({ ...message, content });
+    retained.unshift({ role: message.role, content });
     usedChars = nextChars;
   }
 
   return retained;
 }
 
-function buildUserTurn(input: GenerateReplyInput): string {
+/**
+ * Build the current user turn.
+ * When imageUrlForVision is set it must already be a local-converted data:image/... URL
+ * (GatewayAIService converts file:// URIs before calling this).
+ */
+export function buildUserTurnContent(input: GenerateReplyInput): GatewayMessageContent {
   let userText = stripEmbeddedPayloads(input.userMessage.trim());
 
   if (input.imageAnalysisSummary && !userText.includes('[Photo]')) {
     const summary = truncateText(input.imageAnalysisSummary, 400);
     userText = [userText, `[Photo context: ${summary}]`].filter(Boolean).join('\n');
-  } else if (input.imageUrlForVision && !userText.includes('[Photo]')) {
-    userText = [userText, '[Photo attached — describe using any summary you already have.]']
-      .filter(Boolean)
-      .join('\n');
+  }
+
+  if (input.imageUrlForVision) {
+    const dataUrl = input.imageUrlForVision;
+    const imageCheck = validateVisionImageDataUrl(dataUrl);
+    if (!imageCheck.allowed) {
+      throw new TalkAIError(
+        imageCheck.code === 'image_too_large' ? 'image_too_large' : 'message_too_large',
+        imageCheck.message,
+      );
+    }
+    const caption = userText.trim() || PHOTO_FALLBACK;
+    const text = `${caption}\n\n${IMAGE_TURN_VISION_INSTRUCTION}`;
+    return [
+      { type: 'text', text },
+      { type: 'image_url', image_url: { url: dataUrl } },
+    ];
   }
 
   return userText;
 }
 
 function enforceTotalPayloadBudget(messages: GatewayChatMessage[]): GatewayChatMessage[] {
-  let totalChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  let totalChars = messages.reduce((sum, message) => sum + textCharsFromContent(message.content), 0);
   if (totalChars <= AI_GATEWAY_BUDGETS.maxTotalPayloadChars) return messages;
 
   const trimmed = messages.map((message) => ({ ...message }));
@@ -145,6 +183,7 @@ function enforceTotalPayloadBudget(messages: GatewayChatMessage[]): GatewayChatM
     for (let index = 1; index < trimmed.length - 1; index += 1) {
       if (totalChars <= AI_GATEWAY_BUDGETS.maxTotalPayloadChars) break;
       const message = trimmed[index];
+      if (typeof message.content !== 'string') continue;
       if (message.content.length <= 120) continue;
       const nextLength = Math.max(120, Math.floor(message.content.length * 0.85));
       if (nextLength >= message.content.length) continue;
@@ -157,6 +196,7 @@ function enforceTotalPayloadBudget(messages: GatewayChatMessage[]): GatewayChatM
 
     if (systemIndex >= 0) {
       const system = trimmed[systemIndex];
+      if (typeof system.content !== 'string') break;
       const protectedLen = systemPromptProtectedPrefixLength(system.content);
       const floor = Math.max(1_500, protectedLen);
       const nextLength = Math.max(floor, Math.floor(system.content.length * 0.9));
@@ -188,11 +228,14 @@ export function computeGatewayPayloadDiagnostics(
   const diagnostics: GatewayPayloadDiagnostics = {
     requestBytes: new TextEncoder().encode(JSON.stringify({ messages })).length,
     messageCount: messages.length,
-    systemPromptChars: systemMessage?.content.length ?? 0,
+    systemPromptChars:
+      typeof systemMessage?.content === 'string' ? systemMessage.content.length : 0,
     contextExtensionChars,
-    historyChars: priorHistory.reduce((sum, message) => sum + message.content.length, 0),
-    currentUserMessageChars: currentUserMessage?.content.length ?? 0,
-    totalChars: messages.reduce((sum, message) => sum + message.content.length, 0),
+    historyChars: priorHistory.reduce((sum, message) => sum + textCharsFromContent(message.content), 0),
+    currentUserMessageChars: currentUserMessage
+      ? textCharsFromContent(currentUserMessage.content)
+      : 0,
+    totalChars: messages.reduce((sum, message) => sum + textCharsFromContent(message.content), 0),
   };
 
   return diagnostics;
@@ -223,8 +266,9 @@ export function buildBoundedGatewayChatMessages(input: GenerateReplyInput): {
   messages: GatewayChatMessage[];
   diagnostics: GatewayPayloadDiagnostics;
 } {
-  const userText = buildUserTurn(input);
-  if (userText.length > AI_GATEWAY_BUDGETS.maxUserMessageChars) {
+  const userContent = buildUserTurnContent(input);
+  const userTextChars = textCharsFromContent(userContent);
+  if (userTextChars > AI_GATEWAY_BUDGETS.maxUserMessageChars) {
     throw new TalkAIError('message_too_large');
   }
 
@@ -260,7 +304,7 @@ export function buildBoundedGatewayChatMessages(input: GenerateReplyInput): {
   let messages = enforceTotalPayloadBudget([
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: userText },
+    { role: 'user', content: userContent },
   ]);
 
   const diagnostics = computeGatewayPayloadDiagnostics(messages, contextExtension.length);

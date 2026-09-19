@@ -20,6 +20,7 @@ import { RootStackParamList } from '../navigation/types';
 import { getAIProviderInfo } from '../services/ai/create-ai-service';
 import { notificationService } from '../services/notifications/notification-service';
 import { DebugPanelInfo, getDebugPanelInfo } from '../utils/debug-info';
+import { shouldShowSettingsDiagnosticsEntry } from '../utils/settings-diagnostics-visibility';
 import {
   buildSettingsSections,
   cycleCheckInStyle,
@@ -75,14 +76,16 @@ export function YouScreen() {
   }, [profile, services.storage]);
 
   const loadDebugInfo = useCallback(async () => {
-    if (!profile) return;
+    if (!profile || !shouldShowSettingsDiagnosticsEntry()) return;
     setDebugInfo(await getDebugPanelInfo(profile, services));
   }, [profile, services]);
 
   useFocusEffect(
     useCallback(() => {
       void refreshProfile();
-      void loadDebugInfo();
+      if (shouldShowSettingsDiagnosticsEntry()) {
+        void loadDebugInfo();
+      }
       void reloadPlanStatus();
       void loadExtras();
     }, [refreshProfile, loadDebugInfo, reloadPlanStatus, loadExtras]),
@@ -465,7 +468,7 @@ export function YouScreen() {
           </>
         )}
 
-        {__DEV__ ? (
+        {shouldShowSettingsDiagnosticsEntry() ? (
           <Pressable style={styles.debugToggle} onPress={() => setShowDebug((v) => !v)}>
             <VoxaText variant="caption" color="textMuted">
               {showDebug ? 'Hide diagnostics' : 'Diagnostics'}
@@ -474,7 +477,7 @@ export function YouScreen() {
           </Pressable>
         ) : null}
 
-        {showDebug && __DEV__ ? (
+        {showDebug && shouldShowSettingsDiagnosticsEntry() ? (
           <GlassCard variant="quiet" style={styles.group}>
             <SettingRow
               label="System health"
