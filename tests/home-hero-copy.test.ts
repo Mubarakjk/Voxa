@@ -70,14 +70,14 @@ describe('home hero copy', () => {
 
   it('buildCompanionGreeting uses polished hero subline', () => {
     const greeting = buildCompanionGreeting({
-      profile: { id: 'u1', displayName: 'Hello User' } as never,
+      profile: { id: 'u1', displayName: 'Sam User' } as never,
       memories: [{ content: 'I normally train after work', tags: ['remember-this'] } as never],
       focusState: {
         focus: 'Recent win: I normally train after work I still remember: "I normally train after work".',
       } as never,
     });
 
-    assert.equal(greeting.headline.includes('Hello'), true);
+    assert.equal(greeting.headline.includes('Sam'), true);
     assert.equal(greeting.subline, 'You normally train after work. Ready when you are.');
   });
 
@@ -89,6 +89,23 @@ describe('home hero copy', () => {
     assert.ok(!/TEST/i.test(greeting.greeting));
     assert.ok(!/TEST/i.test(greeting.headline));
     assert.match(greeting.headline, /Welcome back|Good to see you|I'm here|Hey/i);
+  });
+
+  it('rejects junk greeting names like Hey / Hi / Hello', async () => {
+    const { resolveGreetingFirstName } = await import('../src/utils/greeting-name');
+    for (const name of ['Hey', 'hi', 'HELLO', 'unknown', 'User', '  ', 'null']) {
+      assert.equal(resolveGreetingFirstName(name), null, name);
+    }
+    assert.equal(resolveGreetingFirstName('Alex'), 'Alex');
+    assert.equal(resolveGreetingFirstName('Jordan Lee'), 'Jordan');
+
+    const greeting = buildCompanionGreeting({
+      profile: { id: 'u1', displayName: 'Hey' } as never,
+      memories: [],
+    });
+    assert.ok(!/,\s*Hey\b/i.test(greeting.greeting));
+    assert.ok(!/,\s*Hey\b/i.test(greeting.headline));
+    assert.ok(!/Good to see you, Hey/i.test(greeting.headline));
   });
 
   it('phase11 rhythm greets without invalid first names', async () => {
