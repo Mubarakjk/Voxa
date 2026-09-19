@@ -10,6 +10,17 @@ export type UsageCheckResult =
   | { allowed: true; plan: 'free' | 'pro' }
   | { allowed: false; plan: 'free' | 'pro'; code: string; message: string };
 
+/** Metrics the chat AI gateway may bill against. Client-supplied others are rejected. */
+export const AI_GATEWAY_ALLOWED_METRICS = ['ai_messages'] as const;
+export type AiGatewayAllowedMetric = (typeof AI_GATEWAY_ALLOWED_METRICS)[number];
+
+export function resolveAiGatewayMetric(raw: string | undefined): AiGatewayAllowedMetric | null {
+  const metric = (raw ?? 'ai_messages').trim();
+  return (AI_GATEWAY_ALLOWED_METRICS as readonly string[]).includes(metric)
+    ? (metric as AiGatewayAllowedMetric)
+    : null;
+}
+
 export function getDayKey(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
@@ -32,6 +43,20 @@ export function checkUsageAllowance(input: {
   limits: UsageAllowance;
 }): UsageCheckResult {
   const { plan, metric, amount, dailyUsed, monthlyUsed, limits } = input;
+
+  // Fail closed: missing entitlement rows must never become unlimited OpenAI spend.
+  const hasBound =
+    limits.dailyLimit != null ||
+    limits.monthlyLimit != null ||
+    limits.fairUseLimit != null;
+  if (!hasBound) {
+    return {
+      allowed: false,
+      plan,
+      code: 'limits_unavailable',
+      message: 'Usage limits unavailable.',
+    };
+  }
 
   if (plan === 'pro' && limits.fairUseLimit != null) {
     if (dailyUsed + amount > limits.fairUseLimit) {

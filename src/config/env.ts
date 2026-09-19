@@ -1,8 +1,14 @@
 /**
  * Expo inlines EXPO_PUBLIC_* variables at build time.
  * Restart the dev server after changing .env.
+ *
+ * Privileged provider secrets must never be usable from preview/production
+ * client binaries even if mis-set in EAS — Talk/AI spend goes through the gateway.
  */
+import { isReleaseAiEnvironment } from './ai-routing';
+
 export function getOpenAIApiKey(): string | undefined {
+  if (isReleaseAiEnvironment()) return undefined;
   const key = process.env.EXPO_PUBLIC_OPENAI_API_KEY?.trim();
   return key || undefined;
 }
@@ -37,6 +43,7 @@ export function getDataSourceModeLabel(): string {
 }
 
 export function getAudDApiToken(): string | undefined {
+  if (isReleaseAiEnvironment()) return undefined;
   return process.env.EXPO_PUBLIC_AUDD_API_TOKEN?.trim() || undefined;
 }
 
@@ -45,6 +52,7 @@ export function hasAudDApiToken(): boolean {
 }
 
 export function getACRCloudConfig(): { host: string; accessKey: string; accessSecret: string } | null {
+  if (isReleaseAiEnvironment()) return null;
   const host = process.env.EXPO_PUBLIC_ACRCLOUD_HOST?.trim();
   const accessKey = process.env.EXPO_PUBLIC_ACRCLOUD_ACCESS_KEY?.trim();
   const accessSecret = process.env.EXPO_PUBLIC_ACRCLOUD_ACCESS_SECRET?.trim();
