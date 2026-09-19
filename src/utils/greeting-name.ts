@@ -4,7 +4,7 @@
  */
 
 const INVALID_FIRST_NAMES =
-  /^(test|tester|testing|user|null|undefined|demo|guest|n\/?a|asdf|foo|bar)$/i;
+  /^(hey|hi|hello|test|tester|testing|user|unknown|null|undefined|demo|guest|n\/?a|asdf|foo|bar)$/i;
 
 /**
  * Returns a usable first name from the profile display name, or null when

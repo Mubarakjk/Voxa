@@ -1128,6 +1128,7 @@ export class VoxaCompanionService {
       await this.repositories.conversations.updateConversation(input.conversationId, {
         lastMessageAt: voxaMessage.createdAt,
       });
+      options?.onAssistantReady?.({ userMessage, voxaMessage });
       return { userMessage, voxaMessage };
     }
 
@@ -1144,6 +1145,7 @@ export class VoxaCompanionService {
         await this.repositories.conversations.updateConversation(input.conversationId, {
           lastMessageAt: voxaMessage.createdAt,
         });
+        options?.onAssistantReady?.({ userMessage, voxaMessage });
         return { userMessage, voxaMessage };
       }
     }
@@ -1200,6 +1202,7 @@ export class VoxaCompanionService {
         mode: replyMode,
       });
 
+      options?.onAssistantReady?.({ userMessage, voxaMessage });
       return {
         userMessage,
         voxaMessage,

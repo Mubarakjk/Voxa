@@ -40,12 +40,14 @@ import {
   ComposerEditState,
   emptyEditMaySend,
 } from '../services/chat/message-actions';
+import { shouldApplyTalkMessageLoad } from '../services/chat/talk-load-apply';
 import {
   beginTalkSend,
   composerTextAfterFailedSend,
   createTalkSendGuard,
   endTalkSend,
 } from '../services/chat/talk-send-guard';
+import { composerTextAfterDraftRestore, composerTextAfterStarterPrefill } from '../services/chat/talk-starter-prefill';
 import { ADAPTIVE_MODE_LABELS, AdaptiveModeLabel } from '../types/phase3-intelligence';
 import {
   ChatExperiencePayload,
@@ -193,13 +195,15 @@ export function ChatScreen() {
   const [toolsSheetOpen, setToolsSheetOpen] = useState(false);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [composerEdit, setComposerEdit] = useState<ComposerEditState | null>(null);
-  const pendingStarterRef = useRef<{ text: string; autoSend: boolean } | null>(null);
+  const pendingStarterRef = useRef<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const messagesRef = useRef<ChatMessageView[]>([]);
   const loadedConversationRef = useRef<string | null>(null);
   const isTypingRef = useRef(false);
   const messagesLengthRef = useRef(0);
   const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const loadSeqRef = useRef(0);
+  const sendEpochRef = useRef(0);
   const sendGuardRef = useRef(createTalkSendGuard());
   const thinkingStageInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -231,7 +235,16 @@ export function ChatScreen() {
   useEffect(() => {
     if (!profile || !conversationId) return;
     void getConversationDraftsService(services.storage).get(profile.id, conversationId).then((draft) => {
-      if (draft && !input) setInput(draft);
+      if (!draft && !pendingStarterRef.current) return;
+      setInput((current) => {
+        const result = composerTextAfterDraftRestore({
+          currentComposer: current,
+          draft,
+          pendingStarter: pendingStarterRef.current,
+        });
+        if (result.clearStarter) pendingStarterRef.current = null;
+        return result.nextComposer;
+      });
     });
   }, [profile?.id, conversationId]);
 
@@ -283,6 +296,8 @@ export function ChatScreen() {
     if (!force && loadInFlightRef.current) return loadInFlightRef.current;
 
     const run = async () => {
+      const loadSeq = ++loadSeqRef.current;
+      const sendEpochAtLoadStart = sendEpochRef.current;
       const paramConversationId = route.params?.conversationId;
       const mode = profile.companion.lastUsedMode ?? profile.companion.defaultMode ?? 'friend';
       setActiveMode(mode);
@@ -311,13 +326,23 @@ export function ChatScreen() {
         setError(null);
         const loadedMessages = await companion.loadChatMessages(conversation.id);
         setConversationId(conversation.id);
-        setMessages((current) => {
-          const inFlight = current.filter(
-            (item) => item.status === 'pending' || item.status === 'failed',
-          );
-          return mergeChatViews(loadedMessages, inFlight);
-        });
-        loadedConversationRef.current = conversation.id;
+        if (
+          shouldApplyTalkMessageLoad({
+            loadSeq,
+            currentLoadSeq: loadSeqRef.current,
+            sendEpochAtLoadStart,
+            currentSendEpoch: sendEpochRef.current,
+            sendInFlight: sendGuardRef.current.inFlight || isTypingRef.current,
+          })
+        ) {
+          setMessages((current) => {
+            const inFlight = current.filter(
+              (item) => item.status === 'pending' || item.status === 'failed',
+            );
+            return mergeChatViews(loadedMessages, inFlight);
+          });
+          loadedConversationRef.current = conversation.id;
+        }
         setIsLoading(false);
         void companion.getChatExperience(profile.id, conversation.id).then((experience) => {
           if (!experience) return;
@@ -486,6 +511,8 @@ export function ChatScreen() {
       }
       return;
     }
+
+    sendEpochRef.current += 1;
 
     const idsAtStart = new Set(messagesRef.current.map((item) => item.id));
     setComposerEdit(null);
@@ -676,7 +703,9 @@ export function ChatScreen() {
         void services.subscriptionAnalytics.track('free_limit_reached', { feature: err.feature });
         setLimitMessage(err.message);
         setLimitModalVisible(true);
-      } else if (!(err instanceof FeatureLimitError)) {
+      } else if (err instanceof FeatureLimitError) {
+        setError(err.message);
+      } else {
         setError(formatTalkErrorForUser(err));
       }
     } finally {
@@ -720,18 +749,19 @@ export function ChatScreen() {
 
   useEffect(() => {
     const starter = route.params?.starterPrompt;
-    if (!starter) return;
-    pendingStarterRef.current = { text: starter, autoSend: true };
+    if (!starter?.trim()) return;
+    pendingStarterRef.current = starter.trim();
     if (route.params?.mode) setActiveMode(route.params.mode);
     navigation.setParams({ starterPrompt: undefined, mode: undefined } as MainTabParamList['Talk']);
+    setInput((current) => {
+      const { nextComposer, consumed } = composerTextAfterStarterPrefill({
+        pendingStarter: starter,
+        currentComposer: current,
+      });
+      if (consumed) pendingStarterRef.current = null;
+      return nextComposer;
+    });
   }, [route.params?.starterPrompt, route.params?.mode, navigation]);
-
-  useEffect(() => {
-    const pending = pendingStarterRef.current;
-    if (!pending?.autoSend || !conversationId || isLoading || isTyping) return;
-    pendingStarterRef.current = null;
-    void sendMessage([], pending.text);
-  }, [conversationId, isLoading, isTyping]);
 
   const rememberMessage = useCallback(
     async (message: ChatMessageView) => {
@@ -1163,7 +1193,7 @@ export function ChatScreen() {
           </View>
         </View>
 
-        {livingCompanion?.thinkingAbout ? (
+        {messages.length === 0 && livingCompanion?.thinkingAbout ? (
           <View style={styles.contextThought}>
             <VoxaText variant="caption" color="textSecondary" numberOfLines={1}>
               {livingCompanion.thinkingAbout}
