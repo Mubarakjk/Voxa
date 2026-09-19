@@ -7,6 +7,7 @@ export type TalkAIErrorCode =
   | 'rate_limited'
   | 'message_too_large'
   | 'context_too_large'
+  | 'image_too_large'
   | 'provider_not_configured'
   | 'provider_error'
   | 'database_error'
@@ -58,6 +59,11 @@ const PRESENTATIONS: Record<TalkAIErrorCode, Presentation> = {
   context_too_large: {
     message: 'AI gateway context too large',
     userMessage: "Voxa couldn't fit this conversation into one reply. Start a fresh chat and try again.",
+    isDeploymentBlocker: false,
+  },
+  image_too_large: {
+    message: 'AI gateway image too large or invalid',
+    userMessage: 'That photo is too large or could not be read. Try another image.',
     isDeploymentBlocker: false,
   },
   provider_not_configured: {
@@ -116,6 +122,8 @@ const SERVER_CODE_MAP: Record<string, TalkAIErrorCode> = {
   fair_use_exceeded: 'rate_limited',
   message_too_large: 'message_too_large',
   context_too_large: 'context_too_large',
+  image_too_large: 'image_too_large',
+  invalid_image: 'image_too_large',
   method_not_allowed: 'gateway_error',
 };
 
@@ -154,6 +162,9 @@ export function classifyGatewayErrorMessage(message: string, code?: string): Tal
   }
   if (lower.includes('message exceeds maximum size') || lower.includes('message too large')) {
     return 'message_too_large';
+  }
+  if (lower.includes('image exceeds') || lower.includes('invalid image') || lower.includes('image too large')) {
+    return 'image_too_large';
   }
   if (lower.includes('conversation context exceeds') || lower.includes('context too large')) {
     return 'context_too_large';

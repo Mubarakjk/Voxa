@@ -8,6 +8,7 @@ import { AuthError } from '@supabase/supabase-js';
 import { resolveAppEnvironment, resolveTalkAIProvider } from '../src/config/ai-routing';
 import { containsLegalPlaceholderCopy, PRIVACY_POLICY_SECTIONS, TERMS_OF_SERVICE_SECTIONS } from '../src/constants/legal-content';
 import { formatAuthUserError } from '../src/utils/auth-error-copy';
+import { shouldShowSettingsDiagnosticsEntry } from '../src/utils/settings-diagnostics-visibility';
 import { formatTalkErrorForUser } from '../src/services/ai/talk-ai-errors';
 import { friendlyErrorMessage } from '../src/utils/friendly-error';
 
@@ -89,5 +90,25 @@ describe('V1 stability release guards', () => {
     assert.match(source, /Intentionally empty/);
     assert.ok(!source.includes('componentStack'));
     assert.ok(!source.includes('error.stack'));
+  });
+
+  it('You/Settings Diagnostics entry is gated to __DEV__ only', () => {
+    const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+    try {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      assert.equal(shouldShowSettingsDiagnosticsEntry(), false);
+
+      (globalThis as { __DEV__?: boolean }).__DEV__ = true;
+      assert.equal(shouldShowSettingsDiagnosticsEntry(), true);
+    } finally {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = originalDev;
+    }
+
+    const youScreen = readFileSync(join(process.cwd(), 'src/screens/you-screen.tsx'), 'utf8');
+    assert.match(youScreen, /shouldShowSettingsDiagnosticsEntry/);
+    assert.ok(
+      !youScreen.includes("{__DEV__ ? (\n          <Pressable style={styles.debugToggle}"),
+      'Diagnostics toggle must use shouldShowSettingsDiagnosticsEntry, not a raw ungated Pressable',
+    );
   });
 });

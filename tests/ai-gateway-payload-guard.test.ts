@@ -3,7 +3,10 @@ import { describe, it } from 'node:test';
 
 import {
   ABUSE_LIMITS,
+  textCharsFromContent,
   validateChatPayloadSize,
+  validateGatewayMessageContent,
+  validateVisionImageDataUrl,
 } from '../supabase/functions/_shared/usage-guard.ts';
 
 describe('ai-gateway payload guard', () => {
@@ -35,5 +38,47 @@ describe('ai-gateway payload guard', () => {
     if (!result.allowed) {
       assert.equal(result.code, 'context_too_large');
     }
+  });
+
+  it('counts only text characters for multipart user turns', () => {
+    const tiny = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const result = validateChatPayloadSize([
+      { role: 'system', content: 'You are Voxa.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'hello' },
+          { type: 'image_url', image_url: { url: tiny } },
+        ],
+      },
+    ]);
+    assert.deepEqual(result, { allowed: true });
+    assert.equal(
+      textCharsFromContent([
+        { type: 'text', text: 'hello' },
+        { type: 'image_url', image_url: { url: tiny } },
+      ]),
+      5,
+    );
+  });
+
+  it('rejects multipart on non-user roles during payload validation', () => {
+    const tiny = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const result = validateChatPayloadSize([
+      {
+        role: 'system',
+        content: [
+          { type: 'text', text: 'nope' },
+          { type: 'image_url', image_url: { url: tiny } },
+        ],
+      },
+      { role: 'user', content: 'hi' },
+    ]);
+    assert.equal(result.allowed, false);
+  });
+
+  it('rejects invalid vision data URLs in message content validation', () => {
+    assert.equal(validateVisionImageDataUrl('https://evil.example/a.png').allowed, false);
+    assert.equal(validateGatewayMessageContent('user', 'ok').ok, true);
   });
 });
