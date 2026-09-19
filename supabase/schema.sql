@@ -147,13 +147,29 @@ create policy "memories_own" on public.memories for all using (auth.uid() = user
 create policy "goals_own" on public.goals for all using (auth.uid() = user_id);
 create policy "reminders_own" on public.reminders for all using (auth.uid() = user_id);
 create policy "conversations_own" on public.conversations for all using (auth.uid() = user_id);
-create policy "messages_own" on public.messages for all using (auth.uid() = user_id);
+-- Message writes also require owning the parent conversation (see migrations).
+create policy "messages_own" on public.messages
+  for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.conversations c
+      where c.id = conversation_id
+        and c.user_id = auth.uid()
+    )
+  );
 create policy "voice_sessions_own" on public.voice_sessions for all using (auth.uid() = user_id);
 create policy "trusted_contacts_own" on public.trusted_contacts for all using (auth.uid() = user_id);
 
 -- Auto-create profile on signup
 create or replace function public.handle_new_user()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
 begin
   insert into public.profiles (id, display_name, email)
   values (
@@ -163,7 +179,7 @@ begin
   );
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created

@@ -3,7 +3,7 @@
 // Secrets: OPENAI_API_KEY, OPENAI_REALTIME_MODEL (optional)
 // Never returns the permanent API key. Never logs client secrets.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import {
   checkUsageAllowance,
   getDayKey,
@@ -64,21 +64,30 @@ Deno.serve(async (req) => {
     });
   }
 
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  // Validate the caller with the user JWT on an anon-scoped client
+  // (same pattern as ai-gateway / delete-account — do not use service-role getUser(jwt)).
+  const authHeader = req.headers.get('Authorization') ?? req.headers.get('authorization');
+  if (!authHeader || !/^Bearer\s+\S+/i.test(authHeader)) {
     return new Response(JSON.stringify({ ok: false, code: 'unauthorized', message: 'Sign in to start a voice call.' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  );
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !anonKey || !serviceKey) {
+    return new Response(JSON.stringify({ ok: false, code: 'gateway_error', message: 'Voice service unavailable.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
-  const token = authHeader.replace('Bearer ', '');
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) {
     return new Response(JSON.stringify({ ok: false, code: 'invalid_session', message: 'Your session expired. Sign in again.' }), {
       status: 401,
@@ -87,6 +96,7 @@ Deno.serve(async (req) => {
   }
 
   const userId = authData.user.id;
+  const supabase = createClient(supabaseUrl, serviceKey);
   let payload: SessionRequest = {};
   try {
     payload = (await req.json()) as SessionRequest;

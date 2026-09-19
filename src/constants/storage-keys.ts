@@ -121,6 +121,7 @@ export const STORAGE_KEYS = {
   faithValuesReflections: '@voxa/faith_values_reflections',
   faithValuesDuas: '@voxa/faith_values_duas',
   faithValuesPrayerRoutine: '@voxa/faith_values_prayer_routine',
+  chatBookmarks: '@voxa/chat_bookmarks',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

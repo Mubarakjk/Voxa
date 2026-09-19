@@ -8,6 +8,7 @@ import {
   checkUsageAllowance,
   getDayKey,
   getMonthKey,
+  resolveAiGatewayMetric,
   resolvePlanFromSubscription,
   validateChatPayloadSize,
   validatePayloadSize,
@@ -83,17 +84,15 @@ function parseChatRequest(payload: unknown): ChatRequest | null {
     messages.push({ role, content });
   }
 
-  const metric = typeof raw.metric === 'string' ? raw.metric.trim() : undefined;
-  const amount =
-    typeof raw.amount === 'number' && Number.isFinite(raw.amount) && raw.amount > 0
-      ? Math.min(Math.floor(raw.amount), 10)
-      : undefined;
+  const metricRaw = typeof raw.metric === 'string' ? raw.metric.trim() : undefined;
+  // Chat gateway always bills exactly one ai_messages unit — ignore client amount inflation.
+  const amount = 1;
 
   return {
     messages,
     model: typeof raw.model === 'string' ? raw.model : undefined,
     maxTokens: typeof raw.maxTokens === 'number' ? raw.maxTokens : undefined,
-    metric: metric || undefined,
+    metric: metricRaw || undefined,
     amount,
   };
 }
@@ -187,8 +186,11 @@ async function handleGatewayChat(input: {
     });
   }
 
-  const metric = payload.metric ?? 'ai_messages';
-  const amount = payload.amount ?? 1;
+  const metric = resolveAiGatewayMetric(payload.metric);
+  if (!metric) {
+    return jsonError(400, 'invalid_metric', 'Invalid usage metric');
+  }
+  const amount = 1;
 
   let existingEvent: { id: string } | null = null;
   try {
@@ -262,6 +264,22 @@ async function handleGatewayChat(input: {
     dailyUsage = dailyResult.data;
     monthlyUsage = monthlyResult.data;
 
+    if (!limitsRow) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          allowed: false,
+          plan,
+          code: 'limits_unavailable',
+          message: 'Usage limits unavailable.',
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
     const allowance = checkUsageAllowance({
       plan,
       metric,
@@ -271,9 +289,9 @@ async function handleGatewayChat(input: {
       limits: {
         plan,
         metric,
-        dailyLimit: limitsRow?.daily_limit ?? null,
-        monthlyLimit: limitsRow?.monthly_limit ?? null,
-        fairUseLimit: limitsRow?.fair_use_limit ?? null,
+        dailyLimit: limitsRow.daily_limit ?? null,
+        monthlyLimit: limitsRow.monthly_limit ?? null,
+        fairUseLimit: limitsRow.fair_use_limit ?? null,
       },
     });
 

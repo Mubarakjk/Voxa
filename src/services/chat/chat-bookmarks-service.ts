@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@voxa/chat_bookmarks';
+import { STORAGE_KEYS } from '../../constants/storage-keys';
+
+const KEY = STORAGE_KEYS.chatBookmarks;
 
 export type ChatBookmark = {
   messageId: string;
