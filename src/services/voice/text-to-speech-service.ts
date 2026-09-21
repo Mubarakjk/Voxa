@@ -1,12 +1,16 @@
 import * as Speech from 'expo-speech';
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { canUseDirectOpenAIClient } from '../../config/ai-routing';
 import { hasOpenAIApiKey, getOpenAIApiKey } from '../../config/env';
+import { isTtsGatewayConfiguredFromEnv } from '../../config/tts-gateway-env';
 import { VoicePersonality } from '../../types/user-profile';
 import { VoiceSpeechConfig } from '../../types/voice-identity';
 import { VOICE_PERSONALITY_PROFILES } from '../../types/voice-call';
 import { audioSessionManager, createAudioPlayer } from '../audio/audio-session-manager';
 import { setVoiceDebugState, ttsLog } from './voice-debug-state';
+import { clipTextForTtsGateway, resolveAllowedTtsVoice } from './tts-contract';
+import { invokeTtsGatewayOrThrow } from './tts-gateway-client';
 
 export interface ITextToSpeechService {
   speak(text: string, config: VoiceSpeechConfig | VoicePersonality): Promise<void>;
@@ -42,6 +46,19 @@ function resolveConfig(config: VoiceSpeechConfig | VoicePersonality): VoiceSpeec
   return config;
 }
 
+/**
+ * Prefer curated OpenAI-mapped voices.
+ * - Development may use client OpenAI when a key is present (never in release).
+ * - Preview/production use the authenticated tts-gateway (server OPENAI_API_KEY).
+ * - expo-speech is only used when no cloud TTS path exists (offline / misconfigured),
+ *   never as a silent substitute that pretends to be the selected Voxa voice.
+ */
+function preferCloudTts(): 'client_openai' | 'gateway' | 'on_device_only' {
+  if (hasOpenAIApiKey() && canUseDirectOpenAIClient()) return 'client_openai';
+  if (isTtsGatewayConfiguredFromEnv()) return 'gateway';
+  return 'on_device_only';
+}
+
 export class HybridTextToSpeechService implements ITextToSpeechService {
   private muted = false;
   private speaking = false;
@@ -66,31 +83,40 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     ttsLog('TTS START', trimmed.slice(0, 48));
 
     const speechConfig = resolveConfig(config);
+    const path = preferCloudTts();
 
     try {
       await audioSessionManager.prepareForPlayback('tts');
 
-      if (hasOpenAIApiKey()) {
+      if (path === 'client_openai') {
         try {
           await this.speakOpenAI(trimmed, speechConfig);
           return;
         } catch (err) {
           if (this.cancelled) return;
+          if (isTtsGatewayConfiguredFromEnv()) {
+            ttsLog('TTS STUCK FALLBACK', 'client openai → gateway');
+            await audioSessionManager.unloadPlaybackSound();
+            await this.speakGateway(trimmed, speechConfig);
+            return;
+          }
           const message = err instanceof Error ? err.message : 'OpenAI TTS failed';
           ttsLog('TTS STUCK FALLBACK', message);
-          await audioSessionManager.unloadPlaybackSound();
-          await this.speakExpo(trimmed, speechConfig);
-          return;
+          throw err instanceof Error ? err : new Error(message);
         }
       }
-      await this.speakExpo(trimmed, speechConfig);
-    } catch (expoErr) {
-      if (hasOpenAIApiKey()) {
-        ttsLog('TTS FAILED BOTH PROVIDERS');
+
+      if (path === 'gateway') {
+        await this.speakGateway(trimmed, speechConfig);
+        return;
       }
-      const message = expoErr instanceof Error ? expoErr.message : 'TTS failed';
+
+      await this.speakExpo(trimmed, speechConfig);
+    } catch (err) {
+      if (this.cancelled) return;
+      const message = err instanceof Error ? err.message : 'TTS failed';
       ttsLog('TTS ERROR', message);
-      throw expoErr instanceof Error ? expoErr : new Error(message);
+      throw err instanceof Error ? err : new Error(message);
     } finally {
       this.speaking = false;
       await audioSessionManager.releaseLock('tts');
@@ -115,7 +141,6 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     ttsLog('TTS PROVIDER', 'expo-speech');
     setVoiceDebugState({ ttsProvider: 'expo-speech' });
     await audioSessionManager.setPlaybackMode();
-    // Let the iOS audio session settle after expo-audio mode changes before Speech.speak.
     await new Promise((resolve) => setTimeout(resolve, SESSION_SETTLE_MS));
     if (this.cancelled) return;
     ttsLog('TTS AUDIO READY');
@@ -139,7 +164,6 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
         }
       }, PLAYBACK_START_TIMEOUT_MS);
 
-      // Some iOS builds never fire onStart after session churn; poll as a backup.
       const speakingPoll = setInterval(() => {
         void Speech.isSpeakingAsync().then((speaking) => {
           if (speaking && !playbackStarted) {
@@ -173,6 +197,30 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     });
   }
 
+  private async speakGateway(text: string, config: VoiceSpeechConfig) {
+    if (this.cancelled) return;
+    const voice = resolveAllowedTtsVoice(config.openAiVoiceId);
+    if (!voice) {
+      throw new Error('Selected voice is not available for speech.');
+    }
+
+    ttsLog('TTS PROVIDER', 'tts-gateway');
+    setVoiceDebugState({ ttsProvider: 'tts-gateway' });
+
+    const { audioBytes } = await invokeTtsGatewayOrThrow({
+      text: clipTextForTtsGateway(text),
+      voice,
+      speed: Math.min(4, Math.max(0.25, config.speedMultiplier)),
+    });
+
+    if (this.cancelled) return;
+    if (!audioBytes.byteLength) {
+      throw new Error('TTS gateway returned empty audio');
+    }
+
+    await this.playMpegBytes(audioBytes, 'tts-gateway');
+  }
+
   private async speakOpenAI(text: string, config: VoiceSpeechConfig) {
     if (this.cancelled) return;
     const apiKey = getOpenAIApiKey();
@@ -203,6 +251,10 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
     if (!bytes.byteLength) throw new Error('OpenAI TTS returned empty audio');
     if (this.cancelled) return;
 
+    await this.playMpegBytes(bytes, 'openai');
+  }
+
+  private async playMpegBytes(bytes: ArrayBuffer, providerLabel: string) {
     ttsLog('TTS AUDIO READY', `${bytes.byteLength} bytes`);
 
     const base64 = arrayBufferToBase64(bytes);
@@ -230,13 +282,13 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
 
       const startTimeout = setTimeout(() => {
         if (!playbackStarted) {
-          ttsLog('TTS STUCK FALLBACK', 'openai playback did not start within 3s');
-          finish(() => reject(new Error('OpenAI TTS playback did not start within 3s')));
+          ttsLog('TTS STUCK FALLBACK', `${providerLabel} playback did not start within 3s`);
+          finish(() => reject(new Error('TTS playback did not start within 3s')));
         }
       }, PLAYBACK_START_TIMEOUT_MS);
 
       const playTimeout = setTimeout(() => {
-        finish(() => reject(new Error('OpenAI TTS playback timed out')));
+        finish(() => reject(new Error('TTS playback timed out')));
       }, PLAYBACK_TIMEOUT_MS);
 
       const poll = setInterval(() => {
@@ -249,10 +301,10 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
         if (status.playing && !playbackStarted) {
           playbackStarted = true;
           clearTimeout(startTimeout);
-          ttsLog('TTS PLAYBACK START', 'openai');
+          ttsLog('TTS PLAYBACK START', providerLabel);
         }
         if (status.didJustFinish) {
-          ttsLog('TTS PLAYBACK END', 'openai');
+          ttsLog('TTS PLAYBACK END', providerLabel);
           finish(resolve);
         }
       }, 100);
@@ -260,7 +312,7 @@ export class HybridTextToSpeechService implements ITextToSpeechService {
       try {
         player.play();
       } catch (err) {
-        finish(() => reject(err instanceof Error ? err : new Error('OpenAI TTS play failed')));
+        finish(() => reject(err instanceof Error ? err : new Error('TTS play failed')));
       }
     });
 

@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Keyboard, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Alert,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isFeatureVisible } from '../../config/feature-status';
@@ -34,7 +43,6 @@ type ChatInputBarProps = {
   onSend: (attachments: PendingAttachmentInput[]) => void;
   disabled?: boolean;
   voxaName: string;
-  onOpenTools?: () => void;
   onVoiceNoteLimit?: (message: string) => void;
   editing?: boolean;
   onCancelEdit?: () => void;
@@ -46,7 +54,6 @@ export function ChatInputBar({
   onSend,
   disabled,
   voxaName,
-  onOpenTools,
   onVoiceNoteLimit,
   editing,
   onCancelEdit,
@@ -132,6 +139,39 @@ export function ChatInputBar({
       fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
       sizeBytes: asset.fileSize,
     });
+  };
+
+  /** "+" opens attach actions — not Tools. Cancel / deny leaves composer unchanged. */
+  const openAttachmentSheet = () => {
+    if (disabled) return;
+    Keyboard.dismiss();
+
+    if (Platform.OS === 'ios') {
+      const options = showCamera
+        ? ['Cancel', 'Choose Photo', 'Take Photo']
+        : ['Cancel', 'Choose Photo'];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          userInterfaceStyle: 'dark',
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) void pickFromGallery();
+          else if (showCamera && buttonIndex === 2) void takePhoto();
+        },
+      );
+      return;
+    }
+
+    const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+      { text: 'Choose Photo', onPress: () => void pickFromGallery() },
+    ];
+    if (showCamera) {
+      buttons.push({ text: 'Take Photo', onPress: () => void takePhoto() });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Attach a photo', undefined, buttons);
   };
 
   const closeVoicePanel = () => {
@@ -235,16 +275,15 @@ export function ChatInputBar({
           </View>
         ) : (
           <View style={[styles.composerShell, (focused || editing) && styles.composerFocused]}>
-            {onOpenTools ? (
-              <Pressable
-                style={({ pressed }) => [styles.inlineIcon, pressed && styles.iconPressed]}
-                onPress={onOpenTools}
-                disabled={disabled}
-                hitSlop={6}
-                accessibilityLabel="Open chat tools">
-                <Ionicons name="add" size={22} color={colors.textSecondary} />
-              </Pressable>
-            ) : null}
+            <Pressable
+              style={({ pressed }) => [styles.inlineIcon, pressed && styles.iconPressed]}
+              onPress={openAttachmentSheet}
+              disabled={disabled}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Attach a photo">
+              <Ionicons name="add" size={22} color={colors.textSecondary} />
+            </Pressable>
 
             {showCamera ? (
               <Pressable

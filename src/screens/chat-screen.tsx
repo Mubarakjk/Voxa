@@ -1334,7 +1334,6 @@ export function ChatScreen() {
           voxaName={voxaName}
           editing={Boolean(composerEdit)}
           onCancelEdit={handleCancelEdit}
-          onOpenTools={() => setToolsSheetOpen(true)}
           onVoiceNoteLimit={(message) => {
             setLimitMessage(message);
             setLimitModalVisible(true);
@@ -1358,6 +1357,15 @@ export function ChatScreen() {
       <Modal visible={headerMenuOpen} transparent animationType="fade">
         <Pressable style={styles.modalBackdrop} onPress={() => setHeaderMenuOpen(false)}>
           <View style={[styles.menuSheet, { top: layout.tabBarHeight + 56 }]}>
+            <Pressable
+              style={styles.menuRow}
+              onPress={() => {
+                setHeaderMenuOpen(false);
+                setToolsSheetOpen(true);
+              }}>
+              <Ionicons name="sparkles-outline" size={18} color={colors.primarySoft} />
+              <VoxaText variant="body">Tools</VoxaText>
+            </Pressable>
             <Pressable
               style={styles.menuRow}
               onPress={() => {
