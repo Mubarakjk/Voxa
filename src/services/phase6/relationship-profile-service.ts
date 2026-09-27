@@ -1,9 +1,26 @@
 import { STORAGE_KEYS } from '../../constants/storage-keys';
-import { Conversation, EntityId, Goal, Memory, nowIso, UserProfile } from '../../types';
+import { CompanionModeId, Conversation, EntityId, Goal, Memory, nowIso, UserProfile } from '../../types';
 import { CompanionRelationshipProfile, RelationshipFraming } from '../../types/phase6-premium';
 import { CompanionIntelligenceBundle } from '../../types/companion-intelligence';
 import { relationshipGrowthService } from '../intelligence/relationship-growth-service';
 import { IStorageService } from '../contracts';
+
+/** Friend and Coach framing drive the existing Talk companion mode. Other framings do not. */
+export function companionModeForRelationshipFraming(
+  framing: RelationshipFraming,
+): Extract<CompanionModeId, 'friend' | 'coach'> | null {
+  if (framing === 'friend' || framing === 'coach') return framing;
+  return null;
+}
+
+export function companionFieldsForFraming(framing: Extract<RelationshipFraming, 'friend' | 'coach'>): {
+  defaultMode: 'friend' | 'coach';
+  lastUsedMode: 'friend' | 'coach';
+} {
+  const mode = companionModeForRelationshipFraming(framing);
+  if (!mode) throw new Error('Friend or Coach framing is required.');
+  return { defaultMode: mode, lastUsedMode: mode };
+}
 
 export class RelationshipProfileService {
   constructor(private readonly storage: IStorageService) {}

@@ -48,7 +48,7 @@ import {
   endTalkSend,
 } from '../services/chat/talk-send-guard';
 import { composerTextAfterDraftRestore, composerTextAfterStarterPrefill } from '../services/chat/talk-starter-prefill';
-import { ADAPTIVE_MODE_LABELS, AdaptiveModeLabel } from '../types/phase3-intelligence';
+import { getCompanionMode } from '../constants/companion-modes';
 import {
   ChatExperiencePayload,
   ContextCard,
@@ -157,7 +157,9 @@ export function ChatScreen() {
   const { profile, companion, refreshProfile, services } = useVoxa();
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState<CompanionModeId>('friend');
+  const [activeMode, setActiveMode] = useState<CompanionModeId>(
+    profile?.companion.lastUsedMode ?? profile?.companion.defaultMode ?? 'friend',
+  );
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -166,7 +168,6 @@ export function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [thinkingStage, setThinkingStage] = useState(0);
-  const [adaptiveModeLabel, setAdaptiveModeLabel] = useState<AdaptiveModeLabel>('friend');
   const [limitModalVisible, setLimitModalVisible] = useState(false);
   const [limitMessage, setLimitMessage] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -285,7 +286,11 @@ export function ChatScreen() {
     if (isTyping) setOrbState('thinking');
   }, [isTyping]);
 
-  const adaptiveDisplay = ADAPTIVE_MODE_LABELS[adaptiveModeLabel];
+  useEffect(() => {
+    if (route.params?.conversationId) return;
+    const mode = profile?.companion.lastUsedMode ?? profile?.companion.defaultMode;
+    if (mode) setActiveMode(mode);
+  }, [profile?.companion.lastUsedMode, profile?.companion.defaultMode, route.params?.conversationId]);
 
   const loadChat = useCallback(async (force = false) => {
     if (!profile) {
@@ -315,7 +320,10 @@ export function ChatScreen() {
           setActiveMode(conversation.mode);
         }
         if (!conversation) {
-          conversation = await companion.getOrCreateConversation(profile.id, mode, 'chat');
+          const listed = await services.repositories.conversations.listConversations(profile.id);
+          const recentChat = listed.find((item) => item.channel === 'chat' && item.status === 'active');
+          conversation =
+            recentChat ?? (await companion.getOrCreateConversation(profile.id, mode, 'chat'));
         }
         if (!force && loadedConversationRef.current === conversation.id && messagesLengthRef.current > 0) {
           setConversationId(conversation.id);
@@ -440,9 +448,6 @@ export function ChatScreen() {
       );
       const sorted = sortMemoriesWithPinnedFirst(memories);
       const dashboard = await companion.getHomeDashboard(profile.id).catch(() => null);
-      if (dashboard?.phase3.adaptiveModeLabel) {
-        setAdaptiveModeLabel(dashboard.phase3.adaptiveModeLabel);
-      }
       if (dashboard?.phase4.contextCards.length) {
         setContextCards(dashboard.phase4.contextCards);
       }
@@ -596,9 +601,6 @@ export function ChatScreen() {
         await refreshProfile();
       }
 
-      if (result.adaptiveModeLabel) {
-        setAdaptiveModeLabel(result.adaptiveModeLabel);
-      }
       if (result.voxaMessage.mode) {
         setActiveMode(result.voxaMessage.mode);
       }
@@ -1127,7 +1129,7 @@ export function ChatScreen() {
     ? THINKING_STATUS_LABELS[thinkingStage] ?? 'Thinking…'
     : isSpeaking
       ? 'Speaking…'
-      : adaptiveDisplay;
+      : getCompanionMode(activeMode).shortLabel;
 
   return (
     <ScreenShell padded={false} glow="none" safeBottom={false}>

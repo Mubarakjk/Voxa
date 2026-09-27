@@ -1106,15 +1106,21 @@ export class VoxaCompanionService {
     }
 
     if (attachments?.length) {
-      userMessage = await persistUserRemote;
-      const processor = createAttachmentProcessor(this.ai);
-      const uploaded = await processor.uploadAll({
-        userId: input.userId,
-        conversationId: input.conversationId,
-        messageId: userMessage.id,
-        attachments,
-      });
-      userMessage = await this.repositories.messages.updateMessage(userMessage.id, { attachments: uploaded });
+      const pendingAttachments = attachments;
+      void persistUserRemote
+        .then(async (persisted) => {
+          const processor = createAttachmentProcessor(this.ai);
+          const uploaded = await processor.uploadAll({
+            userId: input.userId,
+            conversationId: input.conversationId,
+            messageId: persisted.id,
+            attachments: pendingAttachments,
+          });
+          await this.repositories.messages.updateMessage(persisted.id, { attachments: uploaded });
+        })
+        .catch((err) => {
+          console.warn('[Voxa] Background attachment upload failed.', err);
+        });
     }
 
     if (!hasAttachments && !isFactualFastPath && parseMusicIntent(input.content)) {

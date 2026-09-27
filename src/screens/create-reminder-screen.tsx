@@ -38,7 +38,8 @@ function defaultDate(hoursFromNow = 1) {
 
 export function CreateReminderScreen({ navigation, route }: Props) {
   const { profile, companion } = useVoxa();
-  const presetKind = route.params?.presetKind ?? 'check_in';
+  const requestedKind = route.params?.presetKind ?? 'check_in';
+  const presetKind: ReminderKind = requestedKind === 'alarm' ? 'reminder' : requestedKind;
 
   const [title, setTitle] = useState(
     presetKind === 'check_in' ? 'Daily check-in with Voxa' : '',

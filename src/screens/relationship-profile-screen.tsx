@@ -11,14 +11,17 @@ import { colors, layout, spacing } from '../constants/theme';
 import { useVoxa } from '../context/voxa-context';
 import { RootStackParamList } from '../navigation/types';
 import { CompanionRelationshipProfile, RELATIONSHIP_FRAMING_LABELS, RelationshipFraming } from '../types/phase6-premium';
-import { getRelationshipProfileService } from '../services/phase6/relationship-profile-service';
+import {
+  companionModeForRelationshipFraming,
+  getRelationshipProfileService,
+} from '../services/phase6/relationship-profile-service';
 import { buildPhase6Dashboard } from '../services/phase6/phase6-dashboard-service';
 
 const FRAMINGS: RelationshipFraming[] = ['friend', 'coach', 'mentor', 'study_partner', 'business_partner', 'supportive_companion'];
 
 export function RelationshipProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { profile, companion, services } = useVoxa();
+  const { profile, companion, services, refreshProfile } = useVoxa();
   const [rel, setRel] = useState<CompanionRelationshipProfile | null>(null);
   const [framing, setFraming] = useState<RelationshipFraming>('friend');
 
@@ -36,6 +39,16 @@ export function RelationshipProfileScreen() {
     if (!profile) return;
     await getRelationshipProfileService(services.storage).setFraming(profile.id, f);
     setFraming(f);
+    const mode = companionModeForRelationshipFraming(f);
+    if (!mode) return;
+    await services.repositories.userProfile.updateProfile({
+      companion: {
+        ...profile.companion,
+        defaultMode: mode,
+        lastUsedMode: mode,
+      },
+    });
+    await refreshProfile();
   };
 
   return (

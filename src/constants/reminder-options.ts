@@ -2,7 +2,6 @@ import { CompanionModeId, ReminderKind, ReminderRecurrence } from '../types';
 
 export const REMINDER_KIND_OPTIONS: Array<{ value: ReminderKind; label: string; description: string }> = [
   { value: 'reminder', label: 'Reminder', description: 'A gentle nudge from Voxa' },
-  { value: 'alarm', label: 'Alarm', description: 'A firm time-based alert' },
   { value: 'check_in', label: 'Daily check-in', description: 'Voxa reaches out to you' },
   { value: 'daily_goal', label: 'Goal reminder', description: 'Stay on track with your goals' },
 ];
@@ -24,7 +23,7 @@ export const REMINDER_MODE_OPTIONS: Array<{ value: CompanionModeId; label: strin
 
 export const REMINDER_KIND_LABELS: Record<ReminderKind, string> = {
   reminder: 'Reminder',
-  alarm: 'Alarm',
+  alarm: 'Reminder',
   check_in: 'Check-in',
   daily_goal: 'Goal',
 };

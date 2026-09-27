@@ -6,13 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, layout, radius, spacing } from '../constants/theme';
 import { VoxaText } from '../components/ui/voxa-text';
 
-type TabConfig = { icon: keyof typeof Ionicons.glyphMap; label: string; center?: boolean };
+type TabConfig = { icon: keyof typeof Ionicons.glyphMap; label: string };
 
 function buildTabConfig(): Record<string, TabConfig> {
   return {
     Home: { icon: 'home', label: 'Home' },
     Talk: { icon: 'chatbubbles', label: 'Talk' },
-    Voxa: { icon: 'sparkles', label: 'Voxa', center: true },
+    Voxa: { icon: 'sparkles', label: 'Voxa' },
     Journey: { icon: 'compass', label: 'Journey' },
     You: { icon: 'person', label: 'You' },
   };
@@ -30,27 +30,26 @@ export function PremiumTabBar({ state, navigation }: Props) {
         {state.routes.map((route, index) => {
           const focused = state.index === index;
           const config = TAB_CONFIG[route.name] ?? { icon: 'ellipse', label: route.name };
-          const isCenter = config.center;
 
           return (
             <Pressable
               key={route.key}
               onPress={() => navigation.navigate(route.name)}
-              style={[styles.tab, focused && styles.tabFocused, isCenter && styles.tabCenter]}
+              style={[styles.tab, focused && styles.tabFocused]}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
               accessibilityLabel={config.label}>
-              <View style={[styles.iconWrap, isCenter && styles.iconWrapCenter, focused && isCenter && styles.iconWrapCenterFocused]}>
+              <View style={styles.iconWrap}>
                 <Ionicons
                   name={config.icon}
-                  size={isCenter ? 26 : 22}
+                  size={22}
                   color={focused ? colors.primarySoft : colors.textMuted}
                 />
               </View>
               <VoxaText
                 variant="caption"
                 color={focused ? 'primarySoft' : 'textMuted'}
-                style={isCenter ? styles.labelCenter : styles.label}>
+                style={styles.label}>
                 {config.label}
               </VoxaText>
             </Pressable>
@@ -71,7 +70,7 @@ const styles = StyleSheet.create({
   },
   bar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 2,
   },
@@ -85,7 +84,6 @@ const styles = StyleSheet.create({
     minWidth: layout.minTapTarget,
     gap: 4,
   },
-  tabCenter: { marginTop: -10 },
   tabFocused: {
     backgroundColor: 'rgba(45, 212, 191, 0.1)',
   },
@@ -95,27 +93,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconWrapCenter: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(45, 212, 191, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(45, 212, 191, 0.35)',
-    marginBottom: 2,
-  },
-  iconWrapCenterFocused: {
-    backgroundColor: 'rgba(45, 212, 191, 0.28)',
-    borderColor: colors.primarySoft,
-  },
   label: {
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  labelCenter: {
-    fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.2,
   },
 });

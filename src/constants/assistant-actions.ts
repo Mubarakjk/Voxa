@@ -4,7 +4,7 @@ export const ASSISTANT_ACTIONS: AssistantAction[] = [
   {
     id: 'set_reminder',
     label: 'Set reminder',
-    description: 'Schedule a reminder, alarm, or check-in with Voxa.',
+    description: 'Schedule a reminder or check-in with Voxa.',
     status: 'available',
     relatedModes: ['assistant', 'coach'],
   },

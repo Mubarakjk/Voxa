@@ -17,6 +17,8 @@ import { isFeatureVisible } from '../../config/feature-status';
 import { isMicrophoneChatEnabled, isVoiceNotesEnabled } from '../../config/release-voice';
 import { colors, layout, radius, spacing } from '../../constants/theme';
 import { useVoxa } from '../../context/voxa-context';
+import { prepareChatImage } from '../../services/attachments/prepare-chat-image';
+import { TalkAIError } from '../../services/ai/talk-ai-errors';
 import { PendingAttachmentInput } from '../../types';
 import {
   permissionErrorLabel,
@@ -99,6 +101,32 @@ export function ChatInputBar({
     setPendingAttachments((current) => [...current, attachment]);
   };
 
+  const attachPreparedImage = async (asset: ImagePicker.ImagePickerAsset) => {
+    try {
+      const prepared = await prepareChatImage({
+        localUri: asset.uri,
+        mimeType: asset.mimeType ?? undefined,
+        fileName: asset.fileName ?? undefined,
+        width: asset.width,
+        height: asset.height,
+        sizeBytes: asset.fileSize,
+      });
+      addAttachment({
+        type: 'image',
+        localUri: prepared.localUri,
+        mimeType: prepared.mimeType,
+        fileName: prepared.fileName,
+        sizeBytes: prepared.sizeBytes,
+      });
+    } catch (err) {
+      const message =
+        err instanceof TalkAIError
+          ? err.userMessage
+          : 'That photo could not be prepared. Try another image.';
+      Alert.alert('Photo', message);
+    }
+  };
+
   const takePhoto = async () => {
     const granted = await requestCameraPermission();
     if (!granted) {
@@ -110,14 +138,7 @@ export function ChatInputBar({
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    addAttachment({
-      type: 'image',
-      localUri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
-      sizeBytes: asset.fileSize,
-    });
+    await attachPreparedImage(result.assets[0]);
   };
 
   const pickFromGallery = async () => {
@@ -131,14 +152,7 @@ export function ChatInputBar({
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    addAttachment({
-      type: 'image',
-      localUri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
-      sizeBytes: asset.fileSize,
-    });
+    await attachPreparedImage(result.assets[0]);
   };
 
   /** "+" opens attach actions — not Tools. Cancel / deny leaves composer unchanged. */

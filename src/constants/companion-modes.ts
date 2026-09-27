@@ -28,7 +28,7 @@ export const COMPANION_MODES: Record<CompanionMode['id'], CompanionMode> = {
     description: 'Help with tasks, planning, reminders, and daily organization.',
     tone: 'Clear, supportive, practical',
     openingMessage: 'Hi — want help organizing your day or tackling a task?',
-    helpsWith: ['Planning your day', 'Reminders & alarms', 'Prioritizing tasks', 'Staying organized'],
+    helpsWith: ['Planning your day', 'Reminders', 'Prioritizing tasks', 'Staying organized'],
     capabilities: ['task_planning', 'reminders', 'memory_recall', 'voice_call'],
     requiresSafetyDisclaimer: false,
   },
