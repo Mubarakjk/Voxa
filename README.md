@@ -1,5 +1,7 @@
 # Voxa
 
+[![CI](https://github.com/Mubarakjk/Voxa/actions/workflows/ci.yml/badge.svg)](https://github.com/Mubarakjk/Voxa/actions/workflows/ci.yml)
+
 Voxa is an AI companion app I've been building over the last few months.
 
 I started this project because I wanted something that felt more personal than a normal AI chatbot. Instead of just answering questions, I wanted it to remember conversations, help me stay accountable, keep track of goals, save memories, and feel like it grows with you over time.
@@ -40,6 +42,47 @@ More than anything, this project has been a way for me to improve my software de
 - Supabase
 - OpenAI
 - React Navigation
+
+## How it's put together
+
+```
+src/
+  screens/      App screens (chat, goals, journal, check-ins and more)
+  components/   Reusable UI components
+  services/     AI, memory, billing and data services
+  context/      Shared app state
+  navigation/   React Navigation setup
+supabase/
+  migrations/   Database schema and Row Level Security policies
+  functions/    Edge Functions, including the AI gateway
+tests/          Automated tests
+docs/           QA checklists and release notes
+```
+
+The app never talks to OpenAI directly. Every AI request goes through a Supabase Edge Function (the AI gateway), which checks the user is signed in and keeps the API key on the server, out of the app.
+
+## Running it
+
+You need Node.js 20 or newer.
+
+```bash
+git clone https://github.com/Mubarakjk/Voxa.git
+cd Voxa
+npm install
+cp .env.example .env
+npm start
+```
+
+Fill in `.env` with your own Supabase project details first. `npm start` opens the Expo dev server, where you can run the app on an iOS simulator, an Android emulator or your phone.
+
+## Tests
+
+```bash
+npm run typecheck   # TypeScript
+npm test            # 470+ automated tests
+```
+
+Both run automatically on every push with GitHub Actions.
 
 ## What I learned
 
