@@ -89,3 +89,9 @@ coverage/
 # ── EAS / build outputs ───────────────────────────────────────────
 *.app
 build/
+
+# ── Local editor and assistant config ───────────────────────────
+CLAUDE.md
+AGENTS.md
+.claude/
+.cursor/
