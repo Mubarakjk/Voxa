@@ -42,8 +42,8 @@ Last audited: 27 August 2026.
 | `EXPO_PUBLIC_ACRCLOUD_ACCESS_SECRET` | LOCAL ONLY / DISABLED V1 | Omit. |
 | `EXPO_PUBLIC_WEATHER_PROVIDER` | DISABLED V1 | Must not be `mock`. Empty → Open-Meteo. |
 | `EXPO_PUBLIC_WEATHER_API_URL` | EAS PREVIEW / EAS PRODUCTION | Optional weather proxy. Empty is valid (Open-Meteo). |
-| `EXPO_PUBLIC_PRIVACY_POLICY_URL` | EAS PREVIEW / EAS PRODUCTION | Live GitHub Pages HTTPS URL after publish (e.g. `https://mubarakjk.github.io/Voxa/privacy/`). **Do not use voxa.app.** |
-| `EXPO_PUBLIC_TERMS_OF_SERVICE_URL` | EAS PREVIEW / EAS PRODUCTION | Live GitHub Pages HTTPS URL after publish (e.g. `https://mubarakjk.github.io/Voxa/terms/`). **Do not use voxa.app.** |
+| `EXPO_PUBLIC_PRIVACY_POLICY_URL` | EAS PREVIEW / EAS PRODUCTION | Live GitHub Pages HTTPS URL after publish (e.g. `https://mubarak-jimoh.github.io/Voxa/privacy/`). **Do not use voxa.app.** |
+| `EXPO_PUBLIC_TERMS_OF_SERVICE_URL` | EAS PREVIEW / EAS PRODUCTION | Live GitHub Pages HTTPS URL after publish (e.g. `https://mubarak-jimoh.github.io/Voxa/terms/`). **Do not use voxa.app.** |
 | `EXPO_PUBLIC_SUPPORT_EMAIL` | EAS PREVIEW / EAS PRODUCTION | `mujimoh2008@gmail.com` (confirmed V1 support/privacy inbox). |
 | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` | DISABLED V1 | Omit while billing is dormant. Public SDK key only if billing is later enabled. |
 | `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` | DISABLED V1 | Omit for iOS V1. |

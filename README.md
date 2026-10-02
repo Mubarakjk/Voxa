@@ -1,6 +1,6 @@
 # Voxa
 
-[![CI](https://github.com/Mubarakjk/Voxa/actions/workflows/ci.yml/badge.svg)](https://github.com/Mubarakjk/Voxa/actions/workflows/ci.yml)
+[![CI](https://github.com/mubarak-jimoh/Voxa/actions/workflows/ci.yml/badge.svg)](https://github.com/mubarak-jimoh/Voxa/actions/workflows/ci.yml)
 
 Voxa is an AI companion app I've been building over the last few months.
 
@@ -66,7 +66,7 @@ The app never talks to OpenAI directly. Every AI request goes through a Supabase
 You need Node.js 20 or newer.
 
 ```bash
-git clone https://github.com/Mubarakjk/Voxa.git
+git clone https://github.com/mubarak-jimoh/Voxa.git
 cd Voxa
 npm install
 cp .env.example .env
